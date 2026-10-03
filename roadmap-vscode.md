@@ -1,6 +1,6 @@
 # Gitsprout VS Code extension — MVP
 
-> Status: ready to start · created 2026-10-03 · executors tick checkboxes as each step is verified, not when it "should work". Start with stage 1.
+> Status: stage 1 accepted 2026-10-03 · next — stage 2 · created 2026-10-03 · executors tick checkboxes as each step is verified, not when it "should work". Start with stage 1.
 
 ## Goal
 
@@ -129,17 +129,31 @@ Rows carry `data-vscode-context='{"webviewSection":"commit","sha":"…","prevent
 ### 1. Scaffold
 An installable extension that shows the sprout container with empty views.
 
-- [ ] `package.json`: name `gitsprout`, displayName `Gitsprout`, publisher `fosteev`, version `0.1.0`, engines, activation events, `main`, all contributions from "Manifest contributions" (commands may be stubs that show "Not implemented yet")
-- [ ] dev deps: `typescript`, `esbuild`, `@types/vscode@~1.90.0`, `@types/node@20`, `vitest`, `@vscode/vsce`; scripts `build`, `watch`, `typecheck`, `test`, `package` as in `CLAUDE.md`
-- [ ] `tsconfig.json` (extension, `module: commonjs`, `strict`) and `webview/tsconfig.json` (DOM lib); `scripts/build.mjs` builds both bundles
-- [ ] `media/sprout.svg` (monochrome, `currentColor`, from the prototype logo) and `media/icon.png` 128×128 (rendered with `npx @resvg/resvg-js-cli`)
-- [ ] `.vscode/launch.json` "Run Extension" + `.vscode/tasks.json` (`pnpm watch`); `.vscodeignore` ships only `dist/`, `media/`, `package.json`, `README.md`, `LICENSE` if any
-- [ ] `src/extension.ts` registers stub commands and empty tree providers; one placeholder vitest test
-- [ ] `.gitignore`: `node_modules/`, `dist/`, `*.vsix`, `.vscode-test/`
+- [x] `package.json`: name `gitsprout`, displayName `Gitsprout`, publisher `fosteev`, version `0.1.0`, engines, activation events, `main`, all contributions from "Manifest contributions" (commands may be stubs that show "Not implemented yet")
+- [x] dev deps: `typescript`, `esbuild`, `@types/vscode@~1.90.0`, `@types/node@20`, `vitest`, `@vscode/vsce`; scripts `build`, `watch`, `typecheck`, `test`, `package` as in `CLAUDE.md`
+- [x] `tsconfig.json` (extension, `module: commonjs`, `strict`) and `webview/tsconfig.json` (DOM lib); `scripts/build.mjs` builds both bundles
+- [x] `media/sprout.svg` (monochrome, `currentColor`, from the prototype logo) and `media/icon.png` 128×128 (rendered with `npx @resvg/resvg-js-cli`)
+- [x] `.vscode/launch.json` "Run Extension" + `.vscode/tasks.json` (`pnpm watch`); `.vscodeignore` ships only `dist/`, `media/`, `package.json`, `README.md`, `LICENSE` if any
+- [x] `src/extension.ts` registers stub commands and empty tree providers; one placeholder vitest test
+- [x] `.gitignore`: `node_modules/`, `dist/`, `*.vsix`, `.vscode-test/`
 
 **Done when:** `pnpm install && pnpm build && pnpm typecheck && pnpm test && pnpm package` pass and produce `gitsprout-0.1.0.vsix`. User check: F5 → sprout icon in the Activity Bar with five empty views (Repositories only in a multi-root folder later).
 
 **Session:** sonnet, high; first.
+
+**Decisions (2026-10-03, session 1):**
+- Layout: `src/extension.ts` (wiring), `src/commands/ids.ts` (command/view id lists, no `vscode` import), `src/commands/stubs.ts` (stub commands showing "Gitsprout: not implemented yet."), `src/views/emptyTree.ts` (empty `TreeDataProvider` for all five views), `webview/main.ts` (empty entry so the webview bundle builds), `vitest.config.mts` (`test/**/*.test.ts`; `.mts` so Vite loads it as ESM without a warning), `test/placeholder.test.ts` + `test/manifest.test.ts` (manifest <-> `ids.ts` consistency, menus/keybindings reference declared commands).
+- `gitsprout.multiRepo` is set to `false` in `activate()`, so Repositories stays hidden until stage 3 flips it.
+- `.gitignore`: dropped `.vscode/` (launch/tasks must be committed) and the obsolete `src-tauri/gen/`; added `.serena/`.
+- Toolchain: typescript ^7.0.2 (npm `latest`, the native port), esbuild 0.28, vitest ^4.1, vsce 4.0, `@types/node` 20, `@types/vscode` ~1.90.0. TS 7 rejects `moduleResolution: node10`, so `tsconfig.json` omits it (`module: commonjs`); tests use `__dirname`, not `import.meta`.
+- Review (2026-10-03): TS 7 kept — `tsc` is only the type checker here; esbuild and vitest transpile on their own and nothing consumes the TS JS API (no eslint/ts-node/ts-jest). If a tool later needs the TS 5 API, pin `typescript@~5.9` and set `moduleResolution: bundler`. Vitest moved 5.0 → 4.1: vitest 5 requires `@types/node` ^22 || >=24, vitest 4.1 accepts ^20, and `@types/node@20` stays because VS Code 1.90 runs Node 20 (no Node 22 APIs in `src/`).
+- `.vscodeignore` ships `dist/*.js` (no source maps), `media/`, `package.json`, `README.md`, `LICENSE`. `.vsix` has 8 files, 9.1 KB.
+- `media/icon.png` is the prototype sprout in white on a green (#2e7d32) rounded square, rendered with `@resvg/resvg-js-cli` from a temp SVG (not kept in the repo); the colour is a placeholder choice.
+- Menus: command-to-`contextValue` assignments and `inline`/group names beyond the roadmap text are my guess (inline: fetch/graph on repo, checkout on branches, apply/pop/drop on stash); stage 4/6 should refine them against the prototype. Keybindings: `mac` `alt+cmd+g` / `alt+cmd+r`, `key` `ctrl+alt+g` / `ctrl+alt+r` elsewhere (review fix: `cmd` doesn't exist off macOS).
+- `pnpm package` warns about missing `repository` and `LICENSE`; left as is (`license: UNLICENSED`, `private: true`).
+- `pnpm watch` prints `[watch] <bundle> build started|finished` from an esbuild plugin; `.vscode/tasks.json` waits for the extension bundle's "finished" line, so F5 never launches before `dist/extension.js` exists (review fix: the old `watching…` line was printed before the first build ended).
+- Review note: `workspaceContains:**/.git` most likely never fires (VS Code's glob search lists files, not the `.git` directory); harmless because `onStartupFinished` activates anyway. Kept as decided.
+- Not verified: F5 / Extension Development Host, sprout icon rendering in the Activity Bar, five empty views, `.vscode/launch.json` + `tasks.json` actually working (user check).
 
 ### 2. Git layer
 Runner, parsers, read and write operations, tested without VS Code.
@@ -175,6 +189,8 @@ The four trees for the active repo plus the diff provider.
 - [ ] titles follow the active repo (`TreeView.description = repo name` in multi-repo)
 - [ ] `src/diff/provider.ts` + `openDiff` helpers for every row of the "Diff URIs" table; unit test for URI encode/decode and title building
 
+Note (stage 1 review): the stage 1 `view/item/context` menus are placeholders — add inline Pull/Push for `branch.local.head` and a `stashFile` entry here, against the prototype.
+
 **Done when:** `pnpm typecheck && pnpm test` pass. User check: trees match `git branch -vv`, `git stash list`, `git tag`; a stash file opens a side-by-side diff.
 
 **Session:** sonnet, high; after 3.
@@ -201,6 +217,7 @@ Everything that changes a repo, with native prompts.
 - [ ] `fetch`, `pull`, `push` for the active repo with `withProgress`; PushRejected → error "Can't push refs to remote. Try running 'Pull' first to integrate your changes." with Pull button; NoUpstream on pull → "Publish Branch"; Auth → "Run in Terminal"; Conflict → "Open Source Control"
 - [ ] `stash` (input box for an optional message), `stashApply`, `stashPop`, `stashDrop` (modal)
 - [ ] copy commands, `openSourceControl`, `refresh`; every mutation refreshes the repo and the graph
+- [ ] `menus.commandPalette`: hide commands that need a tree/graph argument (`checkoutBranch`, `checkoutRemote`, `createBranchFrom`, `renameBranch`, `deleteBranch`, `stashApply/Pop/Drop`, `copySha`, `copyMessage`, `copyBranchName`, `copyRepoPath`, `repoShowGraph`, `repoFetch`) or make them prompt when called without one
 
 **Done when:** `pnpm typecheck && pnpm test` pass. User check in a scratch clone: commit on a behind branch (built-in SCM) → Push rejected → Pull merges → Push passes; create/rename/delete a branch; stash with an untracked file and pop it.
 
@@ -259,6 +276,7 @@ Entry points: src/git/{run,parse,repo,types}.ts (create), test/.
 Already decided, don't ask: invocations, parsing rules and error kinds exactly as in the contract; src/git/ must not import 'vscode' (tests run in plain node); integration tests build temp repos with the git CLI and never touch a real remote.
 
 Order: types.ts → run.ts → parse.ts + parse.test.ts → repo.ts → repo.integration.test.ts.
+From the actual code (stage 1): vitest 4.1 with vitest.config.mts (include test/**/*.test.ts); tsconfig.json is module commonjs without moduleResolution and covers src/ and test/ (TypeScript 7 — tsc is only the checker, esbuild/vitest transpile); tests run as CJS — use __dirname / os.tmpdir(), not import.meta; @types/node 20 — no Node 22-only APIs in src/ (VS Code 1.90 runs Node 20); import Node builtins as 'node:child_process' etc. src/commands/ids.ts + test/manifest.test.ts guard the manifest — leave them alone.
 DoD: pnpm typecheck && pnpm test pass.
 Don't: views, commands, webview.
 + Common rules.
