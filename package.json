@@ -68,17 +68,20 @@
       {
         "command": "gitsprout.refresh",
         "title": "Refresh",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(refresh)"
       },
       {
         "command": "gitsprout.fetch",
         "title": "Fetch",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(cloud-download)"
       },
       {
         "command": "gitsprout.fetchAll",
         "title": "Fetch All",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(cloud-download)"
       },
       {
         "command": "gitsprout.pull",
@@ -173,7 +176,12 @@
       {
         "command": "gitsprout.toggleOnlyAttention",
         "title": "Toggle Only Repositories Needing Attention",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(filter)",
+        "toggled": {
+          "condition": "gitsprout.onlyAttention",
+          "icon": "$(check)"
+        }
       },
       {
         "command": "gitsprout.openSourceControl",
@@ -183,12 +191,14 @@
       {
         "command": "gitsprout.repoShowGraph",
         "title": "Show Graph",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(git-commit)"
       },
       {
         "command": "gitsprout.repoFetch",
         "title": "Fetch",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(cloud-download)"
       }
     ],
     "menus": {
