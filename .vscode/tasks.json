@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "pnpm: watch",
+      "type": "shell",
+      "command": "pnpm watch",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "esbuild",
+        "pattern": { "regexp": "^$" },
+        "background": { "activeOnStart": true, "beginsPattern": "\\[watch\\] extension build started", "endsPattern": "\\[watch\\] extension build finished" }
+      },
+      "group": { "kind": "build", "isDefault": true }
+    }
+  ]
+}

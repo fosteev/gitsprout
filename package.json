@@ -1,0 +1,443 @@
+{
+  "name": "gitsprout",
+  "displayName": "Gitsprout",
+  "description": "Multi-repo git overview, commit graph and native diffs for VS Code and Cursor.",
+  "version": "0.1.0",
+  "publisher": "fosteev",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "icon": "media/icon.png",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "workspaceContains:**/.git"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gitsprout",
+          "title": "Gitsprout",
+          "icon": "media/sprout.svg"
+        }
+      ]
+    },
+    "views": {
+      "gitsprout": [
+        {
+          "id": "gitsprout.repositories",
+          "name": "Repositories",
+          "when": "gitsprout.multiRepo"
+        },
+        {
+          "id": "gitsprout.branches",
+          "name": "Branches"
+        },
+        {
+          "id": "gitsprout.remotes",
+          "name": "Remotes"
+        },
+        {
+          "id": "gitsprout.stashes",
+          "name": "Stashes"
+        },
+        {
+          "id": "gitsprout.tags",
+          "name": "Tags"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "gitsprout.showGraph",
+        "title": "Show Graph",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.switchRepository",
+        "title": "Switch Repository…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.refresh",
+        "title": "Refresh",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.fetch",
+        "title": "Fetch",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.fetchAll",
+        "title": "Fetch All",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.pull",
+        "title": "Pull",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.push",
+        "title": "Push",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.checkout",
+        "title": "Checkout…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.checkoutBranch",
+        "title": "Checkout Branch",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.checkoutRemote",
+        "title": "Checkout Remote Branch",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.createBranch",
+        "title": "Create Branch…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.createBranchFrom",
+        "title": "Create Branch From…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.renameBranch",
+        "title": "Rename Branch…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.deleteBranch",
+        "title": "Delete Branch…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.stash",
+        "title": "Stash Changes…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.stashApply",
+        "title": "Apply Stash",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.stashPop",
+        "title": "Pop Stash",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.stashDrop",
+        "title": "Drop Stash…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.copySha",
+        "title": "Copy Commit SHA",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.copyMessage",
+        "title": "Copy Commit Message",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.copyBranchName",
+        "title": "Copy Branch Name",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.copyRepoPath",
+        "title": "Copy Repository Path",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.toggleAutoBuild",
+        "title": "Toggle Hide CI Commits",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.toggleOnlyAttention",
+        "title": "Toggle Only Repositories Needing Attention",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.openSourceControl",
+        "title": "Open Source Control",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.repoShowGraph",
+        "title": "Show Graph",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.repoFetch",
+        "title": "Fetch",
+        "category": "Gitsprout"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "gitsprout.fetch",
+          "when": "view == gitsprout.branches",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitsprout.pull",
+          "when": "view == gitsprout.branches",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitsprout.push",
+          "when": "view == gitsprout.branches",
+          "group": "navigation@3"
+        },
+        {
+          "command": "gitsprout.showGraph",
+          "when": "view == gitsprout.branches",
+          "group": "navigation@4"
+        },
+        {
+          "command": "gitsprout.fetchAll",
+          "when": "view == gitsprout.repositories",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitsprout.toggleOnlyAttention",
+          "when": "view == gitsprout.repositories",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitsprout.stash",
+          "when": "view == gitsprout.stashes",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "gitsprout.repoShowGraph",
+          "when": "view == gitsprout.repositories && viewItem == repo",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitsprout.repoFetch",
+          "when": "view == gitsprout.repositories && viewItem == repo",
+          "group": "inline@2"
+        },
+        {
+          "command": "gitsprout.copyRepoPath",
+          "when": "view == gitsprout.repositories && viewItem == repo",
+          "group": "1_copy"
+        },
+        {
+          "command": "gitsprout.checkoutBranch",
+          "when": "view == gitsprout.branches && viewItem == branch.local",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitsprout.renameBranch",
+          "when": "view == gitsprout.branches && viewItem == branch.local",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "gitsprout.deleteBranch",
+          "when": "view == gitsprout.branches && viewItem == branch.local",
+          "group": "1_modify@2"
+        },
+        {
+          "command": "gitsprout.createBranchFrom",
+          "when": "view == gitsprout.branches && viewItem == branch.local",
+          "group": "2_create"
+        },
+        {
+          "command": "gitsprout.copyBranchName",
+          "when": "view == gitsprout.branches && viewItem == branch.local",
+          "group": "3_copy"
+        },
+        {
+          "command": "gitsprout.renameBranch",
+          "when": "view == gitsprout.branches && viewItem == branch.local.head",
+          "group": "1_modify"
+        },
+        {
+          "command": "gitsprout.createBranchFrom",
+          "when": "view == gitsprout.branches && viewItem == branch.local.head",
+          "group": "2_create"
+        },
+        {
+          "command": "gitsprout.copyBranchName",
+          "when": "view == gitsprout.branches && viewItem == branch.local.head",
+          "group": "3_copy"
+        },
+        {
+          "command": "gitsprout.checkoutRemote",
+          "when": "view == gitsprout.remotes && viewItem == branch.remote",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitsprout.createBranchFrom",
+          "when": "view == gitsprout.remotes && viewItem == branch.remote",
+          "group": "2_create"
+        },
+        {
+          "command": "gitsprout.copyBranchName",
+          "when": "view == gitsprout.remotes && viewItem == branch.remote",
+          "group": "3_copy"
+        },
+        {
+          "command": "gitsprout.stashApply",
+          "when": "view == gitsprout.stashes && viewItem == stash",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitsprout.stashPop",
+          "when": "view == gitsprout.stashes && viewItem == stash",
+          "group": "inline@2"
+        },
+        {
+          "command": "gitsprout.stashDrop",
+          "when": "view == gitsprout.stashes && viewItem == stash",
+          "group": "inline@3"
+        },
+        {
+          "command": "gitsprout.createBranchFrom",
+          "when": "view == gitsprout.tags && viewItem == tag",
+          "group": "2_create"
+        },
+        {
+          "command": "gitsprout.copyBranchName",
+          "when": "view == gitsprout.tags && viewItem == tag",
+          "group": "3_copy"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "gitsprout.createBranchFrom",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
+          "group": "1_create"
+        },
+        {
+          "command": "gitsprout.copySha",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
+          "group": "2_copy@1"
+        },
+        {
+          "command": "gitsprout.copyMessage",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
+          "group": "2_copy@2"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "gitsprout.showGraph",
+        "key": "ctrl+alt+g",
+        "mac": "alt+cmd+g"
+      },
+      {
+        "command": "gitsprout.switchRepository",
+        "key": "ctrl+alt+r",
+        "mac": "alt+cmd+r"
+      }
+    ],
+    "configuration": {
+      "title": "Gitsprout",
+      "properties": {
+        "gitsprout.scanDepth": {
+          "type": "number",
+          "default": 3,
+          "minimum": 0,
+          "description": "How deep to scan workspace folders for git repositories."
+        },
+        "gitsprout.scanExclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules",
+            "**/vendor"
+          ],
+          "description": "Glob patterns skipped during repository discovery."
+        },
+        "gitsprout.logLimit": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 1,
+          "description": "Maximum number of commits loaded into the graph."
+        },
+        "gitsprout.ciPattern": {
+          "type": "string",
+          "default": "^AutoBuild$",
+          "description": "Regular expression matching CI commit subjects (hidden when hideCi is on)."
+        },
+        "gitsprout.hideCi": {
+          "type": "boolean",
+          "default": false,
+          "description": "Hide CI commits in the graph."
+        },
+        "gitsprout.followActiveEditor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Switch the active repository to the one containing the active editor."
+        },
+        "gitsprout.fetchConcurrency": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "description": "Number of repositories fetched in parallel by Fetch All."
+        },
+        "gitsprout.jira": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {
+            "P7": "https://jira.pilot-gps.com/browse/",
+            "GARM": "https://jira.pilot-gps.com/browse/",
+            "PILOTADM": "https://jira.pilot-gps.com/browse/",
+            "RNTBST": "https://jira.pilot-gps.com/browse/",
+            "NEWMFC": "https://jira.sccloud.ru/browse/",
+            "RPGU": "https://jira.sccloud.ru/browse/",
+            "SITCENTER": "https://jira.sccloud.ru/browse/",
+            "VBV": "https://atlassian.tatikoma.ru/jira/browse/",
+            "MFCDEV": "https://atlassian.tatikoma.ru/jira/browse/",
+            "SDU": "https://atlassian.tatikoma.ru/jira/browse/"
+          },
+          "description": "Jira project key to browse URL prefix; keys in commit messages become links."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p webview/tsconfig.json",
+    "test": "vitest run",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "20",
+    "@types/vscode": "~1.90.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
