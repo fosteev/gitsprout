@@ -1,0 +1,1160 @@
+<title>Gitsprout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@600&display=swap">
+<style>
+/* Layout: one desktop window — refs sidebar | commit graph (or diff) | working panel; dark-first like a dev tool */
+:root {
+  --bg: #0d0f15;
+  --surface: #131620;
+  --raise: #1a1e2b;
+  --line: #252a3b;
+  --fg: #e3e6f0;
+  --muted: #8a90a9;
+  --faint: #596079;
+  --accent: #9bd36a;
+  --on-accent: #0f1a08;
+  --ok: #4fd1c0;
+  --warn: #f2c14e;
+  --bad: #ff5d73;
+  --add: rgba(79, 209, 192, .12);
+  --del: rgba(255, 93, 115, .12);
+  --sel: rgba(155, 211, 106, .09);
+  --hover: rgba(255, 255, 255, .035);
+  --l0: #5cc8ff; --l1: #b18cff; --l2: #ff8a65; --l3: #f2c14e; --l4: #4fd1c0; --l5: #ff6fb5;
+  --ui: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --display: 'Unbounded', 'Onest', system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eef0f5; --surface: #ffffff; --raise: #f4f5f9; --line: #dde0ea;
+    --fg: #1a1d29; --muted: #5c6280; --faint: #9095ad;
+    --accent: #3d8b2c; --on-accent: #ffffff;
+    --ok: #0f8f80; --warn: #b07c00; --bad: #d63350;
+    --add: rgba(15, 143, 128, .1); --del: rgba(214, 51, 80, .09); --sel: rgba(61, 139, 44, .08); --hover: rgba(20, 25, 50, .035);
+    --l0: #1a8ccc; --l1: #7a55e0; --l2: #df5a35; --l3: #b88600; --l4: #0f8f80; --l5: #cf3d8a;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #eef0f5; --surface: #ffffff; --raise: #f4f5f9; --line: #dde0ea;
+  --fg: #1a1d29; --muted: #5c6280; --faint: #9095ad;
+  --accent: #3d8b2c; --on-accent: #ffffff;
+  --ok: #0f8f80; --warn: #b07c00; --bad: #d63350;
+  --add: rgba(15, 143, 128, .1); --del: rgba(214, 51, 80, .09); --sel: rgba(61, 139, 44, .08); --hover: rgba(20, 25, 50, .035);
+  --l0: #1a8ccc; --l1: #7a55e0; --l2: #df5a35; --l3: #b88600; --l4: #0f8f80; --l5: #cf3d8a;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 13px/1.4 var(--ui); padding-inline: 16px; padding-block: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mono { font-family: var(--mono); font-size: 12px; }
+svg { flex: none; }
+
+.app {
+  height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+}
+
+/* title bar */
+.titlebar { display: flex; align-items: center; gap: 14px; padding: 0 12px; height: 40px; border-bottom: 1px solid var(--line); background: var(--bg); min-width: 0; }
+.lights { display: flex; gap: 7px; }
+.lights i { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+.brand { display: flex; align-items: center; gap: 7px; color: var(--accent); }
+.brand b { font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .02em; color: var(--fg); }
+.tabs { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tab { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 6px 12px; border-radius: 7px; color: var(--muted); white-space: nowrap; }
+.tab:hover { background: var(--hover); color: var(--fg); }
+.tab.on { background: var(--surface); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); }
+.tab.add { padding: 6px 9px; }
+
+/* toolbar */
+.toolbar { display: flex; align-items: center; gap: 14px; padding: 8px 12px; border-bottom: 1px solid var(--line); min-width: 0; flex-wrap: wrap; }
+.crumb { display: flex; flex-direction: column; gap: 1px; border: 0; background: none; padding: 2px 6px; border-radius: 6px; text-align: left; }
+.crumb:hover { background: var(--hover); }
+.crumb .lbl { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.crumb b { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 5px; }
+.tgroup { display: flex; gap: 2px; padding-left: 14px; border-left: 1px solid var(--line); }
+.tbtn { position: relative; display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 7px 10px; border-radius: 7px; color: var(--muted); }
+.tbtn:hover { background: var(--hover); color: var(--fg); }
+.tbtn:disabled { opacity: .4; cursor: default; background: none; }
+.badge { font-style: normal; font-size: 10px; font-weight: 600; min-width: 17px; padding: 1px 5px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font-variant-numeric: tabular-nums; }
+.badge:empty { display: none; }
+.spacer { flex: 1; }
+.proto { font-size: 11px; color: var(--faint); border: 1px dashed var(--line); padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+.side-toggle { display: none; }
+
+/* main grid */
+.main { display: grid; grid-template-columns: 250px minmax(0, 1fr) 360px; min-height: 0; }
+.side, .panel { min-height: 0; overflow: auto; }
+.side { border-right: 1px solid var(--line); padding: 10px 8px 16px; display: flex; flex-direction: column; gap: 6px; }
+.panel { border-left: 1px solid var(--line); display: flex; flex-direction: column; }
+
+.filter { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; color: var(--faint); margin-bottom: 4px; }
+.filter input { border: 0; background: none; outline: none; width: 100%; min-width: 0; }
+.filter input::placeholder { color: var(--faint); }
+.filter kbd { font: 10px var(--mono); color: var(--faint); }
+
+details.sec > summary { list-style: none; display: flex; align-items: center; gap: 6px; padding: 6px 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); cursor: pointer; border-radius: 6px; }
+details.sec > summary::-webkit-details-marker { display: none; }
+details.sec > summary:hover { background: var(--hover); }
+details.sec > summary .chev { transition: transform .15s; }
+details.sec[open] > summary .chev { transform: rotate(90deg); }
+details.sec > summary .n { margin-left: auto; font-weight: 500; color: var(--faint); font-variant-numeric: tabular-nums; }
+.folder { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 22px; color: var(--faint); font-size: 12px; }
+.ref { display: flex; align-items: center; gap: 7px; padding: 4px 8px 4px 22px; border-radius: 6px; color: var(--fg); cursor: default; user-select: none; min-width: 0; }
+.ref.in { padding-left: 38px; }
+.ref:hover { background: var(--hover); }
+.ref.on { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); }
+.ref .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ref .ic { color: var(--faint); }
+.ref.on .ic { color: var(--accent); }
+.ref .ab { margin-left: auto; display: flex; gap: 4px; font: 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.ref .ab .up { color: var(--ok); }
+.ref .ab .dn { color: var(--warn); }
+.ref .sub { color: var(--faint); font-size: 11px; }
+.empty-note { padding: 4px 8px 4px 22px; color: var(--faint); font-size: 12px; }
+
+/* center */
+.center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.ghead { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.ghead .filter { margin: 0; width: 240px; max-width: 100%; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: none; border-radius: 999px; padding: 4px 10px; color: var(--muted); font-size: 12px; }
+.chip:hover { color: var(--fg); }
+.chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--sel); }
+.viewing { margin-left: auto; color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.gcols, .row { display: grid; grid-template-columns: 150px var(--gw, 60px) minmax(0, 1fr) 118px 54px 66px; align-items: center; column-gap: 10px; }
+.gcols { padding: 5px 12px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); border-bottom: 1px solid var(--line); }
+.gscroll { overflow: auto; flex: 1; min-height: 0; padding-bottom: 12px; }
+.row { height: 30px; padding: 0 12px; cursor: default; user-select: none; }
+.row:hover { background: var(--hover); }
+.row.sel { background: var(--sel); }
+.row.dim { opacity: .28; }
+.row svg { display: block; }
+.refs { display: flex; gap: 4px; min-width: 0; justify-content: flex-end; }
+.pill { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 1px 7px; border-radius: 5px; font-size: 11.5px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--fg); white-space: nowrap; overflow: hidden; }
+.pill span { overflow: hidden; text-overflow: ellipsis; }
+.pill.head { background: var(--c); color: var(--bg); font-weight: 600; }
+.pill.more { flex: none; border-color: var(--line); background: none; color: var(--muted); }
+.msg { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.msg .t { overflow: hidden; text-overflow: ellipsis; }
+.msg.merge .t, .msg.ci .t { color: var(--muted); }
+.jira { flex: none; font: 500 11px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--raise); color: var(--fg); text-decoration: none; border: 1px solid var(--line); }
+a.jira:hover { border-color: var(--accent); color: var(--accent); }
+.kind { flex: none; font-size: 9.5px; font-weight: 600; letter-spacing: .07em; color: var(--muted); }
+.kind.FIX { color: var(--bad); } .kind.FEAT, .kind.FEATURE { color: var(--ok); } .kind.DOCS { color: var(--l0); } .kind.UPDATE { color: var(--warn); }
+.wipmsg { color: var(--accent); font-style: italic; }
+.who { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); font-size: 12px; }
+.who span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.av { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 8.5px; font-weight: 600; color: var(--bg); background: var(--c); }
+.when, .sha { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.sha { font-family: var(--mono); font-size: 11.5px; }
+
+/* diff */
+.diffview { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.dhead { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.dhead .path { font: 12.5px var(--mono); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dhead .path .dir { color: var(--muted); }
+.dbody { overflow: auto; flex: 1; min-height: 0; font: 12px/1.6 var(--mono); padding-bottom: 16px; }
+.dl { display: grid; grid-template-columns: 44px 44px 16px max-content; white-space: pre; }
+.dl .no { color: var(--faint); text-align: right; padding-right: 8px; user-select: none; font-variant-numeric: tabular-nums; }
+.dl .sg { color: var(--faint); user-select: none; }
+.dl.a { background: var(--add); } .dl.a .sg { color: var(--ok); }
+.dl.d { background: var(--del); } .dl.d .sg { color: var(--bad); }
+.dl.h { color: var(--l1); background: var(--raise); margin-top: 6px; }
+.dl.h:first-child { margin-top: 0; }
+.dl.note { color: var(--faint); font-style: italic; }
+.bin { padding: 40px 16px; color: var(--muted); text-align: center; font-family: var(--ui); }
+
+/* panel */
+.phead { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); min-height: 46px; flex-wrap: wrap; }
+.phead .grow { flex: 1; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); background: var(--raise); border-radius: 7px; padding: 6px 11px; font-size: 12.5px; white-space: nowrap; }
+.btn:hover { border-color: var(--faint); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.danger { color: var(--bad); }
+.btn.danger.primary { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn:disabled { opacity: .45; cursor: default; filter: none; }
+.btn.sm { padding: 3px 8px; font-size: 11.5px; }
+.btn.ghost { background: none; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--fg); background: var(--hover); }
+
+.psec { padding: 6px 6px 10px; border-bottom: 1px solid var(--line); }
+.psec-h { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.psec-h .btn { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.file { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; cursor: default; }
+.file:hover { background: var(--hover); }
+.file.on { background: var(--sel); }
+.file .p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; direction: rtl; text-align: left; }
+.file .p bdi { direction: ltr; }
+.file .p .dir { color: var(--faint); }
+.st { font: 600 10px var(--mono); width: 16px; height: 16px; display: grid; place-items: center; border-radius: 4px; }
+.st.M { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.st.A { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.st.D { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+.cnt { font: 11px var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; }
+.cnt .p1 { color: var(--ok); } .cnt .m1 { color: var(--bad); }
+.file .btn { opacity: 0; }
+.file:hover .btn, .file .btn:focus-visible { opacity: 1; }
+.none { padding: 6px 10px 4px; color: var(--faint); font-size: 12px; }
+
+.commitbox { margin-top: auto; padding: 12px 14px 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+.field { position: relative; }
+.field input, .field textarea { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; outline: none; resize: vertical; }
+.field input { padding-right: 38px; font-weight: 500; }
+.field input:focus, .field textarea:focus { border-color: var(--accent); }
+.field .left { position: absolute; right: 9px; top: 9px; font: 11px var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; }
+.field .left.over { color: var(--bad); }
+.check { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12.5px; }
+.check input { accent-color: var(--accent); }
+.cbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.hint { font-size: 11.5px; color: var(--faint); min-height: 1em; }
+
+.ctitle { padding: 14px 14px 4px; font-size: 15px; font-weight: 600; line-height: 1.35; text-wrap: balance; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.cbody { padding: 4px 14px 0; color: var(--muted); white-space: pre-wrap; }
+.meta { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 7px 10px; padding: 12px 14px 14px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+.meta dt { color: var(--faint); }
+.meta dd { margin: 0; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-width: 0; }
+.link { border: 0; background: none; padding: 0; color: var(--accent); font: 12px var(--mono); }
+.link:hover { text-decoration: underline; }
+
+/* status bar */
+.status { display: flex; align-items: center; gap: 14px; padding: 5px 12px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); background: var(--bg); min-width: 0; overflow: hidden; white-space: nowrap; }
+.status b { color: var(--muted); font-weight: 500; }
+.status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block; margin-right: 6px; }
+.status .dot.dirty { background: var(--warn); }
+
+/* context menu, modal, toasts */
+.ctx { position: fixed; z-index: 30; min-width: 220px; background: var(--raise); border: 1px solid var(--line); border-radius: 9px; padding: 5px; box-shadow: 0 12px 32px rgba(0, 0, 0, .35); }
+.ctx button { display: flex; width: 100%; align-items: center; gap: 8px; border: 0; background: none; padding: 6px 10px; border-radius: 6px; text-align: left; font-size: 12.5px; }
+.ctx button:hover:not(:disabled) { background: var(--sel); color: var(--accent); }
+.ctx button:disabled { color: var(--faint); cursor: default; }
+.ctx button.danger:not(:disabled) { color: var(--bad); }
+.ctx .later { margin-left: auto; font-size: 10px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+.ctx hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+.scrim { position: fixed; inset: 0; z-index: 40; background: rgba(5, 7, 12, .5); display: grid; place-items: center; padding: 16px; }
+.modal { width: min(420px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 20px 50px rgba(0, 0, 0, .4); }
+.modal h3 { margin: 0; font-size: 15px; }
+.modal p { margin: 0; color: var(--muted); }
+.modal .field input { padding-right: 10px; font-family: var(--mono); font-size: 12.5px; font-weight: 400; }
+.modal .err { color: var(--bad); font-size: 12px; min-height: 1em; }
+.m-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.toasts { position: fixed; right: 28px; bottom: 44px; z-index: 50; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: none; }
+.toast { background: var(--raise); border: 1px solid var(--line); border-left: 3px solid var(--ok); border-radius: 8px; padding: 9px 13px; max-width: 380px; box-shadow: 0 10px 28px rgba(0, 0, 0, .3); animation: tin .18s ease-out; }
+.toast.warn { border-left-color: var(--warn); } .toast.bad { border-left-color: var(--bad); }
+@keyframes tin { from { transform: translateY(6px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } details.sec > summary .chev { transition: none; } }
+
+/* responsive */
+@media (max-width: 1280px) {
+  .main { grid-template-columns: 220px minmax(0, 1fr) 320px; }
+  .gcols, .row { grid-template-columns: 120px var(--gw, 60px) minmax(0, 1fr) 54px 66px; }
+  .c-who { display: none; }
+}
+@media (max-width: 960px) {
+  body { height: auto; }
+  html { height: auto; }
+  .app { height: auto; }
+  .main { grid-template-columns: minmax(0, 1fr); }
+  .side { display: none; border-right: 0; border-bottom: 1px solid var(--line); max-height: 50vh; }
+  .app.side-open .side { display: flex; }
+  .side-toggle { display: flex; }
+  .center { height: 62vh; }
+  .panel { border-left: 0; border-top: 1px solid var(--line); }
+  .tbtn span:not(.badge) { display: none; }
+  .proto { display: none; }
+}
+@media (max-width: 600px) {
+  .gcols, .row { grid-template-columns: 84px var(--gw, 60px) minmax(0, 1fr); column-gap: 8px; }
+  .c-when, .c-sha { display: none; }
+  .tgroup { padding-left: 8px; }
+  .toolbar { gap: 8px; }
+  .titlebar .lights { display: none; }
+  .ghead .filter { width: 100%; }
+  .viewing { margin-left: 0; }
+}
+</style>
+
+<div class="app" id="app">
+  <header class="titlebar">
+    <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V11.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 13.5C12 9 9 6.5 4.5 6.5c0 4.5 3 7 7.5 7z" fill="currentColor"/><path d="M12 11c0-4 2.6-7.5 7.5-7.5 0 4.5-3 7.5-7.5 7.5z" fill="currentColor" opacity=".7"/><circle cx="12" cy="20" r="2.3" fill="currentColor"/></svg>
+      <b>gitsprout</b>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="Repositories"></nav>
+  </header>
+
+  <div class="toolbar">
+    <button class="tbtn side-toggle" data-act="toggle-side" aria-label="Show branches"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h12"/></svg></button>
+    <button class="crumb" data-act="focus-filter"><span class="lbl">repository</span><b>Pilot7</b></button>
+    <button class="crumb" data-act="focus-filter"><span class="lbl">branch</span><b id="t-branch">develop</b></button>
+    <div class="tgroup">
+      <button class="tbtn" data-act="fetch" title="git fetch --all --prune"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg><span>Fetch</span></button>
+      <button class="tbtn" data-act="pull" title="git pull (fast-forward if possible)"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2v9M4 7.5 8 11.5l4-4M3 14h10"/></svg><span>Pull</span><i class="badge" id="b-pull"></i></button>
+      <button class="tbtn" data-act="push" title="git push"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 12V3M4 6.5 8 2.5l4 4M3 14h10"/></svg><span>Push</span><i class="badge" id="b-push"></i></button>
+    </div>
+    <div class="tgroup">
+      <button class="tbtn" data-act="new-branch" title="Create branch from HEAD"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="4" cy="3.5" r="1.6"/><circle cx="4" cy="12.5" r="1.6"/><circle cx="12" cy="5" r="1.6"/><path d="M4 5.1v5.8M12 6.6c0 3-4 2.4-7 4.6"/></svg><span>Branch</span></button>
+      <button class="tbtn" data-act="stash" title="git stash push -u"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 9.5v3.5h11V9.5M8 2v7.5M5 6.5l3 3 3-3"/></svg><span>Stash</span></button>
+      <button class="tbtn" data-act="pop" id="t-pop" title="git stash pop"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 9.5v3.5h11V9.5M8 9.5V2M5 5l3-3 3 3"/></svg><span>Pop</span></button>
+    </div>
+    <div class="spacer"></div>
+    <span class="proto">Prototype · sample data</span>
+  </div>
+
+  <div class="main">
+    <aside class="side" id="side" aria-label="Branches"></aside>
+    <section class="center">
+      <div class="ghead">
+        <label class="filter"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3.5 3.5"/></svg><input id="q" placeholder="Search commits, SHA, P7-4040…" autocomplete="off"></label>
+        <button class="chip" id="hide-ci" data-act="toggle-ci" aria-pressed="false">Hide AutoBuild <span id="ci-n"></span></button>
+        <span class="viewing" id="viewing"></span>
+      </div>
+      <div id="graphwrap" class="diffview">
+        <div class="gcols" id="gcols"><span style="text-align:right">Branch / Tag</span><span>Graph</span><span>Commit message</span><span class="c-who">Author</span><span class="c-when">Date</span><span class="c-sha">SHA</span></div>
+        <div class="gscroll" id="graph" role="listbox" aria-label="Commits" tabindex="0"></div>
+      </div>
+      <div id="diff" class="diffview" hidden></div>
+    </section>
+    <aside class="panel" id="panel" aria-label="Details"></aside>
+  </div>
+
+  <footer class="status" id="status"></footer>
+</div>
+
+<div class="ctx" id="ctx" hidden role="menu"></div>
+<div class="scrim" id="scrim" hidden>
+  <form class="modal" id="modal">
+    <h3 id="m-title"></h3>
+    <div id="m-body"></div>
+    <div class="err" id="m-err"></div>
+    <div class="m-actions"><button type="button" class="btn" data-act="m-cancel">Cancel</button><button type="submit" class="btn primary" id="m-ok">OK</button></div>
+  </form>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const rnd = () => Math.random().toString(16).slice(2, 9).padEnd(7, '0');
+
+const IC = {
+  local: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3" width="11" height="7.5" rx="1"/><path d="M1 13h14"/></svg>',
+  remote: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.5 12.5h7a3 3 0 0 0 .4-6A4 4 0 0 0 4.2 7a2.8 2.8 0 0 0 .3 5.5z"/></svg>',
+  branch: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5" r="1.5"/><path d="M4.5 5v6M11.5 6.5c0 3-3.5 2.5-6.3 4.6"/></svg>',
+  check: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m3 8.5 3.2 3L13 4.5"/></svg>',
+  tag: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 2.5h5l6 6-5 5-6-6z"/><circle cx="5.5" cy="5.5" r="1"/></svg>',
+  stash: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="3" rx=".8"/><path d="M3 6v7h10V6M6.5 9h3"/></svg>',
+  folder: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 4h4.5l1.5 1.5h7v7.5h-13z"/></svg>',
+  chev: '<svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m3.5 2 3 3-3 3"/></svg>',
+  back: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 3 5 8l5 5"/></svg>',
+  copy: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="8.5" height="8.5" rx="1.2"/><path d="M3 10.5V3.8A1.3 1.3 0 0 1 4.3 2.5H11"/></svg>',
+};
+
+const AUTH = {
+  'fosteev3': { ini: 'FO', c: 'var(--l2)' },
+  'a.sokolov': { ini: 'AS', c: 'var(--l0)' },
+  'd.lebedev': { ini: 'DL', c: 'var(--l4)' },
+  'ci-bot': { ini: 'CI', c: 'var(--faint)' },
+};
+
+const VER = [['build/version.json', 'M', 2, 2]];
+const MERGE_DEV = "Merge remote-tracking branch 'origin/develop' into develop";
+const RAW = [
+  ['e41a9c2', 'AutoBuild', 'ci-bot', 12, ['9b07d3e'], VER],
+  ['9b07d3e', MERGE_DEV, 'a.sokolov', 40, ['3fd2a81', '77c1e05'], []],
+  ['3fd2a81', 'P7-4040 [ FEATURE ] Control Room Algorithm Processing Window fix 2', 'a.sokolov', 55, ['a0e93bb'], [['web/src/control-room/ProcessingWindow.tsx', 'M', 14, 6], ['web/src/control-room/useProcessingWindow.ts', 'M', 5, 2]]],
+  ['77c1e05', 'AutoBuild', 'ci-bot', 70, ['5c2d4f0'], VER],
+  ['a0e93bb', MERGE_DEV, 'a.sokolov', 120, ['d18be7a', '5c2d4f0'], []],
+  ['5c2d4f0', 'RNTBST-672 [ FIX ] charge only the change of the after-hours drop-off fee', 'd.lebedev', 140, ['0e6f2c9'], [['rent/src/billing/AfterHoursFee.php', 'M', 9, 4], ['rent/tests/billing/AfterHoursFeeTest.php', 'M', 22, 0]]],
+  ['d18be7a', 'P7-4040 [ FEATURE ] Control Room Algorithm Processing Window fix', 'a.sokolov', 180, ['b9a4410'], [['web/src/control-room/ProcessingWindow.tsx', 'M', 31, 12]]],
+  ['0e6f2c9', 'RNTBST-663 [ FIX ] add space before section headings in the standard template', 'd.lebedev', 240, ['62f8d1a'], [['rent/templates/standard/agreement.md', 'M', 3, 3]]],
+  ['b9a4410', 'AutoBuild', 'ci-bot', 300, ['f3c0b27'], VER],
+  ['62f8d1a', 'RNTBST-660 [ FEAT ] save contract transfer fuel and mileage in reservation', 'd.lebedev', 360, ['f3c0b27'], [['rent/src/reservation/ContractTransfer.php', 'M', 18, 2], ['rent/migrations/2026_09_30_add_fuel_mileage.php', 'A', 24, 0]]],
+  ['f3c0b27', "Merge branch 'develop' of https://gitlab.pilot-gps.com/SkyElectronics/Pilot7 into develop", 'd.lebedev', 420, ['8ad5e64', '1c79fa0'], []],
+  ['8ad5e64', 'RNTBST-661 [ FIX ] keep agreement settings columns as the form saves', 'd.lebedev', 480, ['4e02b8d'], [['rent/web/src/settings/AgreementColumns.tsx', 'M', 7, 9]]],
+  ['1c79fa0', 'P7-4040 [ FEATURE ] Control Room Algorithm Processing Window', 'a.sokolov', 540, ['4e02b8d'], [['web/src/control-room/ProcessingWindow.tsx', 'A', 86, 0], ['web/src/control-room/useProcessingWindow.ts', 'A', 41, 0], ['web/src/control-room/index.ts', 'M', 1, 0]]],
+  ['4e02b8d', 'AutoBuild', 'ci-bot', 1300, ['c6b13f7'], VER],
+  ['c6b13f7', 'GARM-version [ UPDATE ] 1.8.7', 'fosteev3', 1400, ['2d94e1a'], [['pulse/version.json', 'M', 1, 1], ['pulse/CHANGELOG.md', 'M', 8, 0]]],
+  ['2d94e1a', "Merge branch 'autopilot/garm-887-widget-push' into 'develop'", 'fosteev3', 1500, ['a7f5c33', 'bb3c907'], []],
+  ['a7f5c33', 'AutoBuild', 'ci-bot', 1700, ['90bd2ee'], VER],
+  ['90bd2ee', 'P7-3967 [ FEAT ] Independent addition of an object by the client through the app', 'a.sokolov', 2600, ['5e1fa48'], [['api/objects/ClientObjectController.php', 'A', 64, 0], ['web/src/objects/AddObjectDialog.tsx', 'A', 112, 0], ['web/src/i18n/ru.json', 'M', 12, 0]]],
+  ['5e1fa48', 'P7-MAP [ FEATURE ] hideControls for MapContainer', 'a.sokolov', 2900, ['d4b81c6'], [['web/src/map/MapContainer.tsx', 'M', 6, 1]]],
+  ['bb3c907', 'GARM-887 [ UPDATE ] Log widget push recipient and APNs result per token', 'fosteev3', 3000, ['06da7e4'], [['pulse/widgets/push_daemon.php', 'M', 11, 3]]],
+  ['06da7e4', 'GARM-887 [ FIX ] Requeue widget push when APNs throttles with 429', 'fosteev3', 3200, ['e9c2b55'], [['pulse/widgets/apns_client.php', 'M', 16, 4]], 'APNs answers 429 TooManyRequests on bursts.\nRequeue with a 30 s delay, give up after 5 attempts.'],
+  ['e9c2b55', 'GARM-887 [ DOCS ] Accept stage 5 watchOS widget push', 'fosteev3', 4300, ['73a0f1d'], [['docs/garm/887-widget-push.md', 'M', 14, 2]]],
+  ['73a0f1d', 'GARM-887 [ UPDATE ] Log missing prerequisites of widget push daemon', 'fosteev3', 4500, ['d4b81c6'], [['pulse/widgets/push_daemon.php', 'M', 9, 1]]],
+  ['d4b81c6', 'AutoBuild', 'ci-bot', 4700, ['1fa6e70'], VER],
+  ['1fa6e70', 'P7-3934 [ UPDATE ] Add Fluids report builder translations', 'a.sokolov', 5800, ['8c3e9d2'], [['web/src/reports/fluids/i18n/en.json', 'M', 28, 0], ['web/src/reports/fluids/i18n/ru.json', 'M', 28, 0]]],
+  ['8c3e9d2', 'GARM-823 [ FEAT ] Archive timeline baseline for camera events', 'fosteev3', 7300, ['27b5a0e'], [['pulse/cameras/ArchiveTimeline.php', 'A', 73, 0], ['pulse/cameras/EventsController.php', 'M', 12, 5]]],
+  ['27b5a0e', 'RNTBST-655 [ FIX ] round reservation total to whole rubles', 'd.lebedev', 8700, ['f0a6d19'], [['rent/src/reservation/Total.php', 'M', 3, 2]]],
+  ['f0a6d19', 'AutoBuild', 'ci-bot', 10100, [], VER],
+];
+
+const DAEMON_DIFF = String.raw`@@ -41,9 +41,13 @@ final class PushDaemon
+     public function tick(): void
+     {
+         $jobs = $this->queue->due(limit: 50);
+         foreach ($jobs as $job) {
++            if (!$this->prerequisites($job)) {
++                $this->log->warning('widget push skipped', ['job' => $job->id]);
++                continue;
++            }
+             $this->send($job);
+         }
+     }
+@@ -88,7 +92,8 @@ final class PushDaemon
+     private function send(Job $job): void
+     {
+-        $this->apns->push($job->token, $job->payload);
+-        $job->markSent();
++        $result = $this->apns->push($job->token, $job->payload);
++        $this->log->info('widget push', ['token' => $job->token, 'status' => $result->status]);
++        $result->ok() ? $job->markSent() : $this->retry($job, $result);
+     }
+ }`.split('\n');
+
+const APNS_DIFF = String.raw`@@ -0,0 +1,19 @@
++<?php
++
++namespace Pulse\Widgets;
++
++final class ApnsClient
++{
++    private const TOPIC = 'com.pilot.pulse.widget';
++
++    public function __construct(private HttpClient $http, private string $jwt) {}
++
++    public function push(string $token, array $payload): ApnsResult
++    {
++        $res = $this->http->post("/3/device/{$token}", $payload, [
++            'apns-topic' => self::TOPIC . '.push-type.widgets',
++            'authorization' => "bearer {$this->jwt}",
++        ]);
++        return new ApnsResult($res->status(), $res->header('apns-id'));
++    }
++}`.split('\n');
+
+const S = {
+  commits: RAW.map(([sha, msg, author, ago, parents, files, body]) => ({ sha, msg, author, ago, parents, files, body: body || '' })),
+  heads: { 'develop': 'c6b13f7', 'autopilot/garm-887-widget-push': 'bb3c907', 'GARM-823': '8c3e9d2', 'GARM-807': '27b5a0e', 'docker': 'f0a6d19' },
+  upstream: { 'develop': 'origin/develop', 'autopilot/garm-887-widget-push': 'origin/autopilot/garm-887-widget-push', 'GARM-823': 'origin/GARM-823' },
+  remotes: { 'origin/develop': 'e41a9c2', 'origin/autopilot/garm-887-widget-push': 'bb3c907', 'origin/GARM-823': '8c3e9d2', 'origin/develop_garm': '90bd2ee', 'origin/master': 'f0a6d19', 'origin/7.10': '27b5a0e', 'origin/7.9': 'f0a6d19' },
+  tags: { 'v1.8.7': 'c6b13f7', 'v1.8.6': '8c3e9d2' },
+  HEAD: 'develop',
+  wip: {
+    unstaged: [
+      { path: 'pulse/widgets/push_daemon.php', st: 'M', diff: DAEMON_DIFF },
+      { path: 'pulse/widgets/apns_client.php', st: 'A', diff: APNS_DIFF },
+      { path: '.DS_Store', st: 'M', bin: true },
+    ],
+    staged: [],
+  },
+  stashes: [{ msg: 'WIP on GARM-823: 8c3e9d2 camera timeline tweaks', files: [{ path: 'pulse/cameras/ArchiveTimeline.php', st: 'M', diff: null }] }],
+  sel: 'WIP',
+  diff: null,
+  hideCI: false, q: '', sideQ: '',
+  draft: { summary: '', desc: '', amend: false },
+  fetched: false,
+};
+
+/* ---------- git model ---------- */
+let MAP = {};
+const reindex = () => { MAP = Object.fromEntries(S.commits.map(c => [c.sha, c])); };
+const headSha = () => S.heads[S.HEAD];
+const dirty = () => S.wip.unstaged.length + S.wip.staged.length > 0;
+const isCI = c => c.msg === 'AutoBuild';
+function reach(sha) {
+  const seen = new Set(), st = [sha];
+  while (st.length) { const s = st.pop(); if (!s || seen.has(s)) continue; seen.add(s); (MAP[s]?.parents || []).forEach(p => st.push(p)); }
+  return seen;
+}
+function aheadBehind(local) {
+  const up = S.upstream[local]; if (!up || !S.remotes[up]) return null;
+  const a = reach(S.heads[local]), b = reach(S.remotes[up]);
+  let ahead = 0, behind = 0;
+  a.forEach(s => { if (!b.has(s)) ahead++; }); b.forEach(s => { if (!a.has(s)) behind++; });
+  return { ahead, behind, up };
+}
+function refsAt(sha) {
+  const r = [];
+  Object.entries(S.heads).forEach(([n, s]) => { if (s === sha) r.push({ kind: 'local', name: n, head: n === S.HEAD }); });
+  Object.entries(S.remotes).forEach(([n, s]) => { if (s === sha) r.push({ kind: 'remote', name: n }); });
+  Object.entries(S.tags).forEach(([n, s]) => { if (s === sha) r.push({ kind: 'tag', name: n }); });
+  return r.sort((x, y) => (y.head ? 1 : 0) - (x.head ? 1 : 0));
+}
+function counts(lines) {
+  let a = 0, d = 0;
+  (lines || []).forEach(l => { if (l[0] === '+') a++; else if (l[0] === '-') d++; });
+  return [a, d];
+}
+
+/* ---------- graph layout: one lane per open line of history ---------- */
+function visibleRows() {
+  const hidden = new Set(S.hideCI ? S.commits.filter(c => isCI(c) && !refsAt(c.sha).length).map(c => c.sha) : []);
+  const vis = s => { while (s && hidden.has(s)) s = MAP[s].parents[0]; return s; };
+  const rows = S.commits.filter(c => !hidden.has(c.sha)).map(c => ({ sha: c.sha, c, parents: [...new Set(c.parents.map(vis).filter(Boolean))] }));
+  if (dirty()) rows.unshift({ sha: 'WIP', wip: true, parents: [headSha()] });
+  return { rows, hiddenN: hidden.size };
+}
+function layout(rows) {
+  const lanes = []; const out = []; let max = 1;
+  const free = () => { const i = lanes.indexOf(null); return i < 0 ? lanes.length : i; };
+  const match = (v, sha) => v === sha || v === '~' + sha;
+  for (const r of rows) {
+    const before = lanes.slice();
+    const idxs = []; lanes.forEach((v, i) => { if (v && match(v, r.sha)) idxs.push(i); });
+    const col = idxs.length ? idxs[0] : free();
+    idxs.forEach(i => { lanes[i] = null; });
+    const outs = [];
+    r.parents.forEach((p, pi) => {
+      if (pi === 0) { lanes[col] = r.wip ? '~' + p : p; outs.push(col); }
+      else { let k = lanes.findIndex(v => v && match(v, p)); if (k < 0) { k = free(); lanes[k] = p; } outs.push(k); }
+    });
+    while (lanes.length && lanes[lanes.length - 1] === null) lanes.pop();
+    max = Math.max(max, before.length, lanes.length, col + 1);
+    out.push({ ...r, col, before, outs });
+  }
+  return { rows: out, max };
+}
+const LANE = 14, RH = 30, X = j => 9 + j * LANE;
+function rowSvg(r, W) {
+  const cy = RH / 2;
+  const seg = (x1, y1, x2, y2, j, dash) => {
+    const m = (y1 + y2) / 2;
+    const d = x1 === x2 ? `M${x1} ${y1}V${y2}` : `M${x1} ${y1}C${x1} ${m} ${x2} ${m} ${x2} ${y2}`;
+    return `<path d="${d}" stroke="var(--l${j % 6})"${dash ? ' stroke-dasharray="3 3"' : ''}/>`;
+  };
+  let s = '';
+  r.before.forEach((v, j) => {
+    if (!v) return;
+    const dash = v[0] === '~';
+    if (v === r.sha || v === '~' + r.sha) s += seg(X(j), 0, X(r.col), cy, j, dash);
+    else s += seg(X(j), 0, X(j), RH, j, dash);
+  });
+  r.outs.forEach(k => { s += seg(X(r.col), cy, X(k), RH, k, r.wip); });
+  const c = `var(--l${r.col % 6})`, x = X(r.col);
+  let n;
+  if (r.wip) n = `<circle cx="${x}" cy="${cy}" r="5" fill="var(--surface)" stroke="${c}" stroke-dasharray="2 2"/>`;
+  else if (r.parents.length > 1) n = `<circle cx="${x}" cy="${cy}" r="3.5" fill="${c}" stroke="none"/>`;
+  else if (isCI(r.c)) n = `<circle cx="${x}" cy="${cy}" r="3.5" fill="var(--surface)" stroke="${c}" stroke-width="1.5"/>`;
+  else n = `<circle cx="${x}" cy="${cy}" r="5.5" fill="${c}" stroke="none"/>`;
+  if (r.sha === headSha()) n = `<circle cx="${x}" cy="${cy}" r="9" fill="none" stroke="${c}" stroke-width="1.5" opacity=".55"/>` + n;
+  return `<svg width="${W}" height="${RH}" viewBox="0 0 ${W} ${RH}" fill="none" stroke-width="2" aria-hidden="true">${s}${n}</svg>`;
+}
+
+/* ---------- rendering ---------- */
+function fmtAgo(m) {
+  if (m < 1) return 'now';
+  if (m < 60) return m + 'm';
+  if (m < 1440) return Math.round(m / 60) + 'h';
+  return Math.round(m / 1440) + 'd';
+}
+function fmtAgoLong(m) {
+  if (m < 1) return 'just now';
+  if (m < 60) return m + ' minutes ago';
+  if (m < 1440) { const h = Math.round(m / 60); return h + (h === 1 ? ' hour ago' : ' hours ago'); }
+  const d = Math.round(m / 1440); return d + (d === 1 ? ' day ago' : ' days ago');
+}
+function msgHtml(msg, linkJira) {
+  let rest = msg, key = '', kind = '';
+  const mk = rest.match(/^([A-Z][A-Z0-9]*-[A-Za-z0-9]+)\s+/);
+  if (mk) { key = mk[1]; rest = rest.slice(mk[0].length); }
+  const mt = rest.match(/^\[\s*([A-Z]+)\s*\]\s*/);
+  if (mt) { kind = mt[1]; rest = rest.slice(mt[0].length); }
+  let h = '';
+  if (key) {
+    h += /-\d+$/.test(key) && linkJira
+      ? `<a class="jira" href="https://jira.pilot-gps.com/browse/${key}" target="_blank" rel="noopener" title="Open ${key} in Jira">${key}</a>`
+      : `<span class="jira">${esc(key)}</span>`;
+  }
+  if (kind) h += `<span class="kind ${kind}">${kind}</span>`;
+  return h + `<span class="t">${esc(rest)}</span>`;
+}
+function author(a) {
+  const x = AUTH[a] || { ini: a.slice(0, 2).toUpperCase(), c: 'var(--l1)' };
+  return `<span class="av" style="--c:${x.c}">${x.ini}</span><span>${esc(a)}</span>`;
+}
+function pills(refs, color) {
+  if (!refs.length) return '';
+  const r = refs[0];
+  const name = r.kind === 'local' ? r.name : r.name;
+  const ic = r.kind === 'remote' ? IC.remote : r.kind === 'tag' ? IC.tag : (r.head ? IC.check : IC.local);
+  let h = `<span class="pill${r.head ? ' head' : ''}" style="--c:${color}" title="${esc(refs.map(x => x.name).join(', '))}">${ic}<span>${esc(name)}</span></span>`;
+  if (refs.length > 1) h += `<span class="pill more" title="${esc(refs.slice(1).map(x => x.name).join(', '))}">+${refs.length - 1}</span>`;
+  return h;
+}
+
+function renderGraph() {
+  const { rows, hiddenN } = visibleRows();
+  const L = layout(rows);
+  const W = X(L.max - 1) + 12;
+  const g = $('#graph');
+  g.style.setProperty('--gw', W + 'px');
+  $('#gcols').style.setProperty('--gw', W + 'px');
+  const q = S.q.trim().toLowerCase();
+  g.innerHTML = L.rows.map(r => {
+    const color = `var(--l${r.col % 6})`;
+    if (r.wip) {
+      const n = S.wip.unstaged.length + S.wip.staged.length;
+      return `<div class="row${S.sel === 'WIP' ? ' sel' : ''}" data-row="WIP" role="option" aria-selected="${S.sel === 'WIP'}">
+        <div class="refs"></div>${rowSvg(r, W)}
+        <div class="msg"><span class="wipmsg">// WIP</span><span class="cnt">${n} file${n === 1 ? '' : 's'} · ${S.wip.staged.length} staged</span></div>
+        <div class="who c-who"></div><div class="when c-when"></div><div class="sha c-sha"></div></div>`;
+    }
+    const c = r.c;
+    const hit = !q || c.msg.toLowerCase().includes(q) || c.sha.startsWith(q) || c.author.toLowerCase().includes(q);
+    const cls = c.parents.length > 1 ? 'merge' : isCI(c) ? 'ci' : '';
+    return `<div class="row${S.sel === c.sha ? ' sel' : ''}${hit ? '' : ' dim'}" data-row="${c.sha}" data-ctx="commit" data-arg="${c.sha}" role="option" aria-selected="${S.sel === c.sha}">
+      <div class="refs">${pills(refsAt(c.sha), color)}</div>${rowSvg(r, W)}
+      <div class="msg ${cls}">${msgHtml(c.msg, false)}</div>
+      <div class="who c-who">${author(c.author)}</div>
+      <div class="when c-when">${fmtAgo(c.ago)}</div>
+      <div class="sha c-sha">${c.sha}</div></div>`;
+  }).join('');
+  $('#viewing').textContent = `Viewing ${L.rows.filter(r => !r.wip).length} of ${S.commits.length}`;
+  $('#ci-n').textContent = S.hideCI ? `· ${hiddenN} hidden` : `· ${S.commits.filter(isCI).length}`;
+  $('#hide-ci').setAttribute('aria-pressed', S.hideCI);
+}
+
+function renderSide() {
+  const q = S.sideQ.trim().toLowerCase();
+  const m = n => !q || n.toLowerCase().includes(q);
+  const open = id => (document.getElementById(id)?.open ?? true) ? ' open' : '';
+  const ab = name => {
+    const x = aheadBehind(name); if (!x) return '';
+    return `<span class="ab">${x.ahead ? `<span class="up">↑${x.ahead}</span>` : ''}${x.behind ? `<span class="dn">↓${x.behind}</span>` : ''}</span>`;
+  };
+  const localItem = (name, label, inFolder) => `<div class="ref${name === S.HEAD ? ' on' : ''}${inFolder ? ' in' : ''}" tabindex="0" data-act="sel-ref" data-dbl="checkout" data-ctx="local" data-arg="${esc(name)}" title="Double-click to check out">
+      <span class="ic">${name === S.HEAD ? IC.check : IC.branch}</span><span class="nm">${esc(label)}</span>${ab(name)}</div>`;
+
+  const locals = Object.keys(S.heads).filter(m).sort((a, b) => a.localeCompare(b));
+  const groups = {}; const flat = [];
+  locals.forEach(n => { const i = n.indexOf('/'); if (i > 0) (groups[n.slice(0, i)] ||= []).push(n); else flat.push(n); });
+  let lh = '';
+  Object.keys(groups).sort().forEach(f => {
+    lh += `<div class="folder">${IC.folder}${esc(f)}</div>` + groups[f].map(n => localItem(n, n.slice(f.length + 1), true)).join('');
+  });
+  lh += flat.map(n => localItem(n, n, false)).join('');
+
+  const rem = Object.keys(S.remotes).filter(m).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const rh = rem.map(n => `<div class="ref in" tabindex="0" data-act="sel-remote" data-dbl="checkout-remote" data-ctx="remote" data-arg="${esc(n)}" title="Double-click to check out">
+      <span class="ic">${IC.branch}</span><span class="nm">${esc(n.slice(7))}</span></div>`).join('');
+
+  const sh = S.stashes.map((s, i) => `<div class="ref${S.sel === 'stash:' + i ? ' on' : ''}" tabindex="0" data-act="sel-stash" data-ctx="stash" data-arg="${i}">
+      <span class="ic">${IC.stash}</span><span class="nm">${esc(s.msg)}</span><span class="sub">@{${i}}</span></div>`).join('');
+
+  const tags = Object.keys(S.tags).filter(m).sort().reverse();
+  const th = tags.map(n => `<div class="ref" tabindex="0" data-act="sel-tag" data-arg="${esc(n)}"><span class="ic">${IC.tag}</span><span class="nm">${esc(n)}</span><span class="sub mono">${S.tags[n]}</span></div>`).join('');
+
+  $('#side').innerHTML = `
+    <label class="filter"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3.5 3.5"/></svg><input id="sideq" placeholder="Filter branches" value="${esc(S.sideQ)}" autocomplete="off"><kbd>⌘⌥F</kbd></label>
+    <details class="sec" id="sec-local"${open('sec-local')}><summary>${IC.chev}${IC.local} Local<span class="n">${locals.length}</span></summary>${lh || '<div class="empty-note">No matches</div>'}</details>
+    <details class="sec" id="sec-remote"${open('sec-remote')}><summary>${IC.chev}${IC.remote} Remote<span class="n">${rem.length}</span></summary><div class="folder">${IC.folder}origin</div>${rh || '<div class="empty-note">No matches</div>'}</details>
+    <details class="sec" id="sec-stash"${open('sec-stash')}><summary>${IC.chev}${IC.stash} Stashes<span class="n">${S.stashes.length}</span></summary>${sh || '<div class="empty-note">Nothing stashed</div>'}</details>
+    <details class="sec" id="sec-tags"${open('sec-tags')}><summary>${IC.chev}${IC.tag} Tags<span class="n">${tags.length}</span></summary>${th}</details>`;
+}
+
+function fileRow(f, actHtml, kind, extra) {
+  const i = f.path.lastIndexOf('/');
+  const dir = i >= 0 ? f.path.slice(0, i + 1) : '', base = f.path.slice(i + 1);
+  const [a, d] = f.bin ? [0, 0] : f.diff ? counts(f.diff) : [f.add || 0, f.del || 0];
+  const on = S.diff && S.diff.path === f.path && S.diff.kind === kind ? ' on' : '';
+  return `<div class="file${on}" data-act="open-file" data-arg="${esc(f.path)}" data-kind="${kind}"${extra || ''}>
+    <span class="st ${f.st}">${f.st}</span>
+    <span class="p" title="${esc(f.path)}"><bdi><span class="dir">${esc(dir)}</span>${esc(base)}</bdi></span>
+    <span class="cnt">${f.bin ? 'bin' : `<span class="p1">+${a}</span> <span class="m1">−${d}</span>`}</span>${actHtml}</div>`;
+}
+
+function renderPanel() {
+  const p = $('#panel');
+  if (S.sel === 'WIP' && dirty()) {
+    const u = S.wip.unstaged, s = S.wip.staged, n = u.length + s.length;
+    const left = 72 - S.draft.summary.length;
+    p.innerHTML = `
+      <div class="phead"><b>${n} file change${n === 1 ? '' : 's'}</b> on <span class="pill head" style="--c:var(--accent)">${IC.check}<span>${esc(S.HEAD)}</span></span></div>
+      <div class="psec"><div class="psec-h">Unstaged · ${u.length}${u.length ? '<button class="btn sm" data-act="stage-all">Stage all</button>' : ''}</div>
+        ${u.map(f => fileRow(f, `<button class="btn sm" data-act="stage" data-arg="${esc(f.path)}">Stage</button>`, 'unstaged')).join('') || '<div class="none">Nothing left to stage</div>'}</div>
+      <div class="psec"><div class="psec-h">Staged · ${s.length}${s.length ? '<button class="btn sm" data-act="unstage-all">Unstage all</button>' : ''}</div>
+        ${s.map(f => fileRow(f, `<button class="btn sm" data-act="unstage" data-arg="${esc(f.path)}">Unstage</button>`, 'staged')).join('') || '<div class="none">Stage files to include them in the commit</div>'}</div>
+      <form class="commitbox" id="commitform">
+        <div class="field"><input id="summary" placeholder="Commit summary" value="${esc(S.draft.summary)}" autocomplete="off" aria-label="Commit summary"><span class="left${left < 0 ? ' over' : ''}" id="left">${left}</span></div>
+        <div class="field"><textarea id="desc" rows="3" placeholder="Description" aria-label="Description">${esc(S.draft.desc)}</textarea></div>
+        <label class="check"><input type="checkbox" id="amend"${S.draft.amend ? ' checked' : ''}> Amend previous commit</label>
+        <div class="cbtns"><button type="submit" class="btn primary" id="do-commit">Commit</button><button type="button" class="btn" id="do-commit-push" data-act="commit-push">Commit &amp; push</button></div>
+        <div class="hint" id="chint"></div>
+      </form>`;
+    syncCommitButtons();
+    return;
+  }
+  if (S.sel.startsWith('stash:')) {
+    const i = +S.sel.slice(6), st = S.stashes[i];
+    if (!st) { S.sel = headSha(); return renderPanel(); }
+    p.innerHTML = `
+      <div class="phead"><span class="ic">${IC.stash}</span><b class="mono">stash@{${i}}</b><span class="grow"></span>
+        <button class="btn sm" data-act="stash-apply" data-arg="${i}">Apply</button><button class="btn sm primary" data-act="stash-pop" data-arg="${i}">Pop</button><button class="btn sm danger" data-act="stash-drop" data-arg="${i}">Drop</button></div>
+      <div class="ctitle">${esc(st.msg)}</div>
+      <div class="psec" style="margin-top:8px"><div class="psec-h">Files · ${st.files.length}</div>${st.files.map(f => fileRow(f, '', 'stash', ` data-stash="${i}"`)).join('')}</div>`;
+    return;
+  }
+  const c = MAP[S.sel] || MAP[headSha()];
+  if (!c) { p.innerHTML = ''; return; }
+  const refs = refsAt(c.sha);
+  const tot = c.files.reduce((t, f) => [t[0] + f[2], t[1] + f[3]], [0, 0]);
+  const jira = (c.msg.match(/^([A-Z][A-Z0-9]*-\d+)\s/) || [])[1];
+  p.innerHTML = `
+    <div class="phead"><span class="mono">commit</span><b class="mono">${c.sha}</b><button class="btn sm ghost" data-act="copy" data-arg="${c.sha}" aria-label="Copy SHA">${IC.copy}</button><span class="grow"></span>
+      ${c.sha === headSha() ? '' : `<button class="btn sm" data-act="branch-here" data-arg="${c.sha}">Branch here</button>`}</div>
+    <div class="ctitle">${msgHtml(c.msg, true)}</div>
+    ${c.body ? `<div class="cbody">${esc(c.body)}</div>` : ''}
+    <dl class="meta">
+      <dt>Author</dt><dd class="who" style="color:var(--fg)">${author(c.author)}</dd>
+      <dt>Date</dt><dd>${fmtAgoLong(c.ago)}</dd>
+      <dt>Parent${c.parents.length > 1 ? 's' : ''}</dt><dd>${c.parents.map(s => `<button class="link" data-act="sel-commit" data-arg="${s}">${s}</button>`).join('') || '<span class="sub">root commit</span>'}</dd>
+      ${refs.length ? `<dt>Refs</dt><dd>${refs.map(r => pills([r], `var(--l${r.kind === 'tag' ? 3 : r.kind === 'remote' ? 0 : 2})`)).join('')}</dd>` : ''}
+      ${jira ? `<dt>Jira</dt><dd><a class="jira" href="https://jira.pilot-gps.com/browse/${jira}" target="_blank" rel="noopener">${jira} ↗</a></dd>` : ''}
+    </dl>
+    <div class="psec"><div class="psec-h">${c.parents.length > 1 ? 'Merge commit' : `Files changed · ${c.files.length}`}${c.files.length ? `<span class="cnt" style="margin-left:auto;text-transform:none;letter-spacing:0"><span class="p1">+${tot[0]}</span> <span class="m1">−${tot[1]}</span></span>` : ''}</div>
+      ${c.parents.length > 1 ? `<div class="none">Joins <span class="mono">${c.parents[1]}</span> into <span class="mono">${c.parents[0]}</span>. The changes live in the merged commits.</div>` : ''}
+      ${c.files.map(([path, st, add, del]) => fileRow({ path, st, add, del }, '', 'commit')).join('')}</div>`;
+}
+
+function syncCommitButtons() {
+  const b = $('#do-commit'); if (!b) return;
+  const s = S.draft.summary.trim(), n = S.wip.staged.length;
+  const ok = (n > 0 || S.draft.amend) && s.length > 0;
+  b.disabled = !ok; $('#do-commit-push').disabled = !ok;
+  b.textContent = S.draft.amend ? 'Amend' : n ? `Commit ${n} file${n === 1 ? '' : 's'}` : 'Commit';
+  $('#chint').textContent = !n && !S.draft.amend ? 'Stage at least one file' : !s ? 'Write a summary' : '⌘↵ to commit';
+}
+
+/* fake but plausible diff for commits we have no real patch for */
+const POOL = {
+  php: ["$payload = $this->builder->build($job);", "$this->log->info('push sent', ['token' => $token]);", "if ($response->status === 429) {", "    return $this->requeue($job, delay: 30);", "}", "$job->attempts++;", "$tokens = $this->devices->tokensFor($job->userId);", "return $result;", "$fee = max(0, $next->fee - $prev->fee);", "$reservation->fuel = $transfer->fuel;"],
+  ts: ["const window = useProcessingWindow(roomId);", "if (!window.isOpen) return null;", "export const PROCESSING_WINDOW_MS = 15 * 60 * 1000;", "setAlgorithmState({ ...state, window });", "return <MapContainer hideControls={hideControls} />;", "await api.reservations.update(id, payload);", "const columns = useAgreementColumns(form);", "}"],
+  json: ['"version": "1.8.7",', '"build": 4182,', '"fluids.report.title": "Fluids",', '"fluids.report.volume": "Volume, l",', '"objects.add.title": "Add object",'],
+  md: ['## Stage 5: watchOS widget push', '- APNs topic: `com.pilot.pulse.widget`', '- Retry on 429 with a 30 s delay', 'Accepted on 2026-09-29.', '', '### Prerequisites'],
+};
+function fakeDiff(path, add, del, seed) {
+  const ext = path.split('.').pop();
+  const pool = POOL[ext === 'tsx' || ext === 'js' ? 'ts' : ext] || POOL.ts;
+  let k = parseInt(seed.slice(0, 4), 16) || 7;
+  const pick = () => pool[(k = (k * 31 + 7) % 9973) % pool.length];
+  const start = add && !del ? 1 : 10 + (k % 80);
+  const lines = [];
+  const da = Math.min(del, 10), aa = Math.min(add, 12);
+  lines.push(`@@ -${del || add ? start : 0},${del + (del ? 4 : 0)} +${start},${add + (del ? 4 : 0)} @@`);
+  if (del) lines.push(' ' + pick(), ' ' + pick());
+  for (let i = 0; i < da; i++) lines.push('-' + pick());
+  for (let i = 0; i < aa; i++) lines.push('+' + pick());
+  if (del) lines.push(' ' + pick(), ' ' + pick());
+  if (add > aa || del > da) lines.push(`~… ${add - aa + del - da} more changed lines in the full diff`);
+  return lines;
+}
+S.stashes[0].files[0].diff = fakeDiff('pulse/cameras/ArchiveTimeline.php', 4, 2, 'a1b2');
+
+function renderDiff() {
+  const d = $('#diff'), gw = $('#graphwrap');
+  if (!S.diff) { d.hidden = true; gw.hidden = false; return; }
+  let f, lines, actions = '';
+  if (S.diff.kind === 'unstaged' || S.diff.kind === 'staged') {
+    f = S.wip[S.diff.kind].find(x => x.path === S.diff.path);
+    if (!f) { S.diff = null; return renderDiff(); }
+    lines = f.diff;
+    actions = S.diff.kind === 'unstaged'
+      ? `<button class="btn sm primary" data-act="stage" data-arg="${esc(f.path)}">Stage file</button>`
+      : `<button class="btn sm" data-act="unstage" data-arg="${esc(f.path)}">Unstage file</button>`;
+  } else if (S.diff.kind === 'stash') {
+    f = S.stashes[S.diff.stash]?.files.find(x => x.path === S.diff.path);
+    if (!f) { S.diff = null; return renderDiff(); }
+    lines = f.diff || fakeDiff(f.path, 4, 2, 'stash');
+  } else {
+    const c = MAP[S.diff.sha]; const row = c?.files.find(x => x[0] === S.diff.path);
+    if (!row) { S.diff = null; return renderDiff(); }
+    f = { path: row[0], st: row[1] };
+    lines = fakeDiff(row[0], row[2], row[3], c.sha);
+  }
+  const i = f.path.lastIndexOf('/');
+  const [a, dl] = f.bin ? [0, 0] : counts(lines);
+  let body;
+  if (f.bin) body = '<div class="bin">Binary file. Usually <span class="mono">.DS_Store</span> belongs in <span class="mono">.gitignore</span>.</div>';
+  else {
+    let o = 0, n = 0;
+    body = lines.map(l => {
+      if (l.startsWith('@@')) { const m = l.match(/-(\d+)(?:,\d+)? \+(\d+)/); if (m) { o = +m[1]; n = +m[2]; } return `<div class="dl h"><span class="no"></span><span class="no"></span><span class="sg"></span><span>${esc(l)}</span></div>`; }
+      if (l[0] === '~') return `<div class="dl note"><span class="no"></span><span class="no"></span><span class="sg"></span><span>${esc(l.slice(1))}</span></div>`;
+      const t = l[0], txt = esc(l.slice(1));
+      if (t === '+') return `<div class="dl a"><span class="no"></span><span class="no">${n++}</span><span class="sg">+</span><span>${txt}</span></div>`;
+      if (t === '-') return `<div class="dl d"><span class="no">${o++}</span><span class="no"></span><span class="sg">−</span><span>${txt}</span></div>`;
+      return `<div class="dl"><span class="no">${o++}</span><span class="no">${n++}</span><span class="sg"></span><span>${txt}</span></div>`;
+    }).join('');
+  }
+  const where = S.diff.kind === 'commit' ? `<span class="sha">${S.diff.sha}</span>` : `<span class="cnt">${S.diff.kind === 'stash' ? 'stash@{' + S.diff.stash + '}' : S.diff.kind}</span>`;
+  d.innerHTML = `
+    <div class="dhead"><button class="btn sm" data-act="close-diff">${IC.back} Graph</button>
+      <span class="st ${f.st}">${f.st}</span>
+      <span class="path"><span class="dir">${esc(i >= 0 ? f.path.slice(0, i + 1) : '')}</span>${esc(f.path.slice(i + 1))}</span>
+      ${where}<span class="cnt">${f.bin ? '' : `<span class="p1">+${a}</span> <span class="m1">−${dl}</span>`}</span><span class="spacer"></span>${actions}</div>
+    <div class="dbody">${body}</div>`;
+  d.hidden = false; gw.hidden = true;
+}
+
+function renderChrome() {
+  $('#t-branch').innerHTML = `${IC.branch}${esc(S.HEAD)}`;
+  const x = aheadBehind(S.HEAD);
+  $('#b-pull').textContent = x && x.behind ? x.behind : '';
+  $('#b-push').textContent = x && x.ahead ? x.ahead : '';
+  $('#t-pop').disabled = !S.stashes.length;
+  const repos = ['Pilot7', 'flutter-pulse-mobile', 'yakutia-mfc', 'cpgu-frontend', 'smart_eq_office'];
+  $('#tabs').innerHTML = repos.map((r, i) => `<button class="tab${i ? '' : ' on'}" data-act="tab" data-arg="${r}">${IC.branch}${r}</button>`).join('') +
+    '<button class="tab add" data-act="add-repo" aria-label="Open repository">+</button>';
+  const n = S.wip.unstaged.length + S.wip.staged.length;
+  $('#status').innerHTML = `<span><span class="dot${n ? ' dirty' : ''}"></span><b>${esc(S.HEAD)}</b>${x ? ` → ${esc(x.up)}${x.ahead ? ` · ↑${x.ahead}` : ''}${x.behind ? ` · ↓${x.behind}` : ''}` : ' · no upstream'}</span>
+    <span>${n ? `${n} uncommitted` : 'working tree clean'}</span><span>${S.stashes.length} stash${S.stashes.length === 1 ? '' : 'es'}</span>
+    <span class="spacer"></span><span>gitlab.pilot-gps.com/SkyElectronics/Pilot7</span><span>git 2.47.1</span><span>gitsprout 0.1</span>`;
+}
+
+function render() {
+  reindex();
+  if (S.sel === 'WIP' && !dirty()) S.sel = headSha();
+  renderChrome(); renderSide(); renderGraph(); renderPanel(); renderDiff();
+}
+
+/* ---------- feedback ---------- */
+function toast(msg, kind) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (kind ? ' ' + kind : ''); t.innerHTML = msg;
+  $('#toasts').appendChild(t);
+  setTimeout(() => t.remove(), kind === 'bad' ? 5200 : 3400);
+}
+let modalOk = null;
+function openModal({ title, body, ok = 'OK', danger = false, onOk }) {
+  $('#m-title').textContent = title; $('#m-body').innerHTML = body; $('#m-err').textContent = '';
+  const b = $('#m-ok'); b.textContent = ok; b.className = 'btn primary' + (danger ? ' danger' : '');
+  modalOk = onOk; $('#scrim').hidden = false;
+  setTimeout(() => ($('#m-body input') || b).focus(), 0);
+}
+const closeModal = () => { $('#scrim').hidden = true; modalOk = null; };
+function branchNameError(n, except) {
+  if (!n) return 'Enter a branch name';
+  if (/\s|\.\.|[~^:?*\[\\]|^\/|\/$|\.lock$|^-/.test(n)) return 'Git does not allow spaces, "..", ~ ^ : ? * [ \\ in branch names';
+  if (n !== except && S.heads[n]) return `Branch ${n} already exists`;
+  return '';
+}
+
+/* ---------- git operations (simulated) ---------- */
+function select(id, scroll) {
+  // no sidebar re-render here: replacing the ref under the cursor would swallow its dblclick
+  const wasStash = String(S.sel).startsWith('stash:');
+  S.sel = id; S.diff = null; reindex();
+  if (wasStash) renderSide();
+  renderGraph(); renderPanel(); renderDiff();
+  if (scroll) document.querySelector(`[data-row="${id}"]`)?.scrollIntoView({ block: 'nearest' });
+}
+function checkout(name) {
+  if (name === S.HEAD) return toast(`Already on <b>${esc(name)}</b>`, 'warn');
+  const n = S.wip.unstaged.length + S.wip.staged.length;
+  S.HEAD = name; S.sel = dirty() ? 'WIP' : S.heads[name]; S.diff = null; render();
+  toast(`Switched to <b>${esc(name)}</b>${n ? ` · ${n} uncommitted change${n === 1 ? '' : 's'} carried over` : ''}`);
+}
+function checkoutRemote(rname) {
+  const local = rname.replace(/^origin\//, '');
+  if (S.heads[local]) return checkout(local);
+  S.heads[local] = S.remotes[rname]; S.upstream[local] = rname;
+  S.HEAD = local; S.sel = dirty() ? 'WIP' : S.heads[local]; S.diff = null; render();
+  toast(`Created <b>${esc(local)}</b> tracking ${esc(rname)} and switched to it`);
+}
+function newCommit(msg, files, parents) {
+  const c = { sha: rnd(), msg, author: 'fosteev3', ago: 0, parents, files, body: '' };
+  S.commits.unshift(c); reindex(); return c;
+}
+function renameSha(oldS, newS) {
+  S.commits.forEach(c => { if (c.sha === oldS) c.sha = newS; c.parents = c.parents.map(p => p === oldS ? newS : p); });
+  [S.heads, S.remotes, S.tags].forEach(o => Object.keys(o).forEach(k => { if (o[k] === oldS) o[k] = newS; }));
+}
+function doCommit(thenPush) {
+  const s = S.draft.summary.trim(); if (!s) return;
+  const files = S.wip.staged.map(f => { const [a, d] = f.bin ? [0, 0] : counts(f.diff); return [f.path, f.st, a, d]; });
+  const msg = s;
+  if (S.draft.amend) {
+    const c = MAP[headSha()];
+    const pushed = Object.values(S.remotes).some(r => reach(r).has(c.sha));
+    const ns = rnd(); renameSha(c.sha, ns);
+    c.msg = msg; c.body = S.draft.desc.trim(); c.files = c.files.concat(files); c.ago = 0;
+    toast(`Amended <b>${ns}</b>${pushed ? ' · it was already pushed, so the next push needs --force-with-lease' : ''}`, pushed ? 'warn' : '');
+  } else {
+    const c = newCommit(msg, files, [headSha()]); c.body = S.draft.desc.trim();
+    S.heads[S.HEAD] = c.sha;
+    toast(`Committed <b>${c.sha}</b> on ${esc(S.HEAD)}`);
+  }
+  S.wip.staged = []; S.draft = { summary: '', desc: '', amend: false };
+  S.sel = dirty() ? 'WIP' : headSha(); S.diff = null; render();
+  if (thenPush) push();
+}
+function pull() {
+  const x = aheadBehind(S.HEAD);
+  if (!x) return toast(`<b>${esc(S.HEAD)}</b> has no upstream. Push it first to create one.`, 'warn');
+  if (!x.behind) return toast('Already up to date');
+  if (!x.ahead) {
+    S.heads[S.HEAD] = S.remotes[x.up]; render();
+    return toast(`Fast-forwarded <b>${esc(S.HEAD)}</b> by ${x.behind} commit${x.behind === 1 ? '' : 's'}`);
+  }
+  const c = newCommit(`Merge remote-tracking branch '${x.up}' into ${S.HEAD}`, [], [S.heads[S.HEAD], S.remotes[x.up]]);
+  S.heads[S.HEAD] = c.sha; if (!dirty()) S.sel = c.sha; render();
+  toast(`Branches diverged (↑${x.ahead} ↓${x.behind}), so Gitsprout made merge commit <b>${c.sha}</b>`);
+}
+function push() {
+  const x = aheadBehind(S.HEAD);
+  if (!x) {
+    const up = 'origin/' + S.HEAD; S.remotes[up] = S.heads[S.HEAD]; S.upstream[S.HEAD] = up; render();
+    return toast(`Published <b>${esc(S.HEAD)}</b> to ${esc(up)} and set it as upstream`);
+  }
+  if (x.behind) return toast(`Push rejected: ${esc(x.up)} has ${x.behind} commit${x.behind === 1 ? '' : 's'} you don't have. Pull first, then push.`, 'bad');
+  if (!x.ahead) return toast('Everything up to date');
+  S.remotes[x.up] = S.heads[S.HEAD]; render();
+  toast(`Pushed ${x.ahead} commit${x.ahead === 1 ? '' : 's'} to <b>${esc(x.up)}</b>`);
+}
+function fetchAll() {
+  if (!S.fetched) {
+    S.fetched = true;
+    const c = newCommit('AutoBuild', VER, [S.remotes['origin/develop']]); c.author = 'ci-bot';
+    S.remotes['origin/develop'] = c.sha; render();
+    return toast('Fetched origin · 1 new commit on origin/develop');
+  }
+  toast('Fetched origin · nothing new');
+}
+function stash() {
+  if (!dirty()) return toast('Nothing to stash', 'warn');
+  const files = [...S.wip.staged, ...S.wip.unstaged];
+  const c = MAP[headSha()];
+  S.stashes.unshift({ msg: `WIP on ${S.HEAD}: ${c.sha} ${c.msg.slice(0, 40)}`, files });
+  S.wip = { unstaged: [], staged: [] }; S.diff = null; render();
+  toast(`Stashed ${files.length} file${files.length === 1 ? '' : 's'} as stash@{0}`);
+}
+function applyStash(i, drop) {
+  const st = S.stashes[i]; if (!st) return toast('No stash to pop', 'warn');
+  st.files.forEach(f => { if (!S.wip.unstaged.some(x => x.path === f.path) && !S.wip.staged.some(x => x.path === f.path)) S.wip.unstaged.push({ ...f, diff: f.diff || fakeDiff(f.path, 4, 2, 'stash') }); });
+  if (drop) S.stashes.splice(i, 1);
+  S.sel = 'WIP'; S.diff = null; render();
+  toast(`${drop ? 'Popped' : 'Applied'} stash@{${i}} · ${st.files.length} file${st.files.length === 1 ? '' : 's'} back in the working tree`);
+}
+function move(path, from, to) {
+  const i = S.wip[from].findIndex(f => f.path === path); if (i < 0) return;
+  const [f] = S.wip[from].splice(i, 1); S.wip[to].push(f);
+  if (S.diff && S.diff.path === path) S.diff.kind = to;
+  render();
+}
+function createBranchModal(at) {
+  const from = at || headSha();
+  openModal({
+    title: 'Create branch', ok: 'Create',
+    body: `<p>From <span class="mono">${from}</span> ${esc(MAP[from].msg.slice(0, 48))}</p>
+      <div class="field" style="margin-top:10px"><input id="m-name" placeholder="GARM-901-widget-retry" autocomplete="off" aria-label="Branch name"></div>
+      <label class="check" style="margin-top:10px"><input type="checkbox" id="m-co" checked> Check out after creating</label>`,
+    onOk: () => {
+      const n = $('#m-name').value.trim(); const e = branchNameError(n); if (e) return e;
+      S.heads[n] = from;
+      if ($('#m-co').checked) { S.HEAD = n; S.sel = dirty() ? 'WIP' : from; }
+      render(); toast(`Created branch <b>${esc(n)}</b>${S.HEAD === n ? ' and switched to it' : ''}`);
+    },
+  });
+}
+
+/* ---------- context menu ---------- */
+function showMenu(ev, items) {
+  const m = $('#ctx');
+  m.innerHTML = items.map(it => it === '-' ? '<hr>' :
+    `<button role="menuitem" class="${it.danger ? 'danger' : ''}" ${it.disabled ? 'disabled' : `data-act="${it.act}" data-arg="${esc(it.arg ?? '')}"`}>${esc(it.label)}${it.later ? '<span class="later">later</span>' : ''}</button>`).join('');
+  m.hidden = false;
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(ev.clientX, innerWidth - r.width - 8)) + 'px';
+  m.style.top = Math.max(8, Math.min(ev.clientY, innerHeight - r.height - 8)) + 'px';
+  m.querySelector('button:not(:disabled)')?.focus();
+}
+const hideMenu = () => { $('#ctx').hidden = true; };
+function menuFor(kind, arg) {
+  if (kind === 'local') {
+    const isHead = arg === S.HEAD;
+    return [
+      { label: isHead ? 'Checked out' : `Check out ${arg}`, act: 'checkout', arg, disabled: isHead },
+      { label: 'Pull (fast-forward if possible)', act: 'pull', disabled: !isHead },
+      { label: 'Push', act: 'push', disabled: !isHead },
+      '-',
+      { label: 'Create branch here…', act: 'branch-here', arg: S.heads[arg] },
+      { label: `Rename ${arg}…`, act: 'rename', arg },
+      { label: `Delete ${arg}…`, act: 'delete', arg, danger: true, disabled: isHead },
+      '-',
+      { label: 'Copy branch name', act: 'copy', arg },
+    ];
+  }
+  if (kind === 'remote') return [
+    { label: 'Check out as local branch', act: 'checkout-remote', arg },
+    { label: 'Create branch here…', act: 'branch-here', arg: S.remotes[arg] },
+    '-', { label: 'Copy branch name', act: 'copy', arg },
+  ];
+  if (kind === 'stash') return [
+    { label: 'Apply stash', act: 'stash-apply', arg }, { label: 'Pop stash', act: 'stash-pop', arg },
+    { label: 'Drop stash…', act: 'stash-drop', arg, danger: true },
+  ];
+  if (kind === 'commit') return [
+    { label: 'Create branch here…', act: 'branch-here', arg },
+    { label: 'Reset branch to this commit', later: true, disabled: true },
+    { label: 'Revert commit', later: true, disabled: true },
+    { label: 'Cherry-pick commit', later: true, disabled: true },
+    '-',
+    { label: 'Copy commit SHA', act: 'copy', arg },
+    { label: 'Copy commit message', act: 'copy-msg', arg },
+  ];
+  return [];
+}
+
+/* ---------- actions ---------- */
+function copy(text, label) {
+  const done = () => toast(`Copied ${label || ''} <span class="mono">${esc(text)}</span>`);
+  try { navigator.clipboard.writeText(text).then(done, () => toast('Clipboard blocked here. Select the text instead.', 'warn')); }
+  catch { toast('Clipboard blocked here. Select the text instead.', 'warn'); }
+}
+function act(name, arg, el) {
+  hideMenu();
+  switch (name) {
+    case 'sel-ref': return select(S.heads[arg], true);
+    case 'sel-remote': return select(S.remotes[arg], true);
+    case 'sel-tag': return select(S.tags[arg], true);
+    case 'sel-commit': return select(arg, true);
+    case 'sel-stash': S.sel = 'stash:' + arg; S.diff = null; return render();
+    case 'checkout': return checkout(arg);
+    case 'checkout-remote': return checkoutRemote(arg);
+    case 'fetch': return fetchAll();
+    case 'pull': return pull();
+    case 'push': return push();
+    case 'stash': return stash();
+    case 'pop': return applyStash(0, true);
+    case 'stash-apply': return applyStash(+arg, false);
+    case 'stash-pop': return applyStash(+arg, true);
+    case 'stash-drop': return openModal({
+      title: `Drop stash@{${arg}}?`, ok: 'Drop stash', danger: true,
+      body: `<p>${esc(S.stashes[+arg].msg)}</p><p style="margin-top:8px">The changes are gone after this. Git keeps the object until the next gc, but Gitsprout won't show it again.</p>`,
+      onOk: () => { S.stashes.splice(+arg, 1); if (S.sel.startsWith('stash:')) S.sel = headSha(); render(); toast(`Dropped stash@{${arg}}`); },
+    });
+    case 'new-branch': return createBranchModal();
+    case 'branch-here': return createBranchModal(arg);
+    case 'rename': return openModal({
+      title: `Rename ${arg}`, ok: 'Rename',
+      body: `<div class="field"><input id="m-name" value="${esc(arg)}" autocomplete="off" aria-label="New name"></div>`,
+      onOk: () => {
+        const n = $('#m-name').value.trim(); const e = branchNameError(n, arg); if (e) return e;
+        if (n === arg) return;
+        S.heads[n] = S.heads[arg]; delete S.heads[arg];
+        if (S.upstream[arg]) { S.upstream[n] = S.upstream[arg]; delete S.upstream[arg]; }
+        if (S.HEAD === arg) S.HEAD = n;
+        render(); toast(`Renamed <b>${esc(arg)}</b> to <b>${esc(n)}</b>`);
+      },
+    });
+    case 'delete': {
+      const x = aheadBehind(arg); const unpushed = !x || x.ahead > 0;
+      return openModal({
+        title: `Delete ${arg}?`, ok: 'Delete branch', danger: true,
+        body: `<p>Deletes the local branch only. ${x ? `${esc(x.up)} stays on the server.` : ''}</p>${unpushed ? `<p style="margin-top:8px;color:var(--warn)">${x ? `${x.ahead} commit${x.ahead === 1 ? ' is' : 's are'} not pushed` : 'This branch was never pushed'}, so those commits will only be reachable through reflog.</p>` : ''}`,
+        onOk: () => { delete S.heads[arg]; delete S.upstream[arg]; render(); toast(`Deleted branch <b>${esc(arg)}</b>`); },
+      });
+    }
+    case 'copy': return copy(arg);
+    case 'copy-msg': return copy(MAP[arg].msg, 'message');
+    case 'stage': return move(arg, 'unstaged', 'staged');
+    case 'unstage': return move(arg, 'staged', 'unstaged');
+    case 'stage-all': S.wip.staged.push(...S.wip.unstaged); S.wip.unstaged = []; if (S.diff && S.diff.kind === 'unstaged') S.diff.kind = 'staged'; return render();
+    case 'unstage-all': S.wip.unstaged.push(...S.wip.staged); S.wip.staged = []; if (S.diff && S.diff.kind === 'staged') S.diff.kind = 'unstaged'; return render();
+    case 'open-file': {
+      const kind = el.dataset.kind;
+      S.diff = kind === 'commit' ? { kind, path: arg, sha: S.sel } : kind === 'stash' ? { kind, path: arg, stash: +el.dataset.stash } : { kind, path: arg };
+      renderPanel(); return renderDiff();
+    }
+    case 'close-diff': S.diff = null; renderPanel(); return renderDiff();
+    case 'commit-push': return doCommit(true);
+    case 'toggle-ci': S.hideCI = !S.hideCI; return renderGraph();
+    case 'toggle-side': return $('#app').classList.toggle('side-open');
+    case 'focus-filter': $('#app').classList.add('side-open'); return $('#sideq')?.focus();
+    case 'tab': if (arg !== 'Pilot7') toast(`The prototype has one repo loaded. In the app, <b>${esc(arg)}</b> opens in its own tab with its own state.`, 'warn'); return;
+    case 'add-repo': return toast('In the app this opens a folder picker and remembers the repo as a tab.', 'warn');
+    case 'm-cancel': return closeModal();
+  }
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#ctx')) hideMenu();
+  const row = e.target.closest('[data-row]');
+  const el = e.target.closest('[data-act]');
+  if (el && !(el.tagName === 'A')) { e.preventDefault(); act(el.dataset.act, el.dataset.arg, el); return; }
+  if (row && !e.target.closest('a')) select(row.dataset.row);
+});
+document.addEventListener('dblclick', e => {
+  const el = e.target.closest('[data-dbl]');
+  if (el) act(el.dataset.dbl, el.dataset.arg, el);
+});
+document.addEventListener('contextmenu', e => {
+  const el = e.target.closest('[data-ctx]');
+  if (!el) return hideMenu();
+  e.preventDefault();
+  if (el.dataset.row) { S.sel = el.dataset.row; S.diff = null; render(); }
+  showMenu(e, menuFor(el.dataset.ctx, el.dataset.arg));
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'q') { S.q = t.value; renderGraph(); }
+  else if (t.id === 'sideq') {
+    S.sideQ = t.value; const pos = t.selectionStart; renderSide();
+    const n = $('#sideq'); n.focus(); n.setSelectionRange(pos, pos);
+  } else if (t.id === 'summary') {
+    S.draft.summary = t.value; const left = 72 - t.value.length;
+    const l = $('#left'); l.textContent = left; l.classList.toggle('over', left < 0); syncCommitButtons();
+  } else if (t.id === 'desc') S.draft.desc = t.value;
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'amend') {
+    S.draft.amend = e.target.checked;
+    if (S.draft.amend && !S.draft.summary) { S.draft.summary = MAP[headSha()].msg; $('#summary').value = S.draft.summary; $('#left').textContent = 72 - S.draft.summary.length; }
+    syncCommitButtons();
+  }
+});
+document.addEventListener('submit', e => {
+  e.preventDefault();
+  if (e.target.id === 'commitform') return doCommit(false);
+  if (e.target.id === 'modal' && modalOk) {
+    const err = modalOk();
+    if (typeof err === 'string' && err) { $('#m-err').textContent = err; return; }
+    closeModal();
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (!$('#scrim').hidden) return closeModal();
+    if (!$('#ctx').hidden) return hideMenu();
+    if (S.diff) { S.diff = null; renderPanel(); return renderDiff(); }
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && e.target.closest('#commitform')) { e.preventDefault(); if (!$('#do-commit').disabled) doCommit(false); return; }
+  if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key === 'f' || e.code === 'KeyF')) { e.preventDefault(); return act('focus-filter'); }
+  if (e.key === 'Enter' && e.target.matches('.ref[data-act]')) { e.preventDefault(); act(e.target.dataset.act, e.target.dataset.arg, e.target); return; }
+  const typing = e.target.closest('input, textarea, [contenteditable]');
+  if (typing || !$('#scrim').hidden) return;
+  if (['ArrowDown', 'ArrowUp', 'j', 'k'].includes(e.key)) {
+    const ids = [...document.querySelectorAll('#graph [data-row]')].map(r => r.dataset.row);
+    let i = ids.indexOf(S.sel); i += (e.key === 'ArrowDown' || e.key === 'j') ? 1 : -1;
+    if (i >= 0 && i < ids.length) { e.preventDefault(); select(ids[i], true); }
+  }
+});
+
+render();
+</script>
