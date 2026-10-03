@@ -1,4 +1,6 @@
-# Gitsprout MVP
+# Gitsprout MVP (Tauri desktop app) — superseded
+
+> **Superseded on 2026-10-03** by `roadmap-vscode.md`: Gitsprout became a VS Code extension. Stage 1 (Tauri scaffold) was done and later removed in the pivot commit; partial stage 2 Rust work is in `git stash` ("abandoned: Tauri stage 2 …"). The git invocation and parsing rules below were carried over to the extension contract.
 
 > Status: in progress — stage 1 accepted 2026-10-03, stage 2 next · executors tick checkboxes as each step is verified, not when it "should work".
 
