@@ -35,6 +35,7 @@ prototype/           clickable HTML prototype
 ## Commands
 
 ```
+export PATH=/opt/homebrew/opt/rustup/bin:$PATH   # brew rustup is keg-only; needed for cargo and pnpm tauri
 pnpm install
 pnpm tauri dev                       # run the app
 pnpm build                           # tsc + vite build

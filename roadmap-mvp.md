@@ -1,6 +1,6 @@
 # Gitsprout MVP
 
-> Status: draft · created 2026-10-03 · executors tick checkboxes as each step is verified, not when it "should work".
+> Status: in progress — stage 1 accepted 2026-10-03, stage 2 next · executors tick checkboxes as each step is verified, not when it "should work".
 
 ## Goal
 
@@ -15,7 +15,8 @@ A macOS app that replaces GitKraken for daily work on the user's repos (Pilot7, 
 - Pull is `git pull --no-rebase --no-edit`: fast-forward when possible, merge commit when diverged. This matches the user's current history (`Merge remote-tracking branch 'origin/develop' into develop`).
 - Refresh model: no file watcher in MVP. The UI refetches after every mutation, on window focus and on ⌘R.
 - Log limit: 1000 commits (`--topo-order`). Lanes whose parent is beyond the limit run to the bottom of the graph; accepted.
-- Toolchain on this Mac (checked 2026-10-03): node 22.23, pnpm 9.0, git 2.49, Xcode present, **Rust not installed**. Stage 1 installs it via `brew install rustup`.
+- Toolchain on this Mac: node 22.23, pnpm 9.0, git 2.49, Xcode, Rust 1.99 via brew `rustup` (installed in stage 1). The brew rustup is keg-only: every shell that runs cargo needs `export PATH=/opt/homebrew/opt/rustup/bin:$PATH`.
+- Decision (2026-10-03, after stage 1): the scaffold's React 19 was pinned back to 18 as planned; vite 8, TypeScript 6, vitest 5 kept as generated. The template's `greet` demo, `App.css`, `src/assets`, `public/` were removed.
 - Assumption: `pnpm create tauri-app` accepts `--template react-ts --manager pnpm --identifier … --yes`. If it rejects a flag, run it with `--help` and use the equivalent.
 - Bundle identifier: `dev.fosteev.gitsprout`. Window: title `Gitsprout`, 1400×900, min 960×600.
 
@@ -89,16 +90,16 @@ Default settings: `{ repos: [], active: null, hideCi: false, ciPattern: "^AutoBu
 ### 1. Toolchain and scaffold
 Rust toolchain, a Tauri 2 + React-TS skeleton inside the existing repo, test runners wired, prototype tokens ported.
 
-- [ ] `brew install rustup` → `rustup-init -y --no-modify-path` (or `rustup default stable` if already initialised); `rustc --version` prints ≥ 1.80
-- [ ] scaffold in the scratch dir: `pnpm create tauri-app gs-scaffold --template react-ts --manager pnpm --identifier dev.fosteev.gitsprout --yes`
-- [ ] copy into the repo: `package.json`, `pnpm-lock.yaml`, `tsconfig*.json`, `vite.config.ts`, `index.html`, `src/`, `src-tauri/`; keep the repo's `README.md`, `CLAUDE.md`, `.gitignore`, `prototype/`
-- [ ] package name `gitsprout`; `src-tauri/tauri.conf.json`: productName `Gitsprout`, window title/size from "Context", identifier `dev.fosteev.gitsprout`
-- [ ] add deps: `zustand`, `@tanstack/react-virtual`, `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-opener`; dev: `vitest`; Rust: `serde`(derive), `serde_json`, `thiserror`, `tauri-plugin-dialog`, `tauri-plugin-opener`, dev `tempfile`; register both plugins and their capabilities in `src-tauri/capabilities/default.json`
-- [ ] `package.json` scripts: `test` = `vitest run`; keep `build`, `tauri`
-- [ ] create empty modules from the CLAUDE.md layout (`git/mod.rs`, `run.rs`, `parse.rs`, `ops.rs`, `commands.rs`, `settings.rs`) so later stages only fill them
-- [ ] `src/styles/tokens.css`: the `:root` / light-theme token blocks copied verbatim from the prototype; Google Fonts replaced by bundled fallbacks (`Onest`, `JetBrains Mono` via `@fontsource/onest` and `@fontsource/jetbrains-mono`; `Unbounded` only for the wordmark via `@fontsource/unbounded`)
-- [ ] `App.tsx` renders an empty window shell with the prototype's titlebar (logo + `gitsprout` wordmark) on `var(--bg)`
-- [ ] one placeholder vitest test and one `#[test]` so both runners are proven
+- [x] `brew install rustup` → `rustup-init -y --no-modify-path` (or `rustup default stable` if already initialised); `rustc --version` prints ≥ 1.80
+- [x] scaffold in the scratch dir: `pnpm create tauri-app gs-scaffold --template react-ts --manager pnpm --identifier dev.fosteev.gitsprout --yes`
+- [x] copy into the repo: `package.json`, `pnpm-lock.yaml`, `tsconfig*.json`, `vite.config.ts`, `index.html`, `src/`, `src-tauri/`; keep the repo's `README.md`, `CLAUDE.md`, `.gitignore`, `prototype/`
+- [x] package name `gitsprout`; `src-tauri/tauri.conf.json`: productName `Gitsprout`, window title/size from "Context", identifier `dev.fosteev.gitsprout`
+- [x] add deps: `zustand`, `@tanstack/react-virtual`, `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-opener`; dev: `vitest`; Rust: `serde`(derive), `serde_json`, `thiserror`, `tauri-plugin-dialog`, `tauri-plugin-opener`, dev `tempfile`; register both plugins and their capabilities in `src-tauri/capabilities/default.json`
+- [x] `package.json` scripts: `test` = `vitest run`; keep `build`, `tauri`
+- [x] create empty modules from the CLAUDE.md layout (`git/mod.rs`, `run.rs`, `parse.rs`, `ops.rs`, `commands.rs`, `settings.rs`) so later stages only fill them
+- [x] `src/styles/tokens.css`: the `:root` / light-theme token blocks copied verbatim from the prototype; Google Fonts replaced by bundled fallbacks (`Onest`, `JetBrains Mono` via `@fontsource/onest` and `@fontsource/jetbrains-mono`; `Unbounded` only for the wordmark via `@fontsource/unbounded`)
+- [x] `App.tsx` renders an empty window shell with the prototype's titlebar (logo + `gitsprout` wordmark) on `var(--bg)`
+- [x] one placeholder vitest test and one `#[test]` so both runners are proven
 
 **Done when:** `pnpm install && pnpm build && pnpm test` and `cd src-tauri && cargo test && cargo clippy -- -D warnings` pass; `.gitignore` covers `node_modules/`, `dist/`, `src-tauri/target/`, `src-tauri/gen/`. `pnpm tauri dev` opening the window is checked by the user.
 
