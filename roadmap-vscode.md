@@ -1,6 +1,6 @@
 # Gitsprout VS Code extension — MVP
 
-> Status: stage 1 accepted 2026-10-03 · next — stage 2 · created 2026-10-03 · executors tick checkboxes as each step is verified, not when it "should work". Start with stage 1.
+> Status: stage 1 accepted 2026-10-03 · stage 2 accepted 2026-10-03 · next — stage 3 · created 2026-10-03 · executors tick checkboxes as each step is verified, not when it "should work". Start with stage 1.
 
 ## Goal
 
@@ -39,10 +39,10 @@ A `.vsix` the user installs in VS Code and Cursor that replaces GitKraken for da
 ```ts
 export type ErrorKind = 'NotARepo' | 'GitMissing' | 'PushRejected' | 'NoUpstream' | 'Conflict'
   | 'LocalChanges' | 'NotFullyMerged' | 'Auth' | 'NothingToStash' | 'Other';
-export class GitError extends Error { constructor(public kind: ErrorKind, message: string, public stderr: string, public args: string[]) { super(message); } }
+export class GitError extends Error { constructor(public kind: ErrorKind, message: string, public stderr: string, public args: string[], public stdout = '') { super(message); } }
 
-export interface RepoSummary { root: string; name: string; relPath: string; group: string;  // group = first segment of relPath ('' for a top-level repo)
-  branch: string | null; sha: string | null; upstream: string | null; ahead: number; behind: number; changes: number; }
+export interface SummaryStatus { branch: string | null; sha: string | null; upstream: string | null; ahead: number; behind: number; changes: number }  // Repo.summary()
+export interface RepoSummary extends SummaryStatus { root: string; name: string; relPath: string; group: string }  // group = first segment of relPath ('' for a top-level repo); filled by the registry
 export interface Head { branch: string | null; sha: string | null }               // branch null = detached, sha null = unborn
 export interface LocalBranch { name: string; sha: string; upstream: string | null; ahead: number; behind: number; upstreamGone: boolean }
 export interface RemoteBranch { name: string; sha: string }                        // "origin/develop"
@@ -53,6 +53,7 @@ export type FileStatus = 'M' | 'A' | 'D' | 'R' | 'U';
 export interface FileChange { path: string; origPath: string | null; status: FileStatus; untracked: boolean }
 export interface Status { staged: FileChange[]; unstaged: FileChange[] }
 export interface FileStat { path: string; origPath: string | null; status: FileStatus; add: number | null; del: number | null }
+export interface StashFile extends FileStat { untracked: boolean }               // Repo.stashFiles(); add/del always null
 export interface Stash { index: number; sha: string; message: string }
 ```
 
@@ -67,19 +68,19 @@ export interface Stash { index: number; sha: string; message: string }
 | `commitFiles(sha)` | `diff-tree -r --root --no-commit-id -M -z --name-status <sha>` + same with `--numstat` | merges → `[]` |
 | `stashes()` | `stash list -z --format=%gd%x1f%H%x1f%gs` | |
 | `stashFiles(i)` | `stash show --name-status -z --include-untracked stash@{i}` | add/del null; mark files that exist only in `stash@{i}^3` as untracked (`rev-parse -q --verify stash@{i}^3`, then `ls-tree -r --name-only -z stash@{i}^3`) |
-| `show(ref, path)` | `show <ref>:<path>` | content for the diff provider; missing → empty string |
+| `show(ref, path)` | `show <ref>:<path>`; ref `:` → `show :0:<path>` (conflicted file → `:2:<path>`, ours) | content for the diff provider; `''` ref or missing → empty string |
 | `checkout(name)` | `switch <name>` | "would be overwritten" → LocalChanges |
 | `checkoutRemote(r)` | local = text after first `/`; exists → `switch <local>`, else `switch --track <r>` | |
-| `createBranch(name, start, checkout)` | `check-ref-format --branch <name>`, then `branch <name> <start>` or `switch -c <name> <start>` | |
+| `createBranch(name, start, checkout)` | `check-ref-format --branch <name>`, then `branch --no-track <name> <start>` or `switch --no-track -c <name> <start>` | never tracks `start`; Push publishes it |
 | `renameBranch(old, new)` | `branch -m <old> <new>` | |
 | `deleteBranch(name, force)` | `branch -d|-D <name>` | "not fully merged" → NotFullyMerged |
 | `fetch()` | `fetch --all --prune` | |
-| `pull()` | no upstream → NoUpstream; `pull --no-rebase --no-edit` | `CONFLICT` / `Automatic merge failed` → Conflict |
-| `push()` | upstream → `push`; else `push -u <first remote> HEAD` | `[rejected]`, `non-fast-forward`, `fetch first` → PushRejected |
+| `pull()` | no upstream → NoUpstream; `pull --no-rebase --no-edit` | `CONFLICT (` at line start / `Automatic merge failed` / `you have unmerged files` → Conflict (case-sensitive) |
+| `push()` | upstream → `push`; else `push -u <remote> HEAD`, remote = `branch.<b>.pushRemote` → `remote.pushDefault` → `branch.<b>.remote` → `origin` → first; detached → Other | `[rejected]` (covers non-fast-forward / fetch first) → PushRejected |
 | `stashPush(msg?)` | `stash push -u [-m <msg>]` | "No local changes to save" → NothingToStash |
 | `stashApply/Pop/Drop(i)` | `stash apply|pop|drop stash@{i}` | conflict → Conflict |
 
-Error classification in `run.ts` (stderr, case-insensitive): `not a git repository` → NotARepo; `ENOENT` spawn → GitMissing; `permission denied (publickey)`, `authentication failed`, `could not read username` → Auth; per-method rules above; else Other with the last non-empty stderr line.
+Error classification in `run.ts` (stderr, case-insensitive): `not a git repository` → NotARepo; `ENOENT` spawn → GitMissing; `permission denied (publickey` (any method list), `authentication failed`, `could not read username`, `host key verification failed` → Auth; per-method rules above — applied by `Repo` over stderr + stdout, only when `run.ts` returned `Other` (Auth/NotARepo/GitMissing are never overridden); else Other with the last `fatal:`/`error:` line (else the last non-`hint:` line; stdout if stderr is empty). The runner strips `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` and other repo-relocating variables from the inherited env.
 
 Status `-z` parsing: `1 XY sub mH mI mW hH hI <path>`; `2 XY sub mH mI mW hH hI <Xscore> <path>` + next record = origPath; `u XY` (10 fields) `<path>`; `? <path>`; `!` ignored; `#` headers. X = staged, Y = unstaged, `.` = none; `M`,`T`→M, `A`→A, `D`→D, `R`,`C`→R; type 1/2 → staged if X≠`.`, unstaged if Y≠`.`; `u` → unstaged U; `?` → unstaged A with `untracked: true`.
 Numstat `-z`: `add\tdel\tpath\0`, rename `add\tdel\t\0old\0new\0`, binary `-\t-` → null.
@@ -158,14 +159,27 @@ An installable extension that shows the sprout container with empty views.
 ### 2. Git layer
 Runner, parsers, read and write operations, tested without VS Code.
 
-- [ ] `src/git/run.ts`: `run(root, args, { stdin?, okCodes?, read? })` with env and error classification from the contract; `git.path` passed in by the caller (no `vscode` import in `src/git/`)
-- [ ] `src/git/parse.ts`: `parseStatusSummary`, `parseStatus`, `parseRefs`, `parseTrack`, `parseLog`, `parseNameStatusZ`, `parseNumstatZ`, `parseStashList` with unit tests (`test/parse.test.ts`): rename, untracked, conflict `u`, binary numstat, `gone`, detached, unborn `(initial)`, body with blank lines
-- [ ] `src/git/repo.ts`: class `Repo(root, gitPath)` with every method from the invocation table
-- [ ] `test/repo.integration.test.ts`: temp repos via git CLI (`user.name`/`user.email` set per repo), a bare `origin` and two clones: summary/refs/log/status/commitFiles/stashes; push without upstream sets `-u`; push rejected → PushRejected; pull fast-forward; pull diverged → merge commit with 2 parents; pull conflict → Conflict; checkoutRemote creates tracking branch; deleteBranch unmerged → NotFullyMerged, then force; stash push/pop with an untracked file; clean tree stash → NothingToStash
+- [x] `src/git/run.ts`: `run(root, args, { stdin?, okCodes?, read? })` with env and error classification from the contract; `git.path` passed in by the caller (no `vscode` import in `src/git/`)
+- [x] `src/git/parse.ts`: `parseStatusSummary`, `parseStatus`, `parseRefs`, `parseTrack`, `parseLog`, `parseNameStatusZ`, `parseNumstatZ`, `parseStashList` with unit tests (`test/parse.test.ts`): rename, untracked, conflict `u`, binary numstat, `gone`, detached, unborn `(initial)`, body with blank lines
+- [x] `src/git/repo.ts`: class `Repo(root, gitPath)` with every method from the invocation table
+- [x] `test/repo.integration.test.ts`: temp repos via git CLI (`user.name`/`user.email` set per repo), a bare `origin` and two clones: summary/refs/log/status/commitFiles/stashes; push without upstream sets `-u`; push rejected → PushRejected; pull fast-forward; pull diverged → merge commit with 2 parents; pull conflict → Conflict; checkoutRemote creates tracking branch; deleteBranch unmerged → NotFullyMerged, then force; stash push/pop with an untracked file; clean tree stash → NothingToStash
 
 **Done when:** `pnpm typecheck && pnpm test` pass.
 
 **Session:** sonnet, high; after 1.
+
+**Decisions (2026-10-03, session 2):**
+- Layout: `src/git/types.ts`, `run.ts`, `parse.ts`, `repo.ts` (no `vscode` import); `test/parse.test.ts` (19 unit tests, 23 after acceptance), `test/repo.integration.test.ts` (17 tests on temp repos, 21 after acceptance).
+- `run(root, args, { gitPath?, stdin?, okCodes?, read? })` returns `{ stdout, stderr, code }`; prepends `-C root -c core.quotePath=false`; env `LC_ALL=C`, `GIT_TERMINAL_PROMPT=0`, `GIT_OPTIONAL_LOCKS=0` only when `read`. It classifies only NotARepo / GitMissing / Auth; all per-method kinds (PushRejected, Conflict, LocalChanges, NotFullyMerged, NothingToStash) are applied in `Repo` by regex over stderr+stdout, and only to a generic `Other` failure (so Auth is never masked). stdin is always closed (empty) so git never waits on it.
+- Contract additions: `GitError` got an optional 5th ctor arg `stdout` (git prints CONFLICT and "No local changes to save" to stdout); `Repo.summary()` returns `SummaryStatus` (branch/sha/upstream/ahead/behind/changes) and `RepoSummary extends SummaryStatus` with the workspace-derived `root/name/relPath/group` (stage 3 fills these); `Repo.stashFiles()` returns `StashFile[]` = `FileStat & { untracked }` (stage 4 diff table needs the flag); `parseRefs(out, head)` takes the already-resolved `Head`; extra pure helper `mergeFileStats(nameStatus, numstat)` used by `commitFiles` (files absent from numstat get null counts).
+- Parsers take stdout of exactly the invocations in the table; `parseNameStatusZ` also accepts the `C` (copy) code and maps it to `R`; `T` (type change) maps to `M`.
+- `Repo` details the table left open: `log` first runs `rev-parse -q --verify HEAD` and drops `HEAD` when unborn; `show(ref, path)`: `''` ref -> `''`, `':'` -> `show :<path>`, otherwise `show <ref>:<path>`; missing path/revision (fixed set of stderr patterns) -> `''`, other errors rethrown; `pull`/`push` find the upstream via `rev-parse --abbrev-ref --symbolic-full-name @{upstream}` (exit 1/128 = none; detached/unborn = none -> `NoUpstream` for pull, `push -u <remote> HEAD` for push (remote choice: see the contract); no remote -> `Other` "No remote configured"); an invalid branch name from `check-ref-format` is an `Other` GitError with message "'<name>' is not a valid branch name"; `pull`/`stashApply`/`stashPop` map "would be overwritten ..." to LocalChanges in addition to Conflict; a failed `stashPop` keeps the stash (tested).
+- Integration tests isolate git via `process.env` set in `beforeAll` and restored in `afterAll` (`HOME` and `GIT_CONFIG_GLOBAL` into the temp dir, `GIT_CONFIG_NOSYSTEM=1`, `GIT_EDITOR=true`, fixed author/committer) plus per-repo `commit.gpgsign=false` and an empty `core.hooksPath`; origin is a local bare repo; the temp dir is removed in `afterAll` (verified none left behind).
+- Output is decoded as UTF-8 (`show()` of binary files is lossy; the diff provider shows text only). `maxBuffer` is 256 MB.
+- Checks: `pnpm typecheck && pnpm test && pnpm build` pass, 40 tests (4 files) after the session, 48 after acceptance.
+- Acceptance review (2026-10-03, two passes) fixed: Conflict regex was case-insensitive and matched branch names (`conflict-*`) in unrelated pull failures → anchored, case-sensitive; push without upstream took the alphabetically first remote → pushRemote/pushDefault/branch.remote/origin/first, detached HEAD → clear error; a branch created from `origin/main` tracked it so Push failed (simple) → `createBranch` uses `--no-track`; `show(':')` threw on conflicted files → `:0:` with `:2:` fallback; error message was often a `hint:` line → prefer `fatal:`/`error:`; `Permission denied (publickey,password)` and host-key failures → Auth; inherited `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` overrode `-C` → stripped; `upstream()` swallowed NotARepo → rethrown; EACCES git path → GitMissing; log body keeps leading indentation. 48 tests (23 parse/run unit, 21 integration).
+- Known, left as is: a `\x1f` inside a commit subject shifts log fields (practically never happens); `%(*objectname)` peels one level (a tag of a tag shows the inner tag sha).
+- Not verified: other git versions (only 2.49 here; `upstream:track,nobracket`, `switch` and `stash show --include-untracked` need >= 2.32), non-English locale behaviour beyond `LC_ALL=C`, auth failures against a real remote (classification is regex-only), huge repos / performance, Windows paths.
 
 ### 3. Workspace, repositories view, status bar
 Discovery, the repo registry and everything that is multi-repo.
@@ -287,7 +301,7 @@ Don't: views, commands, webview.
 ```
 Session 3 — Gitsprout workspace and repositories view · Model: sonnet, effort: high · after session 2
 
-Work in /Users/fost/Projects/gitsprout. Task: repo discovery, registry, Repositories view, repo switching, status bar item, built-in SCM depth check, Fetch All — per stage 3 of roadmap-vscode.md. Repo (src/git/repo.ts) exists from stage 2; reuse it, open only what you edit.
+Work in /Users/fost/Projects/gitsprout. Task: repo discovery, registry, Repositories view, repo switching, status bar item, built-in SCM depth check, Fetch All — per stage 3 of roadmap-vscode.md. Repo (src/git/repo.ts) exists from stage 2; reuse it, open only what you edit. `Repo.summary()` returns only `SummaryStatus` (branch/sha/upstream/ahead/behind/changes); you fill `root/name/relPath/group` of `RepoSummary` (src/git/types.ts).
 
 Read: roadmap-vscode.md sections "Decisions", "Manifest contributions", "3. Workspace, repositories view, status bar"; CLAUDE.md. Reference: prototype/vscode-multi.html functions reposPane(), fetchAll(), act() case 'qp-repo', setRepo(), renderStatus().
 Entry points: src/extension.ts, src/workspace/, src/views/repositories.ts, src/views/statusBar.ts.
@@ -305,7 +319,7 @@ Don't: branch/remote/stash/tag views, graph, mutations other than fetch.
 ```
 Session 4 — Gitsprout ref views and diffs · Model: sonnet, effort: high · after session 3
 
-Work in /Users/fost/Projects/gitsprout. Task: Branches, Remotes, Stashes, Tags tree views for the active repo and the gitsprout: diff provider, per stage 4 of roadmap-vscode.md. Registry and Repo exist (stages 2–3).
+Work in /Users/fost/Projects/gitsprout. Task: Branches, Remotes, Stashes, Tags tree views for the active repo and the gitsprout: diff provider, per stage 4 of roadmap-vscode.md. Registry and Repo exist (stages 2–3). `Repo.stashFiles(i)` returns `StashFile[]` (`FileStat` + `untracked`), `Repo.show(ref, path)` takes ref `':'` for the index (a conflicted file yields stage 2, ours) and `''` for an empty side (src/git/repo.ts).
 
 Read: roadmap-vscode.md sections "Diff URIs", "Manifest contributions", "4. Ref views and native diffs"; CLAUDE.md. Reference: prototype/vscode-multi.html renderGitsproutBase() (tree rows, descriptions, inline actions) and diffSource() (titles).
 Entry points: src/views/{branches,remotes,stashes,tags}.ts, src/diff/provider.ts, src/extension.ts, src/workspace/registry.ts (events).
@@ -347,6 +361,7 @@ Read: roadmap-vscode.md sections "Decisions", "Git invocations" (error kinds), "
 Entry points: src/commands/, src/extension.ts, src/views/* (stub commands to replace).
 
 Already decided, don't ask: pull --no-rebase --no-edit; error → action mapping (PushRejected→Pull, NoUpstream→Publish Branch, Auth→Run in Terminal, Conflict→Open Source Control); every mutation refreshes the repo and the graph.
+From the actual code (stage 2): `GitError` = { kind, message, stderr, stdout, args }; `args` already starts with `-C <root> -c core.quotePath=false`, so "Run in Terminal" can run `git` + args as is. `Repo.push()` publishes with `-u` itself when there is no upstream (so "Publish Branch" = `push()`); `createBranch` never tracks the start point. LocalChanges also comes from pull/stashApply/stashPop ("would be overwritten").
 
 Order: stage 6 checkboxes top to bottom.
 DoD: pnpm typecheck && pnpm test pass.
