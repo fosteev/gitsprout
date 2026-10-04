@@ -17,7 +17,8 @@
   "main": "./dist/extension.js",
   "activationEvents": [
     "onStartupFinished",
-    "workspaceContains:**/.git"
+    "workspaceContains:**/.git",
+    "onWebviewPanel:gitsprout.graph"
   ],
   "contributes": {
     "viewsContainers": {

@@ -48,13 +48,17 @@ class GraphPanel implements vscode.Disposable {
   private wip: Status | null = null;
   readonly onDidDispose: vscode.Event<void>;
 
-  constructor(private readonly context: vscode.ExtensionContext, private readonly registry: Registry, private readonly log: (m: string) => void) {
+  /** `revived`: the panel VS Code recreated after a window reload (see `registerGraph`); else a new tab is opened. */
+  constructor(context: vscode.ExtensionContext, private readonly registry: Registry, private readonly log: (m: string) => void, revived?: vscode.WebviewPanel) {
     const dist = vscode.Uri.joinPath(context.extensionUri, 'dist');
-    this.panel = vscode.window.createWebviewPanel(VIEW_TYPE, 'Graph', vscode.ViewColumn.Active, {
-      enableScripts: true,
-      retainContextWhenHidden: true,
-      localResourceRoots: [dist],
-    });
+    const options = { enableScripts: true, localResourceRoots: [dist] };
+    if (revived) {
+      this.panel = revived;
+      // VS Code restores the creation options (incl. `retainContextWhenHidden`) with the tab; re-applied to be explicit.
+      revived.webview.options = options;
+    } else {
+      this.panel = vscode.window.createWebviewPanel(VIEW_TYPE, 'Graph', vscode.ViewColumn.Active, { ...options, retainContextWhenHidden: true });
+    }
     this.panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'sprout.svg');
     const wv = this.panel.webview;
     wv.html = graphHtml({
@@ -98,6 +102,11 @@ class GraphPanel implements vscode.Disposable {
     this.dirty = false;
     const mine = ++this.seq;
     const active = this.registry.active;
+    if (!active && !this.registry.scanned) {
+      // A tab restored after a reload, before the first scan: show "Loading…"; `onDidChangeRepos` reloads it.
+      this.post({ type: 'busy', on: true });
+      return;
+    }
     if (!active) {
       this.root = undefined; this.commits.clear(); this.lastState = undefined;
       this.panel.title = 'Graph';
@@ -107,6 +116,7 @@ class GraphPanel implements vscode.Disposable {
     }
     this.post({ type: 'busy', on: true });
     const settings = readSettings();
+    const t0 = performance.now();
     try {
       const repo = new Repo(active.root, this.registry.gitPath);
       const [commits, refs, status] = await Promise.all([repo.log(settings.logLimit), repo.refs(), repo.status()]);
@@ -120,6 +130,7 @@ class GraphPanel implements vscode.Disposable {
       const msg = stateMessage({ root: active.root, name: active.name }, this.registry.repos.length, refs, commits, wip, settings);
       const sig = JSON.stringify(msg);
       if (sig !== this.lastState) { this.lastState = sig; this.post(msg); }
+      this.log(`graph state ${active.name}: ${Math.round(performance.now() - t0)} ms (${commits.length} commits)`);
     } catch (e) {
       if (mine !== this.seq) return;
       this.log(`graph ${active.root}: ${errText(e)}`);
@@ -215,15 +226,18 @@ class GraphPanel implements vscode.Disposable {
 export function registerGraph(context: vscode.ExtensionContext, registry: Registry, log: (m: string) => void): void {
   let panel: GraphPanel | undefined;
 
+  const adopt = (p: GraphPanel): void => {
+    panel = p;
+    p.onDidDispose(() => { if (panel === p) panel = undefined; });
+  };
+
   const show = (): void => {
     if (panel) { panel.reveal(); return; }
     if (!registry.active) {
       void vscode.window.showInformationMessage('Gitsprout: no Git repository in the workspace.');
       return;
     }
-    const p = new GraphPanel(context, registry, log);
-    panel = p;
-    p.onDidDispose(() => { if (panel === p) panel = undefined; });
+    adopt(new GraphPanel(context, registry, log));
   };
 
   const sha = (arg: unknown): string | undefined => {
@@ -234,6 +248,15 @@ export function registerGraph(context: vscode.ExtensionContext, registry: Regist
 
   context.subscriptions.push(
     { dispose: () => panel?.dispose() },
+    // Window reload: VS Code restores the tab and hands it back; the graph re-attaches and loads the active repo
+    // (during the first scan it shows "Loading…" and reloads on `onDidChangeRepos`).
+    vscode.window.registerWebviewPanelSerializer(VIEW_TYPE, {
+      deserializeWebviewPanel: (revived) => {
+        if (panel) { revived.dispose(); return Promise.resolve(); } // one graph tab only
+        adopt(new GraphPanel(context, registry, log, revived));
+        return Promise.resolve();
+      },
+    }),
     vscode.commands.registerCommand('gitsprout.showGraph', show),
     vscode.commands.registerCommand('gitsprout.toggleAutoBuild', () => setSetting('hideCi', !readSettings().hideCi)),
     vscode.commands.registerCommand('gitsprout.copySha', async (arg?: unknown) => {

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  branchNameError, buildCheckoutEntries, errorPlan, existingBranchNote, localBranchFromArg, localNameOf, refNameFromArg, remoteBranchFromArg,
+  ACTION_LABEL, branchNameError, buildCheckoutEntries, errorPlan, existingBranchNote, localBranchFromArg, localNameOf, refNameFromArg, remoteBranchFromArg,
   resolveStashIndex, shQuote, stashShaFromArg, terminalCommand,
 } from '../src/commands/messages';
 import { execFileSync } from 'node:child_process';
@@ -78,13 +78,22 @@ describe('checkout quick pick', () => {
 describe('errorPlan', () => {
   const E = (kind: Parameters<typeof errorPlan>[0]['kind']) => ({ kind, message: 'msg' });
   it('maps the decided error kinds to actions', () => {
-    expect(errorPlan(E('PushRejected'), 'push')?.actions).toEqual(['pull']);
+    expect(errorPlan(E('PushRejected'), 'push')?.actions).toEqual(['pull', 'output']);
     expect(errorPlan(E('NoUpstream'), 'pull', 'x')).toMatchObject({ actions: ['publish'], level: 'warn' });
-    expect(errorPlan(E('Auth'), 'fetch')?.actions).toEqual(['terminal']);
-    expect(errorPlan(E('Conflict'), 'pull')?.actions).toEqual(['scm']);
+    expect(errorPlan(E('Auth'), 'fetch')?.actions).toEqual(['terminal', 'output']);
+    expect(errorPlan(E('Conflict'), 'pull')?.actions).toEqual(['scm', 'output']);
     expect(errorPlan(E('Conflict'), 'pop')?.text).toMatch(/keeps the stash/);
     expect(errorPlan(E('NothingToStash'), 'stash')).toMatchObject({ level: 'info', text: 'There are no changes to stash.' });
     expect(errorPlan(E('Other'), 'rename')?.text).toBe('Rename branch failed: msg');
+  });
+  it('failed fetch/pull/push offer Show Command Output, other ops and the publish prompt do not', () => {
+    for (const op of ['fetch', 'pull', 'push'] as const) {
+      expect(errorPlan(E('Other'), op)).toMatchObject({ text: expect.stringMatching(/failed: msg$/), actions: ['output'] });
+      expect(errorPlan(E('Conflict'), op)?.actions).toEqual(['scm', 'output']);
+    }
+    expect(errorPlan(E('Other'), 'checkout')?.actions).toEqual([]);
+    expect(errorPlan(E('NoUpstream'), 'push', 'x')?.actions).toEqual(['publish']);
+    expect(ACTION_LABEL.output).toBe('Show Command Output');
   });
   it('a cancelled call shows nothing; Auth outside network ops is a plain error', () => {
     expect(errorPlan(E('Cancelled'), 'fetch')).toBeNull();

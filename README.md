@@ -15,6 +15,46 @@ Staging and committing stay in VS Code's built-in Source Control. Gitsprout adds
 
 Not planned for MVP: staging/commit UI (built-in SCM does it), interactive rebase, conflict editor, PR/issue integrations, AI features.
 
+## Install
+
+Build the package, then install the `.vsix` (no marketplace publishing in the MVP):
+
+```
+pnpm install
+pnpm package                                   # -> gitsprout-0.1.0.vsix
+```
+
+- VS Code: `code --install-extension gitsprout-0.1.0.vsix`, or Extensions view → `…` → Install from VSIX…
+- Cursor: Extensions view → `…` → Install from VSIX… (or `cursor --install-extension gitsprout-0.1.0.vsix`)
+
+Requires VS Code (or Cursor on a matching VS Code base) 1.90+ and git 2.24+ on the PATH (or `git.path` set).
+
+## Usage
+
+- Gitsprout view in the activity bar: Repositories (multi-repo workspaces only), Branches, Remotes, Stashes, Tags. The status bar item shows the active repository and branch; the active repo follows the active editor.
+- Graph tab: `Gitsprout: Show Graph` (`⌥⌘G` on macOS, `Ctrl+Alt+G` elsewhere). The tab is restored after a window reload.
+- `Gitsprout: Switch Repository…`: `⌥⌘R` / `Ctrl+Alt+R`.
+- Commands (Command Palette, view toolbars and context menus): Checkout…, Create Branch…, Rename/Delete Branch, Stash… (push, apply, pop, drop), Fetch, Pull, Push, Fetch All.
+- Pull is `git pull --no-rebase --no-edit` (fast-forward when possible, a merge when diverged). Push of a branch without upstream is offered as "Publish Branch".
+- A fetch is killed after 300 s in total. Pull and Push show a cancellable progress notification.
+- Failed git calls show a notification. Fetch/pull/push errors offer "Show Command Output" (the `Gitsprout` output channel has the full stderr); authentication failures offer "Run in Terminal", which types the same git command into a terminal without pressing Enter.
+- Timings of the repository scan and of every graph load are logged to the `Gitsprout` output channel.
+
+Screenshots: _placeholder (to be added)._
+
+## Settings
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `gitsprout.scanDepth` | `3` | How deep to scan workspace folders for repositories |
+| `gitsprout.scanExclude` | `["**/node_modules", "**/vendor"]` | Glob patterns skipped during discovery |
+| `gitsprout.followActiveEditor` | `true` | Switch the active repository to the one containing the active editor |
+| `gitsprout.fetchConcurrency` | `4` | Repositories fetched in parallel by Fetch All |
+| `gitsprout.logLimit` | `1000` | Maximum number of commits loaded into the graph |
+| `gitsprout.ciPattern` | `^AutoBuild$` | Regular expression matching CI commit subjects |
+| `gitsprout.hideCi` | `false` | Hide CI commits in the graph (also toggled from the graph toolbar) |
+| `gitsprout.jira` | Pilot, SmartCityCloud and Tatikoma projects | Jira project key → browse URL prefix; keys in commit messages become links |
+
 ## Stack
 
 - VS Code extension API (`engines.vscode ^1.90`), TypeScript, esbuild

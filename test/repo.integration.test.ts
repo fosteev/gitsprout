@@ -393,7 +393,7 @@ describe('command flows', () => {
     const before = await rb.summary();
     const err = await rb.push().catch((e: unknown) => e as GitError);
     expect(err).toBeInstanceOf(GitError);
-    expect(errorPlan(err as GitError, 'push', before.branch)).toMatchObject({ level: 'error', actions: ['pull'], text: expect.stringContaining("Try running 'Pull' first") });
+    expect(errorPlan(err as GitError, 'push', before.branch)).toMatchObject({ level: 'error', actions: ['pull', 'output'], text: expect.stringContaining("Try running 'Pull' first") });
 
     const beforePull = await rb.summary();
     await rb.pull();
@@ -432,7 +432,7 @@ describe('command flows', () => {
     await ra.push();
     commit(b, 'README.md', 'from b\n', 'B edits README');
     const conflict = await rb.pull().catch((e: unknown) => e as GitError);
-    expect(errorPlan(conflict as GitError, 'pull')).toMatchObject({ actions: ['scm'] });
+    expect(errorPlan(conflict as GitError, 'pull')).toMatchObject({ actions: ['scm', 'output'] });
     // the line for the terminal replays the failing call without the -C/-c prefix
     expect(terminalCommand('git', (conflict as GitError).args)).toBe('git pull --no-rebase --no-edit');
     expect(terminalCommand('/opt/my git/git', ['-C', '/r', '-c', 'core.quotePath=false', 'push', '-u', 'origin', 'it\'s'])).toBe("'/opt/my git/git' push -u origin 'it'\\''s'");

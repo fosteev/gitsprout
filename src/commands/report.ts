@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { GitError } from '../git/types';
+import { showLog } from '../util/log';
 import { ACTION_LABEL, errorPlan, terminalCommand, type ActionId, type Op } from './messages';
 
 const text = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -17,9 +18,11 @@ export function createReporter(gitPath: () => string, log: (m: string) => void) 
         // The same command, in the integrated terminal, where ssh/credential prompts can be answered.
         const term = vscode.window.createTerminal({ name: 'Gitsprout', cwd: root });
         term.show();
-        if (e instanceof GitError) term.sendText(terminalCommand(gitPath(), e.args));
+        // No Enter: the user reads the command and runs it.
+        if (e instanceof GitError) term.sendText(terminalCommand(gitPath(), e.args), false);
         return;
       }
+      case 'output': showLog(); return;
     }
   };
 
