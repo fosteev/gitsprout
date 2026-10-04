@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { Repo } from '../git/repo';
 import { GitError, type RepoSummary } from '../git/types';
 import { mapPool } from '../util/pool';
-import { discover, type DiscoveredRepo } from './discovery';
+import { discoverWithParents, type DiscoveredRepo } from './discovery';
 import { makeRepoSummary, repoForPath, sameSummary, type FolderRef } from './model';
 
 const SUMMARY_CONCURRENCY = 8;
@@ -43,13 +43,16 @@ export class Registry implements vscode.Disposable {
   private readonly reposEmitter = new vscode.EventEmitter<void>();
   private readonly activeEmitter = new vscode.EventEmitter<RepoSummary | undefined>();
   private readonly repoEmitter = new vscode.EventEmitter<string>();
+  private readonly refreshedEmitter = new vscode.EventEmitter<string>();
   readonly onDidChangeRepos = this.reposEmitter.event;
   readonly onDidChangeActive = this.activeEmitter.event;
   readonly onDidChangeRepo = this.repoEmitter.event;
+  /** Fires after every completed read of a repo, even when the summary is unchanged (a new tag/branch/stash does not change it). */
+  readonly onDidRefreshRepo = this.refreshedEmitter.event;
 
   constructor(private readonly log: (msg: string) => void) {
     this.disposables.push(
-      this.reposEmitter, this.activeEmitter, this.repoEmitter,
+      this.reposEmitter, this.activeEmitter, this.repoEmitter, this.refreshedEmitter,
       vscode.workspace.onDidChangeWorkspaceFolders(() => void this.rescan()),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration('gitsprout.scanDepth') || e.affectsConfiguration('gitsprout.scanExclude')) void this.rescan();
@@ -87,7 +90,7 @@ export class Registry implements vscode.Disposable {
     const cfg = vscode.workspace.getConfiguration('gitsprout');
     const folders = this.folders();
     if (this.disposed) return;
-    const found = await discover(folders.map((f) => f.path), cfg.get<number>('scanDepth', 3), cfg.get<string[]>('scanExclude', ['**/node_modules', '**/vendor']));
+    const found = await discoverWithParents(folders.map((f) => f.path), cfg.get<number>('scanDepth', 3), cfg.get<string[]>('scanExclude', ['**/node_modules', '**/vendor']), this.gitPath);
     const next = new Map(found.map((f) => [f.root, f]));
 
     for (const [root, e] of [...this.entries]) {
@@ -153,7 +156,7 @@ export class Registry implements vscode.Disposable {
   }
 
   /**
-   * Re-reads one repo; fires `onDidChangeRepo` only when the summary actually changed. Reads of one repo are
+   * Re-reads one repo; fires `onDidChangeRepo` only when the summary actually changed (`onDidRefreshRepo` after every read). Reads of one repo are
    * serialised: a request during a running read queues exactly one more read (which starts after the request,
    * so the caller sees state at least as new as its own change); further requests join that queued read.
    */
@@ -173,9 +176,11 @@ export class Registry implements vscode.Disposable {
   private startRead(e: Entry, root: string): Promise<void> {
     const p: Promise<void> = (async () => {
       const s = await this.readSummary(root);
-      if (!s || this.disposed || this.entries.get(root) !== e || sameSummary(e.summary, s)) return;
-      e.summary = s;
-      this.repoEmitter.fire(root);
+      if (!s || this.disposed || this.entries.get(root) !== e) return;
+      const changed = !sameSummary(e.summary, s);
+      if (changed) e.summary = s;
+      if (changed) this.repoEmitter.fire(root);
+      this.refreshedEmitter.fire(root);
     })().finally(() => { if (e.busy === p) e.busy = undefined; });
     e.busy = p;
     return p;
