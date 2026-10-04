@@ -80,9 +80,10 @@ describe('WIP panel in the webview', () => {
     const row = q('#wip-lists .tr.w[title="n.txt"]');
     row.querySelector<HTMLElement>('[data-act="stage"]')?.click();
     expect(sent('stage')).toEqual([{ type: 'stage', files: [f('n.txt', { status: 'A', untracked: true })] }]);
-    expect(sent('openWipFile')).toEqual([]); // the button does not also open the diff
+    expect(sent('diffWipFile')).toEqual([]); // the button does not also open the diff
     q('#wip-lists .tr.w[title="src/a.ts"] .tl').click();
-    expect(sent('openWipFile')).toMatchObject([{ area: 'unstaged', file: { path: 'src/a.ts' } }]);
+    expect(sent('openWipFile')).toEqual([]); // a click shows the inline diff; the native editor is the bar's button
+    expect(sent('diffWipFile')).toMatchObject([{ area: 'unstaged', file: { path: 'src/a.ts' } }]);
   });
 
   it('no discard button on a conflicted row', () => {

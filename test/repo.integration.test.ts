@@ -1057,3 +1057,41 @@ describe('WIP: stage, unstage, discard, commit', () => {
     expect(porcelain(dir)).toContain('A  b.txt');
   });
 });
+
+describe('patch', () => {
+  const fl = (p: { hunks: { lines: { kind: string; text: string }[] }[] }) => p.hunks.flatMap((h) => h.lines.map((l) => l.kind + l.text));
+
+  it('commit with a parent, root commit, rename in a commit', async () => {
+    const dir = init('patch-commit');
+    const root = commit(dir, 'a.txt', 'one\ntwo\n', 'root');
+    const second = commit(dir, 'a.txt', 'one\nTWO\n', 'change');
+    g(dir, 'mv', 'a.txt', 'b.txt');
+    put(dir, 'b.txt', 'one\nTWO\nthree\n');
+    g(dir, 'add', '-A');
+    g(dir, 'commit', '-q', '-m', 'rename');
+    const third = g(dir, 'rev-parse', 'HEAD').trim();
+    const repo = new Repo(dir);
+    expect(fl(await repo.patch({ kind: 'commit', sha: root, parent: null, path: 'a.txt', origPath: null }))).toEqual(['+one', '+two']);
+    expect(fl(await repo.patch({ kind: 'commit', sha: second, parent: root, path: 'a.txt', origPath: null }))).toEqual([' one', '-two', '+TWO']);
+    const ren = await repo.patch({ kind: 'commit', sha: third, parent: second, path: 'b.txt', origPath: 'a.txt' });
+    expect(fl(ren)).toEqual([' one', ' TWO', '+three']);
+  });
+
+  it('staged (also on an unborn branch), unstaged, untracked', async () => {
+    const dir = init('patch-wip');
+    const repo = new Repo(dir);
+    put(dir, 'new.txt', 'x\ny\n');
+    g(dir, 'add', 'new.txt');
+    expect(fl(await repo.patch({ kind: 'staged', path: 'new.txt', origPath: null }))).toEqual(['+x', '+y']);
+    g(dir, 'commit', '-q', '-m', 'init');
+    put(dir, 'new.txt', 'x\nY\n');
+    expect(fl(await repo.patch({ kind: 'unstaged', path: 'new.txt' }))).toEqual([' x', '-y', '+Y']);
+    expect((await repo.patch({ kind: 'staged', path: 'new.txt', origPath: null })).hunks).toHaveLength(0);
+    g(dir, 'add', 'new.txt');
+    expect(fl(await repo.patch({ kind: 'staged', path: 'new.txt', origPath: null }))).toEqual([' x', '-y', '+Y']);
+    put(dir, 'u.txt', 'fresh\n');
+    expect(fl(await repo.patch({ kind: 'untracked', path: 'u.txt' }))).toEqual(['+fresh']);
+    put(dir, 'bin.dat', 'a\0b');
+    expect((await repo.patch({ kind: 'untracked', path: 'bin.dat' })).binary).toBe(true);
+  });
+});

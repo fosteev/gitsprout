@@ -1,6 +1,6 @@
 // Pure HTML builders for the graph UI. Every piece of repository data (subjects, names, paths) goes through esc().
 import type { CommitContext } from '../src/graph/protocol';
-import type { Commit, FileChange, FileStat, Head, Refs, Status } from '../src/git/types';
+import type { Commit, FileChange, FilePatch, FileStat, Head, Hunk, Refs, Status } from '../src/git/types';
 import { esc, fmtAgo, fmtAgoLong, jiraUrl, minutesAgo, parseSubject, splitPath } from './format';
 import { LANE_COLORS, rowSvg, WIP_SHA, type LaidRow } from './layout';
 import { buildTree, dirPaths, type TreeNode } from './wipTree';
@@ -246,10 +246,14 @@ export function wipListsHtml(wip: Status, view: WipView, collapsed: ReadonlySet<
         body = files.map((f, i) => { const [dir, base] = splitPath(f.path); return wipFileRow(f, i, area, 0, base || f.path, dir, false); }).join('');
       } else body = wipTreeRows(buildTree(files).children, area, 0, collapsed);
     }
-    return `<div class="wps"><div class="wpsh" data-act="sec" data-key="${key}" role="button" aria-expanded="${open}">${open ? WI.chevD : WI.chevR}`
-      + `<span>${title}</span><span class="n">(${files.length})</span>${files.length ? btn : ''}</div>${body}</div>`;
+    return `<div class="wps${open ? '' : ' closed'}" data-area="${area}"><div class="wpsh" data-act="sec" data-key="${key}" role="button" aria-expanded="${open}">${open ? WI.chevD : WI.chevR}`
+      + `<span>${title}</span><span class="n">(${files.length})</span>${files.length ? btn : ''}</div>${open ? `<div class="wpb">${body}</div>` : ''}</div>`;
   };
+  // the sash between the two lists only makes sense while both are expanded
+  const sash = collapsed.has(sectionKey('unstaged')) || collapsed.has(sectionKey('staged')) ? ''
+    : '<div class="hsash" title="Drag to resize, double-click to reset"></div>';
   return section('unstaged', 'Unstaged Files', '<button class="go" data-act="stageAll">Stage All Changes</button>', 'No unstaged changes')
+    + sash
     + section('staged', 'Staged Files', '<button class="go un" data-act="unstageAll">Unstage All</button>',
       wip.unstaged.length ? 'Stage files to include them in the commit' : 'No staged changes');
 }
@@ -303,4 +307,82 @@ export const noDetailsHtml = '<div class="nodetail">Select a commit to see its d
 /** The picked file of the WIP list. */
 export function wipFile(wip: Status, area: string, i: number): FileChange | undefined {
   return (area === 'staged' ? wip.staged : wip.unstaged)[i];
+}
+
+// ---- Inline diff (replaces the graph while open; prototype: .diff / .inl / .sbs) ----
+
+export type DiffMode = 'inline' | 'split';
+export type DiffBody = 'loading' | { error: string } | FilePatch;
+
+export const DIFF_TRUNCATED_NOTE = 'Diff truncated at 10 000 lines — Open in Editor for the full diff.';
+
+export interface DiffBar {
+  status: string;
+  path: string;
+  origPath: string | null;
+  /** `<parent7> ↔ <sha7>`, `empty ↔ <sha7>`, `Staged`, `Working Tree` or `Untracked` */
+  label: string;
+  mode: DiffMode;
+  hasPrev: boolean;
+  hasNext: boolean;
+}
+
+export function diffBarHtml(b: DiffBar): string {
+  const [dir, base] = splitPath(b.path);
+  const from = b.origPath ? ` (from ${b.origPath})` : '';
+  const other = b.mode === 'split' ? 'Inline' : 'Split';
+  return `<span class="st ${esc(b.status)}" title="${esc(LETTER_TITLE[b.status] ?? '')}">${esc(b.status)}</span>`
+    + `<span class="dpath" title="${esc(b.path + from)}">${dir ? `<span class="ddir">${esc(dir)}/</span>` : ''}<b>${esc(base)}</b></span>`
+    + `<span class="dctx">${esc(b.label)}</span><span class="dsp"></span>`
+    + `<button class="ib" data-dact="prev" title="Previous file (k)"${b.hasPrev ? '' : ' disabled'}>‹</button>`
+    + `<button class="ib" data-dact="next" title="Next file (j)"${b.hasNext ? '' : ' disabled'}>›</button>`
+    + `<button class="vchip" data-dact="mode" aria-pressed="${b.mode === 'split'}" title="Switch to ${other}">${b.mode === 'split' ? 'Split' : 'Inline'}</button>`
+    + '<button class="vchip" data-dact="editor" title="Open in the diff editor">Open in Editor</button>'
+    + '<button class="ib" data-dact="close" title="Close (Esc)">✕</button>';
+}
+
+const num = (n: number | null): string => (n === null ? '' : String(n));
+
+function inlineRowsHtml(hunks: Hunk[]): string {
+  return hunks.map((h) => `<span class="dfold">${esc(h.header)}</span>` + h.lines.map((l) => {
+    const c = l.kind === '+' ? ' ins' : l.kind === '-' ? ' rem' : '';
+    return `<span class="dn${c}">${num(l.old)}</span><span class="dn${c}">${num(l.new)}</span><span class="dg${c}">${l.kind === ' ' ? '' : l.kind}</span><span class="dc${c}">${esc(l.text)}</span>`;
+  }).join('')).join('');
+}
+
+const fill = (right: boolean): string => `<span class="dn fill${right ? ' dr' : ''}"></span><span class="dc fill"></span>`;
+
+function splitRowsHtml(hunks: Hunk[]): string {
+  return hunks.map((h) => {
+    let out = `<span class="dfold">${esc(h.header)}</span>`;
+    const ls = h.lines;
+    for (let i = 0; i < ls.length;) {
+      if (ls[i].kind === ' ') {
+        const l = ls[i++];
+        out += `<span class="dn">${num(l.old)}</span><span class="dc">${esc(l.text)}</span><span class="dn dr">${num(l.new)}</span><span class="dc">${esc(l.text)}</span>`;
+        continue;
+      }
+      // a run of removals followed by a run of additions is shown side by side, row by row
+      const dels: typeof ls = [];
+      const adds: typeof ls = [];
+      while (i < ls.length && ls[i].kind === '-') dels.push(ls[i++]);
+      while (i < ls.length && ls[i].kind === '+') adds.push(ls[i++]);
+      for (let k = 0; k < Math.max(dels.length, adds.length); k++) {
+        const d = dels[k];
+        const a = adds[k];
+        out += (d ? `<span class="dn rem">${num(d.old)}</span><span class="dc rem">${esc(d.text)}</span>` : fill(false))
+          + (a ? `<span class="dn ins dr">${num(a.new)}</span><span class="dc ins">${esc(a.text)}</span>` : fill(true));
+      }
+    }
+    return out;
+  }).join('');
+}
+
+export function diffBodyHtml(body: DiffBody, mode: DiffMode): string {
+  if (body === 'loading') return '<div class="dnote">Loading…</div>';
+  if ('error' in body) return `<div class="dnote err">${esc(body.error)}</div>`;
+  if (body.binary) return '<div class="dnote">Binary file — not shown.</div>';
+  if (body.hunks.length === 0) return '<div class="dnote">No content changes.</div>';
+  return `<div class="dgrid ${mode === 'split' ? 'dsbs' : 'dinl'}">${mode === 'split' ? splitRowsHtml(body.hunks) : inlineRowsHtml(body.hunks)}</div>`
+    + (body.truncated ? `<div class="dnote">${DIFF_TRUNCATED_NOTE}</div>` : '');
 }

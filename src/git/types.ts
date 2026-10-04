@@ -37,3 +37,6 @@ export interface FileStat { path: string; origPath: string | null; status: FileS
 /** A file of a stash; `untracked` = exists only in `stash@{i}^3`. */
 export interface StashFile extends FileStat { untracked: boolean }
 export interface Stash { index: number; sha: string; message: string }
+export interface PatchLine { kind: ' ' | '+' | '-'; text: string; old: number | null; new: number | null }
+export interface Hunk { header: string; oldStart: number; newStart: number; lines: PatchLine[] }
+export interface FilePatch { binary: boolean; hunks: Hunk[]; truncated: boolean }

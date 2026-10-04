@@ -9,7 +9,7 @@ Gitsprout adds what the built-in Source Control lacks: a commit graph with a Git
 - Workspaces with one repo or many (e.g. `~/Projects` with ~40 repos in nested folders): repository discovery, a Repositories view grouped by folder, "needs attention" filter (uncommitted / ahead / behind), Fetch All, quick repo switching, active repo follows the active editor
 - Branches, Remotes, Stashes, Tags tree views for the active repo: checkout (a remote checkout creates a tracking branch), create, rename, delete, ahead/behind
 - Commit graph (webview) with search, hide CI commits (`AutoBuild`), commit details, Jira keys (`P7-4040`, `NEWMFC-123`) as links
-- Diffs open in VS Code's native diff editor (commit files, stash files, uncommitted files)
+- Diffs open in VS Code's native diff editor (stash files, compare with working tree). In the commit graph, clicking a commit or uncommitted file shows its diff inline in place of the graph (inline or split, switch to the next file, "Open in Editor" for the native diff)
 - Fetch, pull (fast-forward, merge when diverged), push with a clear message and a Pull button when rejected
 - Stash: push, apply, pop, drop
 - WIP panel in the graph (post-MVP, `roadmap-wip-panel.md`): stage, unstage and discard files or everything, commit summary + description, amend, commit and push

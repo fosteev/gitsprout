@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": [".", "../test/wip.webview.test.ts"]
+  "include": [".", "../test/wip.webview.test.ts", "../test/diff.webview.test.ts"]
 }

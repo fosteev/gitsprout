@@ -1,6 +1,6 @@
 // Messages between the extension (src/graph/panel.ts) and the graph webview (webview/main.ts).
 // Type-only imports: this file is bundled into both sides and must stay free of `vscode`/node.
-import type { Commit, FileChange, FileStat, Head, Refs, Status } from '../git/types';
+import type { Commit, FileChange, FilePatch, FileStat, Head, Refs, Status } from '../git/types';
 
 export interface GraphSettings {
   ciPattern: string;
@@ -15,6 +15,9 @@ export type ToWebview =
   /** `error` set = the file list could not be read (`files` is empty then). */
   | { type: 'details'; sha: string; files: FileStat[]; error?: string }
   | { type: 'reveal'; sha: string }                      // select + scroll (from tree views)
+  /** Answer to `diffCommitFile` / `diffWipFile`; `req` echoes the request, a newer request makes older answers stale. */
+  | { type: 'diff'; req: number; patch: FilePatch }
+  | { type: 'diff'; req: number; error: string }
   | { type: 'busy'; on: boolean }
   /** A WIP operation (stage, unstage, discard, commit) is running: the webview disables every WIP button. Separate from the loading `busy`. */
   | { type: 'wipBusy'; on: boolean }
@@ -31,6 +34,9 @@ export type FromWebview =
   | { type: 'select'; sha: string }                      // extension answers with 'details'
   | { type: 'openCommitFile'; sha: string; file: FileStat }
   | { type: 'openWipFile'; file: FileChange; area: 'staged' | 'unstaged' }
+  /** Inline diff of one file (answered with `diff`). `openCommitFile` / `openWipFile` mean "open in the native editor". */
+  | { type: 'diffCommitFile'; req: number; sha: string; file: FileStat }
+  | { type: 'diffWipFile'; req: number; file: FileChange; area: 'staged' | 'unstaged' }
   /** WIP panel. `files` are re-checked against a fresh status; only entries still in the list are acted on. */
   | { type: 'stage'; files: FileChange[] } | { type: 'stageAll' }
   | { type: 'unstage'; files: FileChange[] } | { type: 'unstageAll' }

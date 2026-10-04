@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  mergeFileStats, parseLog, parseNameStatusZ, parseNumstatZ, parseRefs, parseStashList, parseStatus, parseStatusSummary, parseTrack,
+  mergeFileStats, parseLog, parseNameStatusZ, parseNumstatZ, parsePatch, parseRefs, parseStashList, parseStatus, parseStatusSummary, parseTrack,
 } from '../src/git/parse';
 import { classify, gitEnv, lastLine } from '../src/git/run';
 import { commitMessage, splitMessage } from '../src/git/message';
@@ -205,5 +205,66 @@ describe('commit message helpers', () => {
     const m = 'Add thing\n\nFirst paragraph.\n\nSecond paragraph\n- item';
     const { summary, description } = splitMessage(m);
     expect(commitMessage(summary, description)).toBe(m);
+  });
+});
+
+describe('parsePatch', () => {
+  const lines = (...l: string[]) => l.join('\n') + '\n';
+  it('multi-hunk modify with numbering and section text', () => {
+    const p = parsePatch(lines(
+      'diff --git a/f.ts b/f.ts', 'index 111..222 100644', '--- a/f.ts', '+++ b/f.ts',
+      '@@ -1,3 +1,3 @@ function foo() {', ' a', '-b', '+B', ' c',
+      '@@ -10,2 +10,3 @@', ' x', '+y', ' z',
+    ));
+    expect(p.binary).toBe(false);
+    expect(p.truncated).toBe(false);
+    expect(p.hunks).toHaveLength(2);
+    expect(p.hunks[0]).toMatchObject({ header: '@@ -1,3 +1,3 @@ function foo() {', oldStart: 1, newStart: 1 });
+    expect(p.hunks[0].lines).toEqual([
+      { kind: ' ', text: 'a', old: 1, new: 1 },
+      { kind: '-', text: 'b', old: 2, new: null },
+      { kind: '+', text: 'B', old: null, new: 2 },
+      { kind: ' ', text: 'c', old: 3, new: 3 },
+    ]);
+    expect(p.hunks[1]).toMatchObject({ oldStart: 10, newStart: 10 });
+    expect(p.hunks[1].lines.map((l) => [l.kind, l.old, l.new])).toEqual([[' ', 10, 10], ['+', null, 11], [' ', 11, 12]]);
+  });
+  it('added file', () => {
+    const p = parsePatch(lines('diff --git a/n b/n', 'new file mode 100644', 'index 0000000..111 100644', '--- /dev/null', '+++ b/n', '@@ -0,0 +1,2 @@', '+one', '+two'));
+    expect(p.hunks[0]).toMatchObject({ oldStart: 0, newStart: 1 });
+    expect(p.hunks[0].lines.map((l) => [l.kind, l.text, l.old, l.new])).toEqual([['+', 'one', null, 1], ['+', 'two', null, 2]]);
+  });
+  it('deleted file', () => {
+    const p = parsePatch(lines('diff --git a/d b/d', 'deleted file mode 100644', '--- a/d', '+++ /dev/null', '@@ -1,2 +0,0 @@', '-one', '-two'));
+    expect(p.hunks[0].lines.map((l) => [l.kind, l.old, l.new])).toEqual([['-', 1, null], ['-', 2, null]]);
+  });
+  it('rename-only has no hunks', () => {
+    const p = parsePatch(lines('diff --git a/a b/b', 'similarity index 100%', 'rename from a', 'rename to b'));
+    expect(p).toEqual({ binary: false, hunks: [], truncated: false });
+  });
+  it('binary', () => {
+    expect(parsePatch(lines('diff --git a/x.png b/x.png', 'index 1..2 100644', 'Binary files a/x.png and b/x.png differ'))).toMatchObject({ binary: true, hunks: [] });
+    expect(parsePatch(lines('diff --git a/x b/x', 'index 1..2 100644', 'GIT binary patch', 'literal 3', 'xyz'))).toMatchObject({ binary: true, hunks: [] });
+  });
+  it('skips "\\ No newline at end of file"', () => {
+    const p = parsePatch(lines('@@ -1 +1 @@', '-a', '\\ No newline at end of file', '+b', '\\ No newline at end of file'));
+    expect(p.hunks[0].lines.map((l) => l.kind + l.text)).toEqual(['-a', '+b']);
+  });
+  it('strips a trailing CR', () => {
+    const p = parsePatch('@@ -1,2 +1,2 @@\n a\r\n-b\r\n+c\r\n');
+    expect(p.hunks[0].lines.map((l) => l.text)).toEqual(['a', 'b', 'c']);
+  });
+  it('omitted counts mean 1; empty line is context', () => {
+    const p = parsePatch('@@ -5 +7 @@\n-a\n+b\n\n c\n');
+    expect(p.hunks[0]).toMatchObject({ header: '@@ -5 +7 @@', oldStart: 5, newStart: 7 });
+    expect(p.hunks[0].lines[2]).toEqual({ kind: ' ', text: '', old: 6, new: 8 });
+    expect(p.hunks[0].lines[3]).toEqual({ kind: ' ', text: 'c', old: 7, new: 9 });
+  });
+  it('truncates after maxLines', () => {
+    const body = Array.from({ length: 10 }, (_, i) => `+l${i}`);
+    const p = parsePatch(lines('@@ -0,0 +1,10 @@', ...body), 4);
+    expect(p.truncated).toBe(true);
+    expect(p.hunks[0].lines).toHaveLength(4);
+    expect(parsePatch(lines('@@ -0,0 +1,10 @@', ...body), 10).truncated).toBe(false);
   });
 });

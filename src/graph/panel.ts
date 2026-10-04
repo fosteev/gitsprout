@@ -5,7 +5,7 @@ import { openPlan } from '../diff/provider';
 import { commitFilePlan, stagedPlan, unstagedPlan } from '../diff/uri';
 import type { WipActions } from '../commands/wip';
 import { Repo } from '../git/repo';
-import type { Commit, Head, Status } from '../git/types';
+import type { Commit, FilePatch, Head, Status } from '../git/types';
 import { onReveal } from '../views/refsStore';
 import type { Registry } from '../workspace/registry';
 import type { FromWebview, GraphSettings, ToWebview } from './protocol';
@@ -204,6 +204,25 @@ class GraphPanel implements vscode.Disposable {
         await this.open(m.area === 'staged' ? stagedPlan(f, this.head.sha === null) : unstagedPlan(f));
         return;
       }
+      case 'diffCommitFile': {
+        const c = this.commits.get(m.sha);
+        if (!this.root || !c) return;
+        const { file } = m;
+        await this.sendDiff(m.req, (repo) => repo.patch({ kind: 'commit', sha: m.sha, parent: c.parents[0] ?? null, path: file.path, origPath: file.origPath }));
+        return;
+      }
+      case 'diffWipFile': {
+        if (!this.root || !this.wip) return;
+        const list = m.area === 'staged' ? this.wip.staged : this.wip.unstaged;
+        const f = list.find((x) => x.path === m.file.path && x.origPath === m.file.origPath);
+        if (!f) return;
+        await this.sendDiff(m.req, (repo) => repo.patch(
+          m.area === 'staged' ? { kind: 'staged', path: f.path, origPath: f.origPath }
+            : f.untracked ? { kind: 'untracked', path: f.path }
+            : { kind: 'unstaged', path: f.path },
+        ));
+        return;
+      }
       case 'stage': await this.withWipBusy(() => this.wipActions.stage(this.repoRoot, m.files)); return;
       case 'unstage': await this.withWipBusy(() => this.wipActions.unstage(this.repoRoot, m.files)); return;
       case 'stageAll': await this.withWipBusy(() => this.wipActions.stageAll(this.repoRoot)); return;
@@ -236,6 +255,20 @@ class GraphPanel implements vscode.Disposable {
         if (isAllowedUrl(m.url, readSettings().jira)) await vscode.env.openExternal(vscode.Uri.parse(m.url));
         return;
     }
+  }
+
+  /** Runs the patch read and posts the `diff` answer unless the panel switched repos meanwhile. */
+  private async sendDiff(req: number, read: (repo: Repo) => Promise<FilePatch>): Promise<void> {
+    const root = this.root;
+    if (!root) return;
+    let msg: ToWebview;
+    try {
+      msg = { type: 'diff', req, patch: await read(new Repo(root, this.registry.gitPath)) };
+    } catch (e) {
+      this.log(`graph diff: ${errText(e)}`);
+      msg = { type: 'diff', req, error: errText(e) };
+    }
+    if (root === this.root) this.post(msg);
   }
 
   private wipRunning = 0;

@@ -1,13 +1,13 @@
 // Graph UI entry point: DOM glue around the pure model (layout.ts, render.ts, format.ts).
-import type { FileStat } from '../src/git/types';
+import type { FileChange, FileStat } from '../src/git/types';
 import type { FromWebview, ToWebview } from '../src/graph/protocol';
 import './styles.css';
 import { ciMatcher } from './format';
 import { graphWidth, layout, RH, visibleRows, WIP_SHA, type LaidRow } from './layout';
 import {
-  canDiscard, commitDetailsHtml, HEAD_PUSHED_NOTE, keepSet, NO_SUMMARY_ERROR, noDetailsHtml, primaryClass, primaryInnerHtml, refsBySha, rowHtml,
+  canDiscard, commitDetailsHtml, diffBarHtml, diffBodyHtml, HEAD_PUSHED_NOTE, keepSet, NO_SUMMARY_ERROR, noDetailsHtml, primaryClass, primaryInnerHtml, refsBySha, rowHtml,
   SUMMARY_LIMIT, WIP_LABEL, wipBarHtml, wipCommitHtml, wipDirKeys, wipFile, wipFileCount, wipHeaderHtml, wipListsHtml, wipPrimary,
-  type CommitCtx, type FilesState, type RefPill, type RowEnv, type WipDraft, type WipView,
+  type CommitCtx, type DiffBody, type DiffMode, type FilesState, type RefPill, type RowEnv, type WipDraft, type WipView,
 } from './render';
 
 declare function acquireVsCodeApi(): { postMessage(m: FromWebview): void; setState(s: unknown): void; getState?(): unknown };
@@ -69,15 +69,33 @@ let amendAsked: string | null | undefined;
 let wipMounted = false;
 /** The repo root the persisted state belongs to; a `state` for another root drops it. */
 let stateRoot: string | undefined;
+/** The inline diff that replaces the graph while open (null = the graph is shown). Not persisted; only `diffMode` is. */
+interface OpenDiff {
+  area: 'commit' | 'staged' | 'unstaged';
+  /** the commit of a commit diff */
+  sha: string;
+  file: FileStat | FileChange;
+  body: DiffBody;
+}
+let diff: OpenDiff | null = null;
+let diffMode: DiffMode = 'inline';
+/** Bumped per request (and on close); a `diff` answer with another `req` is stale. */
+let diffReq = 0;
+/** `#list` scrollTop at the moment the diff opened (a hidden element loses it). */
+let listScroll = 0;
 const PANE_MIN = 240, GRAPH_MIN = 240;
 /** Details pane width the user dragged the sash to; null = the CSS default. Not tied to a repo. */
 let paneWidth: number | null = null;
+/** Unstaged share of the WIP lists' height (0..1) the user dragged the sash to; null = half. */
+let listSplit: number | null = null;
 
 function restore(): void {
   const raw = api.getState?.();
   if (typeof raw !== 'object' || raw === null) return;
-  const o = raw as { root?: unknown; draft?: unknown; view?: unknown; collapsed?: unknown; paneWidth?: unknown };
+  const o = raw as { root?: unknown; draft?: unknown; view?: unknown; collapsed?: unknown; paneWidth?: unknown; listSplit?: unknown; diffMode?: unknown };
   if (typeof o.paneWidth === 'number' && o.paneWidth > 0) paneWidth = o.paneWidth;
+  if (typeof o.listSplit === 'number' && o.listSplit > 0 && o.listSplit < 1) listSplit = o.listSplit;
+  if (o.diffMode === 'inline' || o.diffMode === 'split') diffMode = o.diffMode;
   if (typeof o.root === 'string') stateRoot = o.root;
   const d = o.draft as Partial<WipDraft> | null | undefined;
   if (d && typeof d.summary === 'string' && typeof d.description === 'string' && typeof d.amend === 'boolean') {
@@ -90,7 +108,7 @@ restore();
 
 function persist(): void {
   if (stateRoot === undefined) return;
-  api.setState({ root: stateRoot, draft, view: wipView, collapsed: [...collapsed], paneWidth });
+  api.setState({ root: stateRoot, draft, view: wipView, collapsed: [...collapsed], paneWidth, listSplit, diffMode });
 }
 
 const app = document.getElementById('app') as HTMLElement;
@@ -109,6 +127,7 @@ app.innerHTML = `
       <div class="gcols"><span>Graph</span><span>Description</span><span class="gwhen">Date</span><span class="gwho">Author</span><span class="gsha">Commit</span></div>
       <div id="rows"></div>
     </div>
+    <div class="dview" id="dview" hidden><div class="dbar" id="dbar"></div><div class="dbody" id="dbody"></div></div>
     <div class="details" id="details"></div>
     <div class="sash" id="sash" title="Drag to resize, double-click to reset"></div>
   </div>`;
@@ -175,6 +194,7 @@ function commitCtx(): CommitCtx {
 function renderWip(s: State, wip: NonNullable<State['wip']>): void {
   if (!wipMounted) {
     details.innerHTML = '<div class="wp"><div id="wip-head"></div><div class="wpl" id="wip-lists"></div><div id="wip-commit"></div></div>';
+    applyListSplit();
     $('wip-commit').innerHTML = wipCommitHtml(draft, commitCtx());
     wipMounted = true;
     // properties, not attributes: a leading newline or odd characters round-trip exactly
@@ -189,10 +209,18 @@ function renderWipLists(s: State, wip: NonNullable<State['wip']>): void {
   const keys = wipDirKeys(wip);
   const where = s.head.branch ?? (s.head.sha ? 'detached HEAD' : 'no commits yet');
   $('wip-head').innerHTML = wipHeaderHtml(wipFileCount(wip), where) + wipBarHtml(wipView, keys.length > 0, keys.some((k) => !collapsed.has(k)));
-  $('wip-lists').innerHTML = wipListsHtml(wip, wipView, collapsed);
+  // each list scrolls on its own and is rebuilt here: keep where the user was
+  const lists = $('wip-lists');
+  const scroll = new Map([...lists.querySelectorAll<HTMLElement>('.wps')].map((el) => [el.dataset.area, el.querySelector('.wpb')?.scrollTop ?? 0]));
+  lists.innerHTML = wipListsHtml(wip, wipView, collapsed);
+  for (const el of lists.querySelectorAll<HTMLElement>('.wps')) {
+    const b = el.querySelector<HTMLElement>('.wpb');
+    if (b) b.scrollTop = scroll.get(el.dataset.area) ?? 0;
+  }
   // CSP forbids style attributes in markup; CSSOM is fine
   for (const el of details.querySelectorAll<HTMLElement>('[data-d]')) el.style.setProperty('--d', el.dataset.d as string);
   applyBusy();
+  markDiffRow();
 }
 
 /** Updates the parts of the commit box that depend on state, never the inputs themselves. */
@@ -252,6 +280,11 @@ function syncWipRow(): void {
 }
 
 function renderDetails(): void {
+  renderDetailsInner();
+  markDiffRow();
+}
+
+function renderDetailsInner(): void {
   if (!st || !model) { setWipLayout(false); details.innerHTML = noDetailsHtml; return; }
   if (selected === WIP_SHA && st.wip) { setWipLayout(true); renderWip(st, st.wip); return; }
   setWipLayout(false);
@@ -261,6 +294,157 @@ function renderDetails(): void {
   const fs: FilesState = f === undefined ? 'loading' : f;
   details.innerHTML = commitDetailsHtml(c, fs, { jira: st.settings.jira, pills: model.pills, nowMs: Date.now(), known: model.known });
 }
+
+// ---- Inline diff ----
+
+/** The file rows of the details pane in DOM order (across areas): what prev/next walk. */
+const diffRows = (): HTMLElement[] => [...details.querySelectorAll<HTMLElement>('.tr[data-file]')].filter((r) => r.dataset.area !== undefined);
+
+/** The `FileStat` / `FileChange` a details row stands for. */
+function rowFile(row: HTMLElement): { area: OpenDiff['area']; file: FileStat | FileChange } | undefined {
+  const i = Number(row.dataset.file);
+  const area = row.dataset.area;
+  if (area === 'commit') {
+    const f = selected ? files.get(selected) : undefined;
+    return Array.isArray(f) && f[i] ? { area, file: f[i] } : undefined;
+  }
+  if ((area === 'staged' || area === 'unstaged') && st?.wip) {
+    const file = wipFile(st.wip, area, i);
+    return file ? { area, file } : undefined;
+  }
+  return undefined;
+}
+
+const sameFile = (a: { path: string; origPath: string | null }, b: { path: string; origPath: string | null }): boolean => a.path === b.path && a.origPath === b.origPath;
+
+/** Highlights the open file's row (the details pane is re-rendered often) and refreshes the bar's prev/next state. */
+function markDiffRow(): void {
+  if (!diff) return;
+  const open = diff;
+  const rows = diffRows();
+  let at = -1;
+  rows.forEach((r, i) => {
+    const f = rowFile(r);
+    const hit = !!f && f.area === open.area && sameFile(f.file, open.file);
+    r.classList.toggle('on', hit);
+    if (hit) at = i;
+  });
+  renderDiffBar(at > 0, at >= 0 && at < rows.length - 1);
+}
+
+function diffLabel(d: OpenDiff): string {
+  if (d.area === 'commit') {
+    const parent = model?.bySha.get(d.sha)?.parents[0];
+    return `${parent ? parent.slice(0, 7) : 'empty'} ↔ ${d.sha.slice(0, 7)}`;
+  }
+  if (d.area === 'staged') return 'Staged';
+  return (d.file as FileChange).untracked ? 'Untracked' : 'Working Tree';
+}
+
+function renderDiffBar(hasPrev: boolean, hasNext: boolean): void {
+  if (!diff) return;
+  $('dbar').innerHTML = diffBarHtml({
+    status: diff.file.status, path: diff.file.path, origPath: diff.file.origPath, label: diffLabel(diff), mode: diffMode, hasPrev, hasNext,
+  });
+}
+
+function renderDiffBody(keepScroll = false): void {
+  if (!diff) return;
+  const body = $('dbody');
+  const top = body.scrollTop;
+  body.innerHTML = diffBodyHtml(diff.body, diffMode);
+  body.scrollTop = keepScroll ? top : 0;
+}
+
+function requestDiff(): void {
+  if (!diff) return;
+  const req = ++diffReq;
+  if (diff.area === 'commit') send({ type: 'diffCommitFile', req, sha: diff.sha, file: diff.file as FileStat });
+  else send({ type: 'diffWipFile', req, file: diff.file as FileChange, area: diff.area });
+}
+
+/** Opens the diff of a details row, or switches the open one to it. */
+function openDiff(area: OpenDiff['area'], file: FileStat | FileChange): void {
+  if (!diff) {
+    listScroll = list.scrollTop;
+    list.hidden = true;
+    $('dview').hidden = false;
+  }
+  diff = { area, sha: selected ?? '', file, body: 'loading' };
+  renderDiffBody();
+  markDiffRow();
+  requestDiff();
+}
+
+function closeDiff(): void {
+  if (!diff) return;
+  diff = null;
+  diffReq++; // an answer still in flight is stale now
+  $('dview').hidden = true;
+  list.hidden = false;
+  list.scrollTop = listScroll;
+  for (const r of details.querySelectorAll('.tr.on')) r.classList.remove('on');
+  renderRows(true);
+  list.focus();
+}
+
+function stepDiff(dir: 1 | -1): void {
+  if (!diff) return;
+  const rows = diffRows();
+  const at = rows.findIndex((r) => r.classList.contains('on'));
+  const next = rows[at + dir];
+  if (at < 0 || !next) return;
+  const t = rowFile(next);
+  if (t) openDiff(t.area, t.file);
+}
+
+function onDiff(m: Extract<ToWebview, { type: 'diff' }>): void {
+  if (!diff || m.req !== diffReq) return;
+  diff.body = 'error' in m ? { error: m.error } : m.patch;
+  renderDiffBody(true);
+}
+
+/** A `state` arrived: a WIP diff follows its file (same path in its area, else the other area, else it closes). */
+function followDiff(s: State): void {
+  if (!diff) return;
+  if (diff.area === 'commit') {
+    if (selected !== diff.sha) closeDiff();
+    return;
+  }
+  if (!s.wip || selected !== WIP_SHA) { closeDiff(); return; }
+  const other = diff.area === 'staged' ? 'unstaged' : 'staged';
+  for (const area of [diff.area, other] as const) {
+    const f = s.wip[area].find((x) => sameFile(x, diff!.file));
+    if (!f) continue;
+    const moved = area !== diff.area;
+    diff.area = area;
+    diff.file = f;
+    if (moved) { diff.body = 'loading'; renderDiffBody(); } // another side of the file: start over
+    requestDiff(); // silent: the old content stays (and its scroll position) until the answer
+    return;
+  }
+  closeDiff();
+}
+
+$('dview').addEventListener('click', (ev) => {
+  const b = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-dact]');
+  if (!b || b.disabled || !diff) return;
+  switch (b.dataset.dact) {
+    case 'close': closeDiff(); break;
+    case 'prev': stepDiff(-1); break;
+    case 'next': stepDiff(1); break;
+    case 'mode':
+      diffMode = diffMode === 'split' ? 'inline' : 'split';
+      persist();
+      markDiffRow();
+      renderDiffBody(true);
+      break;
+    case 'editor':
+      if (diff.area === 'commit') send({ type: 'openCommitFile', sha: diff.sha, file: diff.file as FileStat });
+      else send({ type: 'openWipFile', file: diff.file as FileChange, area: diff.area });
+      break;
+  }
+});
 
 function renderToolbar(): void {
   if (!st || !model) return;
@@ -287,6 +471,7 @@ function scrollToRow(sha: string, center: boolean): void {
 
 function select(sha: string, o: { center?: boolean } = {}): void {
   const changed = sha !== selected;
+  if (changed) closeDiff();
   selected = sha;
   scrollToRow(sha, !!o.center);
   renderRows(true);
@@ -310,7 +495,7 @@ function showMessage(text: string | null): void {
 }
 
 function onState(s: State): void {
-  if (st && st.repo.root !== s.repo.root) { files.clear(); selected = null; list.scrollTop = 0; }
+  if (st && st.repo.root !== s.repo.root) { closeDiff(); files.clear(); selected = null; list.scrollTop = 0; }
   if (stateRoot !== undefined && stateRoot !== s.repo.root) {
     // the persisted draft belongs to another repo
     draft = emptyDraft(); wipView = 'tree'; collapsed = new Set(); draftErr = ''; headInfo = null; amendAsked = undefined; wipMounted = false;
@@ -329,6 +514,7 @@ function onState(s: State): void {
   if (want && model.known.has(want)) selected = want;
   const sel = defaultSelection();
   selected = sel;
+  followDiff(s);
   if (want && sel === want) scrollToRow(want, true);
   renderRows(true);
   renderDetails();
@@ -349,7 +535,9 @@ window.addEventListener('message', (ev: MessageEvent<ToWebview>) => {
       files.set(m.sha, m.error !== undefined ? { error: m.error } : m.files);
       if (m.sha === selected) renderDetails();
       break;
+    case 'diff': onDiff(m); break;
     case 'reveal':
+      closeDiff();
       if (model?.known.has(m.sha)) select(m.sha, { center: true });
       else pendingReveal = m.sha;
       break;
@@ -361,7 +549,7 @@ window.addEventListener('message', (ev: MessageEvent<ToWebview>) => {
       break;
     case 'committed': onCommitted(); break;
     case 'amendInfo': onAmendInfo(m); break;
-    case 'error': st = undefined; model = undefined; selected = null; renderRows(); renderDetails(); showMessage(m.message); break;
+    case 'error': closeDiff(); st = undefined; model = undefined; selected = null; renderRows(); renderDetails(); showMessage(m.message); break;
   }
 });
 
@@ -406,6 +594,42 @@ sash.addEventListener('pointerdown', (ev) => {
 });
 sash.addEventListener('dblclick', () => { paneWidth = null; applyPaneWidth(); persist(); });
 
+// Sash between the Unstaged and Staged lists (rebuilt with the lists, so listen on window while dragging).
+const LIST_MIN = 52;
+function applyListSplit(): void {
+  const el = document.getElementById('wip-lists');
+  if (!el) return;
+  if (listSplit === null) el.style.removeProperty('--uf'); else el.style.setProperty('--uf', String(listSplit));
+}
+details.addEventListener('pointerdown', (ev) => {
+  const h = (ev.target as HTMLElement).closest<HTMLElement>('.hsash');
+  if (!h || ev.button !== 0) return;
+  ev.preventDefault();
+  const lists = $('wip-lists');
+  h.classList.add('on');
+  const move = (e: PointerEvent): void => {
+    const r = lists.getBoundingClientRect();
+    if (r.height <= LIST_MIN * 2) return;
+    const y = Math.min(Math.max(e.clientY - r.top, LIST_MIN), r.height - LIST_MIN);
+    listSplit = Math.round((y / r.height) * 1000) / 1000;
+    applyListSplit();
+  };
+  const up = (): void => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+    lists.querySelector('.hsash')?.classList.remove('on');
+    persist();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
+});
+details.addEventListener('dblclick', (ev) => {
+  if (!(ev.target as HTMLElement).closest('.hsash')) return;
+  listSplit = null; applyListSplit(); persist();
+});
+
 // Details card.
 details.addEventListener('click', (ev) => {
   if (!st) return;
@@ -417,14 +641,8 @@ details.addEventListener('click', (ev) => {
   else if (t.dataset.url) send({ type: 'openUrl', url: t.dataset.url });
   else if (t.dataset.select) { if (model?.known.has(t.dataset.select)) select(t.dataset.select, { center: true }); }
   else if (t.dataset.file !== undefined) {
-    const i = Number(t.dataset.file);
-    if (t.dataset.area === 'commit') {
-      const f = selected ? files.get(selected) : undefined;
-      if (selected && Array.isArray(f) && f[i]) send({ type: 'openCommitFile', sha: selected, file: f[i] });
-    } else if (st.wip && (t.dataset.area === 'staged' || t.dataset.area === 'unstaged')) {
-      const file = wipFile(st.wip, t.dataset.area, i);
-      if (file) send({ type: 'openWipFile', file, area: t.dataset.area });
-    }
+    const target = rowFile(t);
+    if (target) openDiff(target.area, target.file);
   }
 });
 
@@ -582,9 +800,9 @@ $('ci').addEventListener('click', () => {
   else { selected = sel; renderRows(true); renderDetails(); }
   send({ type: 'toggleCi', hideCi: st.settings.hideCi });
 });
-qEl.addEventListener('input', () => { query = qEl.value; renderRows(true); });
+qEl.addEventListener('input', () => { closeDiff(); query = qEl.value; renderRows(true); });
 qEl.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Enter') jumpToMatch(ev.shiftKey ? -1 : 1);
+  if (ev.key === 'Enter') { closeDiff(); jumpToMatch(ev.shiftKey ? -1 : 1); }
   else if (ev.key === 'Escape') { qEl.value = ''; query = ''; renderRows(true); }
 });
 
@@ -605,6 +823,12 @@ document.addEventListener('keydown', (ev) => {
   if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
   const tag = (ev.target as HTMLElement).tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (diff) {
+    // ↑/↓ are left to the native scroll of the diff
+    if (ev.key === 'Escape') { if (!(ev.target as HTMLElement).closest('#wmenu, #wmore')) { ev.preventDefault(); closeDiff(); } }
+    else if (ev.key === 'j' || ev.key === 'k') { ev.preventDefault(); stepDiff(ev.key === 'j' ? 1 : -1); }
+    return;
+  }
   const dir = ev.key === 'ArrowDown' || ev.key === 'j' ? 1 : ev.key === 'ArrowUp' || ev.key === 'k' ? -1 : 0;
   if (!dir || !model?.rows.length) return;
   ev.preventDefault();

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { Commit, Refs } from '../src/git/types';
+import type { Commit, FilePatch, Refs } from '../src/git/types';
 import { ciMatcher, esc, fmtAgo, fmtAgoLong, jiraUrl, parseSubject, splitPath } from '../webview/format';
 import { layout, visibleRows } from '../webview/layout';
-import { commitDetailsHtml, keepSet, pillsHtml, refsBySha, rowHtml, subjectHtml, type RowEnv } from '../webview/render';
+import { commitDetailsHtml, diffBarHtml, diffBodyHtml, keepSet, pillsHtml, refsBySha, rowHtml, subjectHtml, type RowEnv } from '../webview/render';
 import { asFileChange, asFileStat, graphHtml, isAllowedUrl, isSafeRelPath, parseFromWebview, shaFromArg } from '../src/graph/validate';
 
 const SHA = 'a'.repeat(40);
@@ -135,5 +135,70 @@ describe('webview message validation', () => {
     expect(h).toContain('<script nonce="N0nce"');
     expect(h).not.toContain('unsafe-inline');
     expect(h).toContain("default-src 'none'");
+  });
+});
+
+describe('diff rendering', () => {
+  const line = (kind: ' ' | '+' | '-', text: string, old: number | null, nw: number | null) => ({ kind, text, old, new: nw });
+  const patch = (lines: ReturnType<typeof line>[], extra: Partial<FilePatch> = {}): FilePatch =>
+    ({ binary: false, truncated: false, hunks: [{ header: '@@ -1,3 +1,3 @@ fn <b>', oldStart: 1, newStart: 1, lines }], ...extra });
+  const mixed = patch([line(' ', 'a', 1, 1), line('-', 'old1', 2, null), line('-', 'old2', 3, null), line('+', 'new1', null, 2), line(' ', 'z', 4, 3)]);
+  const count = (html: string, re: RegExp) => (html.match(re) ?? []).length;
+
+  it('inline: fold row, numbers, signs, classes', () => {
+    const html = diffBodyHtml(mixed, 'inline');
+    expect(html).toContain('dinl');
+    expect(html).toContain('<span class="dfold">@@ -1,3 +1,3 @@ fn &lt;b&gt;</span>');
+    expect(html).toContain('<span class="dn rem">2</span><span class="dn rem"></span><span class="dg rem">-</span><span class="dc rem">old1</span>');
+    expect(html).toContain('<span class="dn ins"></span><span class="dn ins">2</span><span class="dg ins">+</span><span class="dc ins">new1</span>');
+    expect(html).toContain('<span class="dn">1</span><span class="dn">1</span><span class="dg"></span><span class="dc">a</span>');
+  });
+
+  it('split: context on both sides, runs zipped, the shorter side padded with fill', () => {
+    const html = diffBodyHtml(mixed, 'split');
+    expect(html).toContain('dsbs');
+    expect(html).toContain('<span class="dn">1</span><span class="dc">a</span><span class="dn dr">1</span><span class="dc">a</span>');
+    // old1 | new1 on one row, old2 | fill on the next
+    expect(html).toContain('<span class="dc rem">old1</span><span class="dn ins dr">2</span><span class="dc ins">new1</span>');
+    expect(html).toContain('<span class="dc rem">old2</span><span class="dn fill dr"></span><span class="dc fill"></span>');
+    expect(count(html, /fill/g)).toBe(2);
+  });
+
+  it('split: additions alone get a filled left side, removals alone a filled right side', () => {
+    const add = diffBodyHtml(patch([line('+', 'x', null, 1)]), 'split');
+    expect(add).toContain('<span class="dn fill"></span><span class="dc fill"></span><span class="dn ins dr">1</span><span class="dc ins">x</span>');
+    const del = diffBodyHtml(patch([line('-', 'y', 1, null)]), 'split');
+    expect(del).toContain('<span class="dn rem">1</span><span class="dc rem">y</span><span class="dn fill dr"></span><span class="dc fill"></span>');
+  });
+
+  it('escapes file content in both modes', () => {
+    const p = patch([line('+', '<img src=x onerror=alert(1)> & "q"', null, 1)]);
+    for (const mode of ['inline', 'split'] as const) {
+      const html = diffBodyHtml(p, mode);
+      expect(html).not.toContain('<img');
+      expect(html).toContain('&lt;img src=x onerror=alert(1)&gt; &amp; &quot;q&quot;');
+    }
+  });
+
+  it('states: loading, error, binary, no hunks, truncated', () => {
+    expect(diffBodyHtml('loading', 'inline')).toContain('Loading…');
+    expect(diffBodyHtml({ error: 'boom <x>' }, 'inline')).toContain('boom &lt;x&gt;');
+    expect(diffBodyHtml({ binary: true, hunks: [], truncated: false }, 'inline')).toContain('Binary file — not shown.');
+    expect(diffBodyHtml({ binary: false, hunks: [], truncated: false }, 'split')).toContain('No content changes.');
+    expect(diffBodyHtml(patch([line('+', 'x', null, 1)], { truncated: true }), 'inline')).toContain('Diff truncated at 10 000 lines — Open in Editor for the full diff.');
+    expect(diffBodyHtml(mixed, 'inline')).not.toContain('truncated');
+  });
+
+  it('bar: path split, label, mode chip, nav state, escaping', () => {
+    const bar = { status: 'M', path: 'src/<a>.ts', origPath: null, label: 'abc1234 ↔ def5678', mode: 'inline' as const, hasPrev: false, hasNext: true };
+    const html = diffBarHtml(bar);
+    expect(html).toContain('<span class="ddir">src/</span><b>&lt;a&gt;.ts</b>');
+    expect(html).toContain('abc1234 ↔ def5678');
+    expect(html).toContain('data-dact="prev" title="Previous file (k)" disabled');
+    expect(html).toContain('data-dact="next" title="Next file (j)">');
+    expect(html).toContain('aria-pressed="false" title="Switch to Split">Inline');
+    expect(html).toContain('Open in Editor');
+    expect(html).toContain('Close (Esc)');
+    expect(diffBarHtml({ ...bar, mode: 'split' })).toContain('aria-pressed="true" title="Switch to Inline">Split');
   });
 });

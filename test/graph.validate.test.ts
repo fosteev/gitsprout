@@ -74,3 +74,26 @@ describe('inGitDir', () => {
     expect(inGitDir('/r/.gitignore')).toBe(false);
   });
 });
+
+describe('parseFromWebview: inline diff requests', () => {
+  const sha = 'a'.repeat(40);
+  const S = { path: 'a.ts', origPath: null, status: 'M', add: 1, del: 2 };
+
+  it('diffCommitFile: req, sha and a well-formed file', () => {
+    expect(parseFromWebview({ type: 'diffCommitFile', req: 3, sha, file: S })).toEqual({ type: 'diffCommitFile', req: 3, sha, file: S });
+    for (const req of [0, -1, 1.5, '2', null, undefined, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(parseFromWebview({ type: 'diffCommitFile', req, sha, file: S }), String(req)).toBeUndefined();
+    }
+    expect(parseFromWebview({ type: 'diffCommitFile', req: 1, sha: 'zz', file: S })).toBeUndefined();
+    expect(parseFromWebview({ type: 'diffCommitFile', req: 1, sha, file: { ...S, path: '../x' } })).toBeUndefined();
+    expect(parseFromWebview({ type: 'diffCommitFile', req: 1, sha })).toBeUndefined();
+  });
+
+  it('diffWipFile: req, area and a well-formed file', () => {
+    expect(parseFromWebview({ type: 'diffWipFile', req: 1, file: F, area: 'staged' })).toEqual({ type: 'diffWipFile', req: 1, file: F, area: 'staged' });
+    expect(parseFromWebview({ type: 'diffWipFile', req: 9, file: R, area: 'unstaged' })).toEqual({ type: 'diffWipFile', req: 9, file: R, area: 'unstaged' });
+    expect(parseFromWebview({ type: 'diffWipFile', req: 0, file: F, area: 'staged' })).toBeUndefined();
+    expect(parseFromWebview({ type: 'diffWipFile', req: 1, file: F, area: 'other' })).toBeUndefined();
+    expect(parseFromWebview({ type: 'diffWipFile', req: 1, file: { ...F, path: '.git/config' }, area: 'staged' })).toBeUndefined();
+  });
+});

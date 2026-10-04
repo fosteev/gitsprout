@@ -56,7 +56,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .sash { position: absolute; top: 0; bottom: 0; right: calc(var(--pw) - 3px); width: 6px; z-index: 3; cursor: col-resize; touch-action: none; }
 .sash:hover, .sash.on { background: var(--vscode-sash-hoverBorder, var(--accent)); transition: background .1s .3s; }
 .sash.on { transition: none; }
-.glist { overflow: auto; min-height: 0; padding-bottom: 10px; outline: none; --gw: 20px; }
+.glist { grid-column: 1; grid-row: 1; overflow: auto; min-height: 0; padding-bottom: 10px; outline: none; --gw: 20px; }
 .gcols, .gr { display: grid; grid-template-columns: var(--gw) minmax(0, 1fr) 56px 120px 64px; column-gap: 10px; align-items: center; padding: 0 12px; }
 .gcols { height: 24px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 1; }
 .gr { height: 26px; cursor: pointer; user-select: none; }
@@ -108,6 +108,7 @@ button.jira:hover { text-decoration: underline; }
 
 .tr { display: flex; align-items: center; height: 22px; padding: 0 6px 0 14px; cursor: pointer; white-space: nowrap; }
 .tr:hover { background: var(--hover); }
+.tr.on { background: var(--sel); color: var(--sel-fg); }
 .tr .st { width: 16px; flex: none; font-size: 11px; font-weight: 700; text-align: center; margin-right: 6px; }
 .tr .st.M, .tr .st.R { color: var(--mod); } .tr .st.A { color: var(--added); } .tr .st.D { color: var(--deleted); } .tr .st.U { color: var(--err); }
 .tr .tl { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -132,8 +133,19 @@ button.jira:hover { text-decoration: underline; }
 .seg button + button { border-left: 1px solid var(--input-line); }
 .seg button:hover { color: var(--fg); }
 .seg button[aria-pressed="true"] { background: var(--sel); color: var(--sel-fg); }
-.wpl { flex: 1; min-height: 0; overflow: auto; padding-bottom: 6px; }
-.wpsh { display: flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px 0 4px; font-size: 12.5px; font-weight: 600; cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1; background: var(--bg); border-top: 1px solid var(--line); }
+/* two lists, each with its own scroll; --uf is the unstaged share of the height (set by dragging .hsash) */
+.wpl { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wps { display: flex; flex-direction: column; min-height: 52px; flex: 1 1 0; }
+.wps[data-area="unstaged"] { flex-grow: var(--uf, .5); }
+.wps[data-area="staged"] { flex-grow: calc(1 - var(--uf, .5)); }
+.wps.closed { flex: none; min-height: 0; }
+.wps.closed + .wps, .wps:has(+ .wps.closed) { flex-grow: 1; }
+.wpb { flex: 1; min-height: 0; overflow: auto; padding-bottom: 6px; }
+.hsash { position: relative; height: 0; flex: none; z-index: 3; }
+.hsash::before { content: ''; position: absolute; left: 0; right: 0; top: -3px; height: 6px; cursor: row-resize; touch-action: none; }
+.hsash:hover::before, .hsash.on::before { background: var(--vscode-sash-hoverBorder, var(--accent)); transition: background .1s .3s; }
+.hsash.on::before { transition: none; }
+.wpsh { display: flex; flex: none; align-items: center; gap: 4px; height: 30px; padding: 0 10px 0 4px; font-size: 12.5px; font-weight: 600; cursor: pointer; user-select: none; background: var(--bg); border-top: 1px solid var(--line); }
 .wps:first-child .wpsh { border-top: 0; }
 .wpsh .n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
 .wpsh .go { margin-left: auto; height: 22px; padding: 0 9px; border-radius: 3px; font-size: 12px; font-weight: 500; border: 1px solid var(--added); color: var(--added); background: color-mix(in srgb, var(--added) 14%, transparent); }
@@ -179,7 +191,7 @@ button.jira:hover { text-decoration: underline; }
   /* the WIP panel needs more than 42% of a short window: give it the lower 60% and let the pane scroll as a whole */
   .split.wipon { grid-template-rows: minmax(0, 1fr) minmax(0, 60%); }
   .details.wipon { overflow: auto; }
-  .wpl { flex: 1 0 auto; min-height: 96px; }
+  .wpl { flex: 1 0 auto; min-height: 220px; }
   .gcols, .gr { grid-template-columns: var(--gw) minmax(0, 1fr) 56px 64px; }
   .gwho { display: none; }
 }
@@ -187,3 +199,29 @@ button.jira:hover { text-decoration: underline; }
   .gcols, .gr { grid-template-columns: var(--gw) minmax(0, 1fr); }
   .gwhen, .gsha { display: none; }
 }
+
+/* Inline diff: takes the graph's grid cell while open */
+.details { grid-column: 2; grid-row: 1; }
+.dview { grid-column: 1; grid-row: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.dbar { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--line); flex: none; font-size: 12.5px; white-space: nowrap; }
+.dbar .st { width: 16px; flex: none; font-size: 11px; font-weight: 700; text-align: center; }
+.dbar .st.M, .dbar .st.R { color: var(--mod); } .dbar .st.A { color: var(--added); } .dbar .st.D { color: var(--deleted); } .dbar .st.U { color: var(--err); }
+.dpath { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ddir { color: var(--muted); }
+.dctx { color: var(--muted); font: 11.5px var(--mono); flex: none; }
+.dsp { flex: 1; min-width: 4px; }
+.dbody { flex: 1; min-height: 0; overflow: auto; font: var(--vscode-editor-font-size, 12px)/1.5 var(--mono); }
+.dgrid { display: grid; min-width: 0; }
+.dinl { grid-template-columns: 46px 46px 18px minmax(0, 1fr); }
+.dsbs { grid-template-columns: 46px minmax(0, 1fr) 46px minmax(0, 1fr); }
+.dgrid > span { white-space: pre-wrap; word-break: break-all; min-height: 1.5em; }
+.dn { color: var(--vscode-editorLineNumber-foreground, var(--muted)); text-align: right; padding-right: 10px; user-select: none; font-variant-numeric: tabular-nums; }
+.dg { color: var(--muted); user-select: none; }
+.dc { padding-right: 10px; }
+.dsbs .dr { border-left: 1px solid var(--line); padding-left: 0; }
+.ins { background: var(--vscode-diffEditor-insertedLineBackground, rgba(155, 185, 85, .2)); }
+.rem { background: var(--vscode-diffEditor-removedLineBackground, rgba(255, 0, 0, .2)); }
+.fill { background: repeating-linear-gradient(-45deg, rgba(128, 128, 128, .18) 0 2px, transparent 2px 7px); }
+.dfold { grid-column: 1 / -1; color: var(--muted); background: color-mix(in srgb, var(--vscode-focusBorder) 8%, transparent); padding: 1px 14px; font: 11.5px var(--vscode-font-family, sans-serif); }
+.dnote { padding: 20px; color: var(--muted); font-family: var(--vscode-font-family, sans-serif); font-size: 12.5px; }
+.dnote.err { color: var(--err); }

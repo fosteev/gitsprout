@@ -10,7 +10,7 @@ VS Code / Cursor extension (TypeScript). Every git action shells out to the syst
 ## Sources of truth
 
 - `roadmap-vscode.md` — stages, checkboxes, git contract, webview protocol, manifest contributions. Executors tick checkboxes as they verify them.
-- `prototype/vscode-multi.html` and `prototype/vscode.html` — reference for behaviour, copy, and the graph look (lane geometry, rows, details card). The real extension uses native VS Code UI wherever the prototype emulates it (tree views, quick picks, notifications, diff editor, context menus).
+- `prototype/vscode-multi.html` and `prototype/vscode.html` — reference for behaviour, copy, and the graph look (lane geometry, rows, details card). The real extension uses native VS Code UI wherever the prototype emulates it (tree views, quick picks, notifications, diff editor, context menus). Exception: the graph's file diff is rendered inline in the webview (`roadmap-inline-diff.md`); tree views still open the native diff editor.
 - `README.md` — product scope. Anything outside it is out of scope for MVP.
 
 ## Layout (target)

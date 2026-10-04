@@ -1,14 +1,21 @@
 import { classify, run, type RunOptions, type RunResult } from './run';
 import {
-  mergeFileStats, parseLog, parseNameStatusZ, parseNumstatZ, parseRefs, parseStashList, parseStatus, parseStatusSummary,
+  mergeFileStats, parseLog, parseNameStatusZ, parseNumstatZ, parsePatch, parseRefs, parseStashList, parseStatus, parseStatusSummary,
 } from './parse';
 import type { NameStatus } from './parse';
 import { splitMessage } from './message';
 import {
-  GitError, type Commit, type ErrorKind, type FileChange, type FileStat, type Refs, type Stash, type StashFile, type Status, type SummaryStatus,
+  GitError, type Commit, type ErrorKind, type FileChange, type FilePatch, type FileStat, type Refs, type Stash, type StashFile, type Status, type SummaryStatus,
 } from './types';
 
 type Rule = [RegExp, ErrorKind];
+
+/** What `Repo.patch` diffs: one file of a commit (against its first parent, null = root), of the index, or of the working tree. */
+export type PatchSpec =
+  | { kind: 'commit'; sha: string; parent: string | null; path: string; origPath: string | null }
+  | { kind: 'staged'; path: string; origPath: string | null }
+  | { kind: 'unstaged'; path: string }
+  | { kind: 'untracked'; path: string };
 
 const LOCAL_CHANGES: Rule[] = [[/would be overwritten|local changes to the following files|commit your changes or stash/i, 'LocalChanges']];
 // Case-sensitive and anchored: branch names like `conflict-fix` or `unmerged-ui` show up in unrelated failures.
@@ -138,6 +145,29 @@ export class Repo {
       }
       throw e;
     }
+  }
+
+  /** Unified diff of one file as hunks (no color, no external diff tool, rename detection on). */
+  async patch(spec: PatchSpec): Promise<FilePatch> {
+    const base = ['--no-color', '--no-ext-diff'];
+    const paths = (path: string, origPath?: string | null): string[] => ['--', ...(origPath && origPath !== path ? [origPath] : []), path];
+    let args: string[];
+    let opts: RunOptions = READ;
+    switch (spec.kind) {
+      case 'commit':
+        args = spec.parent === null
+          ? ['diff-tree', '-p', '-r', '-M', '--root', '--no-commit-id', ...base, spec.sha, ...paths(spec.path)]
+          : ['diff', ...base, '-M', spec.parent, spec.sha, ...paths(spec.path, spec.origPath)];
+        break;
+      case 'staged': args = ['diff', '--cached', ...base, '-M', ...paths(spec.path, spec.origPath)]; break;
+      case 'unstaged': args = ['diff', ...base, ...paths(spec.path)]; break;
+      case 'untracked':
+        args = ['diff', '--no-index', ...base, '--', '/dev/null', spec.path];
+        opts = { ...READ, okCodes: [1] };
+        break;
+    }
+    const { stdout } = await this.git(args, opts);
+    return parsePatch(stdout);
   }
 
   /** Blob id and size at `ref:path` (same spec rules as `show`, stage 0 for the index); `undefined` if there is none. */

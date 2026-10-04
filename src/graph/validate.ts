@@ -51,9 +51,11 @@ const isText = (s: unknown): s is string => typeof s === 'string' && s.length <=
 
 const isSha = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-f]{7,64}$/.test(s);
 
+const isReq = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0;
+
 /** Narrows an untrusted message to a well-formed `FromWebview`, or undefined. */
 export function parseFromWebview(m: unknown): FromWebview | undefined {
-  const o = m as { type?: unknown; sha?: unknown; file?: unknown; area?: unknown; files?: unknown; summary?: unknown; description?: unknown; amend?: unknown; push?: unknown; hideCi?: unknown; url?: unknown; text?: unknown } | null;
+  const o = m as { type?: unknown; req?: unknown; sha?: unknown; file?: unknown; area?: unknown; files?: unknown; summary?: unknown; description?: unknown; amend?: unknown; push?: unknown; hideCi?: unknown; url?: unknown; text?: unknown } | null;
   if (!o || typeof o !== 'object') return undefined;
   switch (o.type) {
     case 'ready': case 'openScm': case 'switchRepo': case 'refresh':
@@ -78,6 +80,14 @@ export function parseFromWebview(m: unknown): FromWebview | undefined {
     case 'openWipFile': {
       const file = asFileChange(o.file);
       return file && (o.area === 'staged' || o.area === 'unstaged') ? { type: 'openWipFile', file, area: o.area } : undefined;
+    }
+    case 'diffCommitFile': {
+      const file = asFileStat(o.file);
+      return isReq(o.req) && isSha(o.sha) && file ? { type: 'diffCommitFile', req: o.req, sha: o.sha, file } : undefined;
+    }
+    case 'diffWipFile': {
+      const file = asFileChange(o.file);
+      return isReq(o.req) && file && (o.area === 'staged' || o.area === 'unstaged') ? { type: 'diffWipFile', req: o.req, file, area: o.area } : undefined;
     }
     case 'toggleCi': return typeof o.hideCi === 'boolean' ? { type: 'toggleCi', hideCi: o.hideCi } : undefined;
     case 'openUrl': return typeof o.url === 'string' ? { type: 'openUrl', url: o.url } : undefined;

@@ -1,5 +1,5 @@
 // Pure parsers over git output. No I/O.
-import type { Commit, FileChange, FileStat, FileStatus, Head, LocalBranch, RemoteBranch, Refs, Stash, Status, SummaryStatus, Tag } from './types';
+import type { Commit, FileChange, FilePatch, FileStat, FileStatus, Head, Hunk, LocalBranch, RemoteBranch, Refs, Stash, Status, SummaryStatus, Tag } from './types';
 
 const nonEmpty = (s: string) => s.length > 0;
 
@@ -204,6 +204,46 @@ export function parseStashList(out: string): Stash[] {
     const m = /^stash@\{(\d+)\}$/.exec(gd);
     if (!m || !sha) continue;
     res.push({ index: Number(m[1]), sha, message: rest.join('\x1f') });
+  }
+  return res;
+}
+
+const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+
+/**
+ * One file's unified diff (`git diff` / `diff-tree -p` output) -> hunks. Lines before the first `@@` are file headers
+ * (only checked for the binary markers). Stops after `maxLines` hunk lines and sets `truncated`.
+ */
+export function parsePatch(text: string, maxLines = 10000): FilePatch {
+  const res: FilePatch = { binary: false, hunks: [], truncated: false };
+  const lines = text.split('\n');
+  if (lines.length && lines[lines.length - 1] === '') lines.pop();
+  let hunk: Hunk | null = null;
+  let oldNo = 0;
+  let newNo = 0;
+  let count = 0;
+  for (const raw of lines) {
+    const m = HUNK_HEADER.exec(raw);
+    if (m) {
+      hunk = { header: raw.replace(/\r$/, ''), oldStart: Number(m[1]), newStart: Number(m[2]), lines: [] };
+      res.hunks.push(hunk);
+      oldNo = hunk.oldStart;
+      newNo = hunk.newStart;
+      continue;
+    }
+    if (!hunk) {
+      if (/^Binary files .* differ$/.test(raw) || raw === 'GIT binary patch') res.binary = true;
+      continue;
+    }
+    if (raw.startsWith('\\')) continue; // "\ No newline at end of file"
+    const c = raw[0];
+    if (c !== ' ' && c !== '+' && c !== '-' && raw !== '') continue; // not part of the hunk
+    if (count >= maxLines) { res.truncated = true; break; }
+    count++;
+    const t = raw.slice(1).replace(/\r$/, '');
+    if (c === '+') hunk.lines.push({ kind: '+', text: t, old: null, new: newNo++ });
+    else if (c === '-') hunk.lines.push({ kind: '-', text: t, old: oldNo++, new: null });
+    else hunk.lines.push({ kind: ' ', text: t, old: oldNo++, new: newNo++ });
   }
   return res;
 }
