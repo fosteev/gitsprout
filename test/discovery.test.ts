@@ -2,7 +2,8 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { compileExclude, discover } from '../src/workspace/discovery';
+import { execFileSync } from 'node:child_process';
+import { compileExclude, discover, discoverWithParents } from '../src/workspace/discovery';
 
 let tmp: string;
 const mk = (...p: string[]) => mkdirSync(join(tmp, ...p), { recursive: true });
@@ -120,5 +121,45 @@ describe('compileExclude', () => {
     expect(ex('node_modules')).toBe(true);
     expect(ex('x/vendors')).toBe(false);
     expect(compileExclude(['{a,b'])('a')).toBe(false);
+  });
+});
+
+describe('discoverWithParents', () => {
+  it('resolves a workspace folder inside a repo to the enclosing repo', async () => {
+    const root = join(tmp, 'enclosing');
+    mkdirSync(join(root, 'src', 'deep'), { recursive: true });
+    execFileSync('git', ['init', '-q', root], { stdio: 'ignore' });
+    const sub = join(root, 'src', 'deep');
+    expect(await discover([sub], 3)).toEqual([]);
+    const found = await discoverWithParents([sub], 3);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ root: realpathSync(root), folder: sub, depth: 0 });
+    expect(found[0].gitDir).toBe(join(realpathSync(root), '.git'));
+  });
+  it('does not walk up when something is found below, and adds nothing outside a repo', async () => {
+    const withBelow = await discoverWithParents([join(tmp, 'ws', 'at')], 3);
+    expect(withBelow.map((r) => r.root)).toEqual((await discover([join(tmp, 'ws', 'at')], 3)).map((r) => r.root));
+    mk('nowhere', 'x');
+    expect(await discoverWithParents([join(tmp, 'nowhere', 'x')], 3)).toEqual([]);
+  });
+  it('keeps the folder spelling for the root when the folder is reached through a symlink', async () => {
+    const real = join(tmp, 'linked-real');
+    mkdirSync(join(real, 'pkg'), { recursive: true });
+    execFileSync('git', ['init', '-q', real], { stdio: 'ignore' });
+    const link = join(tmp, 'linked');
+    symlinkSync(real, link, 'dir');
+    const folder = join(link, 'pkg');
+    const found = await discoverWithParents([folder], 3);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ root: link, folder, depth: 0 });
+    expect(found[0].gitDir).toBe(join(link, '.git'));
+  });
+  it('does not walk up from a folder whose repo was attributed to an overlapping folder', async () => {
+    const home = join(tmp, 'dotfiles');
+    mkdirSync(join(home, 'x', 'r'), { recursive: true });
+    execFileSync('git', ['init', '-q', home], { stdio: 'ignore' });
+    execFileSync('git', ['init', '-q', join(home, 'x', 'r')], { stdio: 'ignore' });
+    const found = await discoverWithParents([join(home, 'x', 'r'), join(home, 'x')], 3);
+    expect(found.map((r) => r.root)).toEqual([join(home, 'x', 'r')]);
   });
 });

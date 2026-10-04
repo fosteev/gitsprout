@@ -85,21 +85,37 @@ export class Repo {
     return parseStashList(stdout);
   }
 
-  async stashFiles(i: number): Promise<StashFile[]> {
-    const ref = `stash@{${i}}`;
-    const [names, third] = await Promise.all([
-      this.git(['stash', 'show', '--name-status', '-z', '--include-untracked', ref], READ),
-      this.git(['rev-parse', '-q', '--verify', `${ref}^3`], { ...READ, okCodes: [1] }),
+  /**
+   * Files of a stash. `stash` is an index (`stash@{i}`) or, preferably, the stash commit sha: indexes shift on every
+   * push/drop, the sha does not. Untracked files come from `<stash>^3`. git < 2.32 lacks
+   * `stash show --include-untracked`; then the tracked list is read without it and the `^3` files are appended as added.
+   */
+  async stashFiles(stash: number | string): Promise<StashFile[]> {
+    const ref = typeof stash === 'number' ? `stash@{${stash}}` : stash;
+    const [names, untrackedList] = await Promise.all([
+      this.git(['stash', 'show', '--name-status', '-z', '--include-untracked', ref], READ).then(
+        (r) => ({ stdout: r.stdout, withUntracked: true }),
+        async (e: unknown) => {
+          if (!(e instanceof GitError) || !/unknown option|unrecognized argument|usage: git (stash|diff)/i.test(e.stderr)) throw e;
+          const r = await this.git(['stash', 'show', '--name-status', '-z', ref], READ);
+          return { stdout: r.stdout, withUntracked: false };
+        },
+      ),
+      this.git(['rev-parse', '-q', '--verify', `${ref}^3`], { ...READ, okCodes: [1] }).then(async (third) => {
+        if (third.code !== 0) return [] as string[];
+        const { stdout } = await this.git(['ls-tree', '-r', '--name-only', '-z', `${ref}^3`], READ);
+        return stdout.split('\0').filter(Boolean);
+      }),
     ]);
-    let untracked = new Set<string>();
-    if (third.code === 0) {
-      const { stdout } = await this.git(['ls-tree', '-r', '--name-only', '-z', `${ref}^3`], READ);
-      untracked = new Set(stdout.split('\0').filter(Boolean));
-    }
-    return parseNameStatusZ(names.stdout).map((n) => ({
+    const untracked = new Set(untrackedList);
+    const files: StashFile[] = parseNameStatusZ(names.stdout).map((n) => ({
       path: n.path, origPath: n.origPath, status: n.status, add: null, del: null,
       untracked: untracked.has(n.path),
     }));
+    if (!names.withUntracked) {
+      for (const path of untrackedList) files.push({ path, origPath: null, status: 'A', add: null, del: null, untracked: true });
+    }
+    return files;
   }
 
   /**
@@ -117,6 +133,15 @@ export class Repo {
       }
       throw e;
     }
+  }
+
+  /** Blob id and size at `ref:path` (same spec rules as `show`, stage 0 for the index); `undefined` if there is none. */
+  async blobInfo(ref: string, path: string): Promise<{ oid: string; size: number } | undefined> {
+    if (ref === '') return undefined;
+    const spec = ref === ':' ? `:0:${path}` : `${ref}:${path}`;
+    const { stdout } = await this.git(['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'], { ...READ, stdin: `${spec}\n` });
+    const m = /^([0-9a-f]+) blob (\d+)$/.exec(stdout.trim());
+    return m ? { oid: m[1], size: Number(m[2]) } : undefined;
   }
 
   private async showSpec(spec: string): Promise<string> {

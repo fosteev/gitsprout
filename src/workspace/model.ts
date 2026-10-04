@@ -3,7 +3,7 @@ import type { RepoSummary, SummaryStatus } from '../git/types';
 
 export interface FolderRef { name: string; path: string }
 
-function inside(parent: string, child: string): string | null {
+export function inside(parent: string, child: string): string | null {
   const rel = relative(parent, child);
   if (rel === '') return '';
   if (rel === '..' || rel.startsWith('..' + sep) || /^[a-zA-Z]:/.test(rel) || rel.startsWith(sep)) return null;

@@ -1,5 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
+import { run } from '../git/run';
+import { inside } from './model';
 
 export interface DiscoveredRepo {
   /** Working tree root. */
@@ -101,3 +103,32 @@ export async function discover(folders: readonly string[], depth: number, exclud
   return [...found.values()].sort((a, b) => (a.root < b.root ? -1 : a.root > b.root ? 1 : 0));
 }
 
+
+/**
+ * `discover`, plus: a workspace folder that sits inside a repo (no repo found at or below it) is resolved upwards
+ * with `git rev-parse --show-cdup` (cwd = the folder) and the enclosing repo is added (depth 0). `--show-cdup`
+ * rather than `--show-toplevel`: the root keeps the folder's spelling (symlinks, `/var` vs `/private/var`, Windows
+ * slashes), so it still contains the folder and matches editor paths. Folders in no repo, and submodule checkouts,
+ * add nothing.
+ */
+export async function discoverWithParents(
+  folders: readonly string[], depth: number, exclude: readonly string[] = [], gitPath?: string,
+): Promise<DiscoveredRepo[]> {
+  const found = await discover(folders, depth, exclude);
+  const byRoot = new Map(found.map((r) => [r.root, r]));
+  for (const f of folders) {
+    const folder = resolve(f);
+    // Overlapping workspace folders: a repo below this folder may have been attributed to another folder.
+    if (found.some((r) => inside(folder, r.root) !== null)) continue;
+    let cdup: string;
+    try {
+      cdup = (await run(folder, ['rev-parse', '--show-cdup'], { gitPath, read: true })).stdout.trim();
+    } catch { continue; }
+    const top = resolve(folder, cdup);
+    if (byRoot.has(top)) continue;
+    const marker = await readMarker(top);
+    if (marker?.kind !== 'repo') continue;
+    byRoot.set(top, { root: top, gitDir: marker.gitDir, commonDir: marker.commonDir, folder, depth: 0 });
+  }
+  return [...byRoot.values()].sort((a, b) => (a.root < b.root ? -1 : a.root > b.root ? 1 : 0));
+}

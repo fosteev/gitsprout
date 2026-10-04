@@ -58,7 +58,8 @@
       {
         "command": "gitsprout.showGraph",
         "title": "Show Graph",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(graph)"
       },
       {
         "command": "gitsprout.switchRepository",
@@ -86,12 +87,14 @@
       {
         "command": "gitsprout.pull",
         "title": "Pull",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(arrow-down)"
       },
       {
         "command": "gitsprout.push",
         "title": "Push",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(arrow-up)"
       },
       {
         "command": "gitsprout.checkout",
@@ -101,12 +104,14 @@
       {
         "command": "gitsprout.checkoutBranch",
         "title": "Checkout Branch",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(arrow-swap)"
       },
       {
         "command": "gitsprout.checkoutRemote",
         "title": "Checkout Remote Branch",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(arrow-swap)"
       },
       {
         "command": "gitsprout.createBranch",
@@ -131,22 +136,26 @@
       {
         "command": "gitsprout.stash",
         "title": "Stash Changes…",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(add)"
       },
       {
         "command": "gitsprout.stashApply",
         "title": "Apply Stash",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(check)"
       },
       {
         "command": "gitsprout.stashPop",
         "title": "Pop Stash",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(export)"
       },
       {
         "command": "gitsprout.stashDrop",
         "title": "Drop Stash…",
-        "category": "Gitsprout"
+        "category": "Gitsprout",
+        "icon": "$(trash)"
       },
       {
         "command": "gitsprout.copySha",
@@ -199,6 +208,11 @@
         "title": "Fetch",
         "category": "Gitsprout",
         "icon": "$(cloud-download)"
+      },
+      {
+        "command": "gitsprout.openStashFile",
+        "title": "Open Changes",
+        "category": "Gitsprout"
       }
     ],
     "menus": {
@@ -334,6 +348,21 @@
           "command": "gitsprout.copyBranchName",
           "when": "view == gitsprout.tags && viewItem == tag",
           "group": "3_copy"
+        },
+        {
+          "command": "gitsprout.pull",
+          "when": "view == gitsprout.branches && viewItem == branch.local.head",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitsprout.push",
+          "when": "view == gitsprout.branches && viewItem == branch.local.head",
+          "group": "inline@2"
+        },
+        {
+          "command": "gitsprout.openStashFile",
+          "when": "view == gitsprout.stashes && viewItem == stashFile",
+          "group": "navigation"
         }
       ],
       "webview/context": [
@@ -351,6 +380,12 @@
           "command": "gitsprout.copyMessage",
           "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
           "group": "2_copy@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "gitsprout.openStashFile",
+          "when": "false"
         }
       ]
     },
@@ -433,7 +468,69 @@
           "description": "Jira project key to browse URL prefix; keys in commit messages become links."
         }
       }
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "gitsprout.branches",
+        "contents": "No branches.",
+        "when": "gitsprout.refsState == 'ok'"
+      },
+      {
+        "view": "gitsprout.branches",
+        "contents": "No repository is open.",
+        "when": "gitsprout.refsState == 'none'"
+      },
+      {
+        "view": "gitsprout.branches",
+        "contents": "Can't read the repository. See the Gitsprout output.",
+        "when": "gitsprout.refsState == 'error'"
+      },
+      {
+        "view": "gitsprout.remotes",
+        "contents": "No remote branches.",
+        "when": "gitsprout.refsState == 'ok'"
+      },
+      {
+        "view": "gitsprout.remotes",
+        "contents": "No repository is open.",
+        "when": "gitsprout.refsState == 'none'"
+      },
+      {
+        "view": "gitsprout.remotes",
+        "contents": "Can't read the repository. See the Gitsprout output.",
+        "when": "gitsprout.refsState == 'error'"
+      },
+      {
+        "view": "gitsprout.stashes",
+        "contents": "No stashes.",
+        "when": "gitsprout.refsState == 'ok'"
+      },
+      {
+        "view": "gitsprout.stashes",
+        "contents": "No repository is open.",
+        "when": "gitsprout.refsState == 'none'"
+      },
+      {
+        "view": "gitsprout.stashes",
+        "contents": "Can't read the repository. See the Gitsprout output.",
+        "when": "gitsprout.refsState == 'error'"
+      },
+      {
+        "view": "gitsprout.tags",
+        "contents": "No tags.",
+        "when": "gitsprout.refsState == 'ok'"
+      },
+      {
+        "view": "gitsprout.tags",
+        "contents": "No repository is open.",
+        "when": "gitsprout.refsState == 'none'"
+      },
+      {
+        "view": "gitsprout.tags",
+        "contents": "Can't read the repository. See the Gitsprout output.",
+        "when": "gitsprout.refsState == 'error'"
+      }
+    ]
   },
   "scripts": {
     "build": "node scripts/build.mjs",
