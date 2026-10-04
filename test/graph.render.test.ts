@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Commit, Refs } from '../src/git/types';
 import { ciMatcher, esc, fmtAgo, fmtAgoLong, jiraUrl, parseSubject, splitPath } from '../webview/format';
 import { layout, visibleRows } from '../webview/layout';
-import { commitDetailsHtml, keepSet, pillsHtml, refsBySha, rowHtml, subjectHtml, wipDetailsHtml, type RowEnv } from '../webview/render';
+import { commitDetailsHtml, keepSet, pillsHtml, refsBySha, rowHtml, subjectHtml, type RowEnv } from '../webview/render';
 import { asFileChange, asFileStat, graphHtml, isAllowedUrl, isSafeRelPath, parseFromWebview, shaFromArg } from '../src/graph/validate';
 
 const SHA = 'a'.repeat(40);
@@ -57,7 +57,7 @@ describe('render', () => {
   it('rows carry the webview context and escape author/subject', () => {
     const c = commit();
     const lay = layout(visibleRows([c], { hideCi: false, isCi: () => false, keep: new Set(), headSha: SHA, dirty: false }).rows);
-    const env: RowEnv = { root: '/work/repo', width: 20, selected: SHA, headSha: SHA, jira: JIRA, pills: refsBySha(refs, refs.head), isCi: () => false, query: 'zzz', nowMs: 2_000_000, wipCount: 0 };
+    const env: RowEnv = { root: '/work/repo', width: 20, selected: SHA, headSha: SHA, jira: JIRA, pills: refsBySha(refs, refs.head), isCi: () => false, query: 'zzz', nowMs: 2_000_000, wipCount: 0, wipSummary: '' };
     const h = rowHtml(lay.rows[0], env);
     expect(h).toContain(`data-sha="${SHA}"`);
     expect(h).toContain('data-vscode-context="{&quot;webviewSection&quot;:&quot;commit&quot;');
@@ -81,17 +81,6 @@ describe('render', () => {
     expect(f).toContain('+3');
     expect(f).toContain('from a/old.ts');
     expect(f).toContain('data-file="1" data-area="commit"');
-  });
-
-  it('wip details lists staged and unstaged with areas', () => {
-    const h = wipDetailsHtml({
-      staged: [{ path: 'a.ts', origPath: null, status: 'M', untracked: false }],
-      unstaged: [{ path: 'dir/n.ts', origPath: null, status: 'A', untracked: true }],
-    }, { branch: 'develop', sha: SHA });
-    expect(h).toContain('data-area="staged"');
-    expect(h).toContain('data-area="unstaged"');
-    expect(h).toContain('untracked');
-    expect(h).toContain('data-scm="1"');
   });
 });
 

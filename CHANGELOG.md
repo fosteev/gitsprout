@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- WIP panel in the commit graph: select the Uncommitted Changes row to stage, unstage and discard files (or everything), see Unstaged/Staged as a path list or a tree, write a commit message (summary with a 72-character counter, description), amend the previous commit, commit, or commit and push. The draft survives tab switches and window reloads. The graph now refreshes when working-tree files change.
+
 ## 0.1.0
 
 First release.
