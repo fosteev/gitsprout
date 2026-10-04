@@ -1,5 +1,6 @@
 **
 !dist/*.js
+!dist/*.css
 !media/**
 !package.json
 !README.md
