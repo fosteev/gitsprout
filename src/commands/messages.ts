@@ -138,11 +138,11 @@ export function pushMessage(before: Sum, after: Pick<SummaryStatus, 'upstream'>)
 // ---- error -> notification ----
 
 export type Op = 'fetch' | 'pull' | 'push' | 'checkout' | 'create' | 'rename' | 'delete' | 'stash' | 'apply' | 'pop' | 'drop';
-export type ActionId = 'pull' | 'publish' | 'terminal' | 'scm' | 'stash';
+export type ActionId = 'pull' | 'publish' | 'terminal' | 'scm' | 'stash' | 'output';
 export interface ErrorPlan { text: string; level: 'error' | 'warn' | 'info'; actions: ActionId[] }
 
 export const ACTION_LABEL: Record<ActionId, string> = {
-  pull: 'Pull', publish: 'Publish Branch', terminal: 'Run in Terminal', scm: 'Open Source Control', stash: 'Stash Changes',
+  pull: 'Pull', publish: 'Publish Branch', terminal: 'Run in Terminal', scm: 'Open Source Control', stash: 'Stash Changes', output: 'Show Command Output',
 };
 
 const OP_WORD: Record<Op, string> = {
@@ -156,6 +156,13 @@ const NETWORK: readonly Op[] = ['fetch', 'pull', 'push'];
  * NoUpstream -> Publish Branch, Auth -> Run in Terminal, Conflict -> Open Source Control (roadmap, "Decisions").
  */
 export function errorPlan(e: { kind: ErrorKind; message: string }, op: Op, branch?: string | null): ErrorPlan | null {
+  const plan = basePlan(e, op, branch);
+  // Failed fetch/pull/push: the full git output (stderr) is in the `Gitsprout` channel. Not for the publish prompt (not a failure to read).
+  if (plan && NETWORK.includes(op) && e.kind !== 'NoUpstream') plan.actions.push('output');
+  return plan;
+}
+
+function basePlan(e: { kind: ErrorKind; message: string }, op: Op, branch?: string | null): ErrorPlan | null {
   switch (e.kind) {
     case 'Cancelled': return null;
     case 'PushRejected':

@@ -4,15 +4,14 @@ import { MUTATION_COMMAND_IDS, registerMutations } from './commands/mutations';
 import { REF_COMMAND_IDS, registerRefViews } from './commands/refs';
 import { REPO_COMMAND_IDS, registerRepoCommands } from './commands/repos';
 import { GRAPH_COMMAND_IDS, registerGraph } from './graph/panel';
+import { createLog } from './util/log';
 import { RepositoriesView } from './views/repositories';
 import { createStatusBar } from './views/statusBar';
 import { Registry } from './workspace/registry';
 import { createScmDepthCheck } from './workspace/scmDepth';
 
 export function activate(context: vscode.ExtensionContext): void {
-  const out = vscode.window.createOutputChannel('Gitsprout');
-  const log = (m: string) => out.appendLine(`${new Date().toISOString()} ${m}`);
-  context.subscriptions.push(out);
+  const log = createLog(context);
 
   void vscode.commands.executeCommand('setContext', 'gitsprout.multiRepo', false);
 

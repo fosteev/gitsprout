@@ -34,6 +34,7 @@ export class Registry implements vscode.Disposable {
   private entries = new Map<string, Entry>();
   private activeRoot: string | undefined;
   private scanning: Promise<void> = Promise.resolve();
+  private scannedOnce = false;
   private gitMissingShown = false;
   private focusRefresh: Promise<void> | undefined;
   private focused = vscode.window.state.focused;
@@ -75,6 +76,8 @@ export class Registry implements vscode.Disposable {
   /** Depth of every repo below its workspace folder (for the built-in SCM depth check). */
   depths(): number[] { return [...this.entries.values()].map((e) => e.found.depth); }
   get gitPath(): string { return configuredGitPath(); }
+  /** False until the first scan finishes (or fails): an empty registry before that means "still looking", not "no repos". */
+  get scanned(): boolean { return this.scannedOnce; }
 
   private folders(): FolderRef[] {
     return (vscode.workspace.workspaceFolders ?? []).map((f) => ({ name: f.name, path: f.uri.fsPath }));
@@ -82,7 +85,10 @@ export class Registry implements vscode.Disposable {
 
   /** Scans the workspace folders; serialised, so overlapping triggers queue up. */
   rescan(): Promise<void> {
-    this.scanning = this.scanning.then(() => this.doScan()).catch((e) => this.log(`scan failed: ${String(e)}`));
+    this.scanning = this.scanning.then(() => this.doScan()).catch((e) => {
+      this.log(`scan failed: ${String(e)}`);
+      if (!this.scannedOnce) { this.scannedOnce = true; this.reposEmitter.fire(); }
+    });
     return this.scanning;
   }
 
@@ -90,8 +96,10 @@ export class Registry implements vscode.Disposable {
     const cfg = vscode.workspace.getConfiguration('gitsprout');
     const folders = this.folders();
     if (this.disposed) return;
+    const t0 = performance.now();
     const found = await discoverWithParents(folders.map((f) => f.path), cfg.get<number>('scanDepth', 3), cfg.get<string[]>('scanExclude', ['**/node_modules', '**/vendor']), this.gitPath);
     const next = new Map(found.map((f) => [f.root, f]));
+    const t1 = performance.now();
 
     for (const [root, e] of [...this.entries]) {
       if (next.has(root)) continue;
@@ -114,7 +122,9 @@ export class Registry implements vscode.Disposable {
 
     await vscode.commands.executeCommand('setContext', 'gitsprout.multiRepo', this.entries.size > 1);
     this.pickActive();
-    this.log(`scan: ${this.entries.size} repositories in ${folders.length} folder(s)`);
+    const t2 = performance.now();
+    this.log(`scan: ${this.entries.size} repositories in ${folders.length} folder(s); discovery ${Math.round(t1 - t0)} ms, summaries ${Math.round(t2 - t1)} ms (${added.length} read), total ${Math.round(t2 - t0)} ms`);
+    this.scannedOnce = true;
     this.reposEmitter.fire();
   }
 

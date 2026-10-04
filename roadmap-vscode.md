@@ -1,6 +1,6 @@
 # Gitsprout VS Code extension — MVP
 
-> Status: stage 1 accepted 2026-10-03 · stage 2 accepted 2026-10-03 · stage 3 accepted 2026-10-03 · stage 4 accepted 2026-10-04 · stage 5 accepted 2026-10-04 · stage 6 accepted 2026-10-04 (live-VS Code checks for stages 5–6 pending, see roadmap-vscode.pending.md) · next — stage 7 · created 2026-10-03 · executors tick checkboxes as each step is verified, not when it "should work". Start with stage 1.
+> Status: stage 7 accepted 2026-10-04 · MVP complete, user checks pending (see roadmap-vscode.pending.md) · stages 1–6 accepted 2026-10-03…04 · created 2026-10-03 · executors tick checkboxes as each step is verified, not when it "should work".
 
 ## Goal
 
@@ -297,13 +297,23 @@ Everything that changes a repo, with native prompts.
 - Not verified (user check, live VS Code/Cursor): all prompts and notifications as shown (quick pick, input boxes, modals incl. button labels, progress), "Run in Terminal" actually opening the terminal and running the command, Auth on a real remote, `webview/context` Create Branch Here in the graph, inline/context menu placement of the new commands in the trees, that the graph and trees reload after each mutation, Cancel in Fetch All killing real fetches.
 
 ### 7. Polish and package
-- [ ] performance: log activation summary time for `~/Projects` and graph `state` time for Pilot7 to an output channel `Gitsprout`; targets < 2 s and < 1 s; numbers in the report
-- [ ] README: install from `.vsix` in VS Code (`code --install-extension`) and Cursor (Extensions → … → Install from VSIX), settings table, shortcuts, screenshots placeholder
-- [ ] `CHANGELOG.md` 0.1.0; `pnpm package`
+- [x] performance: log activation summary time for `~/Projects` and graph `state` time for Pilot7 to an output channel `Gitsprout`; targets < 2 s and < 1 s; numbers in the report
+- [x] README: install from `.vsix` in VS Code (`code --install-extension`) and Cursor (Extensions → … → Install from VSIX), settings table, shortcuts, screenshots placeholder
+- [x] `CHANGELOG.md` 0.1.0; `pnpm package`
+- [x] user decisions: graph tab restored after reload (`registerWebviewPanelSerializer` + `onWebviewPanel:gitsprout.graph`), "Run in Terminal" types without Enter, "Show Command Output" in fetch/pull/push error notifications (live behaviour: user check)
 
 **Done when:** `pnpm package` produces the `.vsix`; the report has the measured times. User check: install the `.vsix` in Cursor and VS Code and work a day without GitKraken.
 
 **Session:** sonnet, high; after 6.
+
+**Decisions (2026-10-04, session 7):**
+- Timings, measured read-only with a node script over the real `src/` modules (`discoverWithParents` + `Repo.summary()` at concurrency 8, as `Registry.doScan`; `Repo.log(1000)` + `refs()` + `status()` in parallel, as `GraphPanel.load`), 3 runs each, no fetch/pull/checkout. Activation summary for `/Users/fost/Projects` (62 repos, depth 3): 652 / 481 / 463 ms total (discovery 4-14 ms, summaries ~460-640 ms) vs. target < 2 s. Graph `state` for `/Users/fost/Projects/pilot/Pilot7` (the only Pilot7 repo, 51 472 commits, branch `develop`; 1000 commits, 37 local / 54 remote branches, 3 tags): 117 / 109 / 111 ms vs. target < 1 s. The extension writes both to the `Gitsprout` channel: `scan: N repositories ...; discovery X ms, summaries Y ms (K read), total Z ms` (`Registry.doScan`) and `graph state <repo>: X ms (N commits)` (`GraphPanel.load`, up to just before the message is posted). In-editor numbers (extension host, file watchers) not measured: user check.
+- The output channel moved to `src/util/log.ts` (`createLog(context)` returns the `log` function used everywhere; `showLog()` reveals the channel without taking focus) so the error reporter can reveal it without another command.
+- Graph serializer: `registerWebviewPanelSerializer('gitsprout.graph')` hands the revived panel to `GraphPanel` (new optional constructor argument; it re-applies `webview.options`, which VS Code does not persist). A second revived panel is disposed (one graph tab). The executor's note that a revived panel loses `retainContextWhenHidden` was wrong (review): VS Code's webview editor serializer stores `{...webview.options, ...contentOptions}` with the tab and revives with them (checked in the VS Code 1.140 workbench bundle, `toJson`/`fromJson`), so the restored tab keeps it; re-applying `webview.options` is harmless. Review fix: until the first scan finishes (`Registry.scanned`, also set when the scan fails) an empty registry shows "Loading…" instead of "No Git repository in the workspace."; `onDidChangeRepos` then loads the graph. `onWebviewPanel:gitsprout.graph` added to `activationEvents`.
+- "Run in Terminal": `terminal.sendText(cmd, false)`. "Show Command Output": new `ActionId` `output` (label as in the prototype), appended by `errorPlan` to every plan of `fetch`/`pull`/`push` except the "Publish Branch" prompt (NoUpstream is not a failure); other ops unchanged. The channel already holds kind, message and stderr of every failure. Unit tests in `test/commands.messages.test.ts`; plan assertions in `test/repo.integration.test.ts` updated.
+- `registerStubCommands` left as is (registers nothing now; `COMMAND_IDS` stays in sync via the manifest test).
+- Package: `.vscodeignore` got `!CHANGELOG.md`; `pnpm package` gives `gitsprout-0.1.0.vsix`, 10 files, 48.57 KB (not committed, `*.vsix` is ignored). vsce warns about a missing `repository` field and `LICENSE`: left as is (private, unpublished). Tests: 167 passing (+1).
+- Not verified (user check, live VS Code/Cursor): installing the `.vsix` in both editors, the graph tab coming back after "Reload Window", "Show Command Output" and "Run in Terminal" (no Enter) in real notifications, in-editor timings, a day of work without GitKraken.
 
 ## Session prompts
 
