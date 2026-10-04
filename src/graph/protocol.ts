@@ -16,6 +16,13 @@ export type ToWebview =
   | { type: 'details'; sha: string; files: FileStat[]; error?: string }
   | { type: 'reveal'; sha: string }                      // select + scroll (from tree views)
   | { type: 'busy'; on: boolean }
+  /** A WIP operation (stage, unstage, discard, commit) is running: the webview disables every WIP button. Separate from the loading `busy`. */
+  | { type: 'wipBusy'; on: boolean }
+  /** The commit was made (`sha` = the new HEAD): the webview clears the draft. */
+  | { type: 'committed'; sha: string }
+  /** Answer to `amendInfo`: HEAD's message to prefill the draft, and whether HEAD is already on a remote; `unborn` = no commit to amend. */
+  | { type: 'amendInfo'; summary: string; description: string; pushed: boolean }
+  | { type: 'amendInfo'; unborn: true }
   /** No repo / log unreadable: the webview shows the message instead of the graph. */
   | { type: 'error'; message: string };
 
@@ -24,6 +31,14 @@ export type FromWebview =
   | { type: 'select'; sha: string }                      // extension answers with 'details'
   | { type: 'openCommitFile'; sha: string; file: FileStat }
   | { type: 'openWipFile'; file: FileChange; area: 'staged' | 'unstaged' }
+  /** WIP panel. `files` are re-checked against a fresh status; only entries still in the list are acted on. */
+  | { type: 'stage'; files: FileChange[] } | { type: 'stageAll' }
+  | { type: 'unstage'; files: FileChange[] } | { type: 'unstageAll' }
+  | { type: 'discard'; file: FileChange } | { type: 'discardAll' }
+  /** `push` = Commit and Push (ignored together with `amend`: no force push). */
+  | { type: 'commit'; summary: string; description: string; amend: boolean; push: boolean }
+  /** The Amend checkbox was ticked: the extension answers with `amendInfo`. */
+  | { type: 'amendInfo' }
   | { type: 'openScm' } | { type: 'switchRepo' } | { type: 'refresh' }
   | { type: 'toggleCi'; hideCi: boolean }
   | { type: 'openUrl'; url: string }

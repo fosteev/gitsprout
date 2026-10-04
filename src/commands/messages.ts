@@ -1,6 +1,6 @@
 // Pure helpers behind the mutation commands (no `vscode` import, unit-tested): wording ported from the prototype
 // (`doPull`, `doPush`, `branchNameError`, delete/stash dialogs), error -> notification mapping, quick pick contents.
-import type { ErrorKind, LocalBranch, Refs, Stash, SummaryStatus } from '../git/types';
+import type { ErrorKind, FileChange, LocalBranch, Refs, Stash, SummaryStatus } from '../git/types';
 
 const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
 export const commits = (n: number): string => `${n} ${plural(n, 'commit', 'commits')}`;
@@ -170,6 +170,39 @@ export function pushMessage(before: Sum, after: Pick<SummaryStatus, 'upstream'>)
   if (!before.ahead) return 'Everything up-to-date.';
   return `Pushed ${commits(before.ahead)} to ${before.upstream}.`;
 }
+
+// ---- WIP panel ----
+
+export const NOTHING_TO_DISCARD_TO = 'Nothing to discard to: the branch has no commits yet.';
+export const NO_COMMIT_SUMMARY = 'Enter a commit summary.';
+export const NESTED_REPO_DISCARD = "Can't discard a nested repository from here.";
+
+/** The files of `list` that `requested` names (same path and origPath), as the extension's own entries: stale or invented ones drop out. */
+export function matchFiles(requested: readonly FileChange[], list: readonly FileChange[]): FileChange[] {
+  const key = (f: FileChange): string => `${f.path}\0${f.origPath ?? ''}`;
+  const want = new Set(requested.map(key));
+  return list.filter((f) => want.has(key(f)));
+}
+
+/** Distinct paths with staged or unstaged changes (a partly staged file counts once). */
+export function changedFileCount(s: { staged: readonly FileChange[]; unstaged: readonly FileChange[] }): number {
+  return new Set([...s.staged, ...s.unstaged].map((f) => f.path)).size;
+}
+
+/** An unstaged `A`/`R` that is not untracked is an intent-to-add file: discarding it deletes it (see `Repo.discard`). */
+export const discardDeletes = (f: Pick<FileChange, 'status' | 'untracked'>): boolean => f.untracked || f.status === 'A' || f.status === 'R';
+
+export const discardFileConfirm = (f: Pick<FileChange, 'path' | 'status' | 'untracked'>): { text: string; detail: string } => ({
+  text: `Discard changes in '${f.path}'?`,
+  detail: discardDeletes(f) ? "The file will be deleted. This can't be undone." : "This can't be undone.",
+});
+
+export const discardAllConfirm = (n: number): { text: string; detail: string } => ({
+  text: `Discard all changes in ${n} ${plural(n, 'file', 'files')}?`,
+  detail: "Staged and unstaged changes are reset to HEAD and untracked files are deleted. This can't be undone.",
+});
+
+export const committedFlash = (sha: string): string => `Committed ${shortSha(sha)}`;
 
 // ---- error -> notification ----
 

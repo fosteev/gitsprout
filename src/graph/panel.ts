@@ -1,14 +1,15 @@
 import { randomBytes } from 'node:crypto';
-import { basename } from 'node:path';
+import { basename, relative } from 'node:path';
 import * as vscode from 'vscode';
 import { openPlan } from '../diff/provider';
 import { commitFilePlan, stagedPlan, unstagedPlan } from '../diff/uri';
+import type { WipActions } from '../commands/wip';
 import { Repo } from '../git/repo';
 import type { Commit, Head, Status } from '../git/types';
 import { onReveal } from '../views/refsStore';
 import type { Registry } from '../workspace/registry';
 import type { FromWebview, GraphSettings, ToWebview } from './protocol';
-import { graphHtml, isAllowedUrl, parseFromWebview, shaFromArg, stateMessage } from './validate';
+import { graphHtml, inGitDir, isAllowedUrl, parseFromWebview, shaFromArg, stateMessage } from './validate';
 
 export const VIEW_TYPE = 'gitsprout.graph';
 /** Ids implemented here; `registerStubCommands` skips them. */
@@ -55,6 +56,7 @@ class GraphPanel implements vscode.Disposable {
     context: vscode.ExtensionContext,
     private readonly registry: Registry,
     private readonly log: (m: string) => void,
+    private readonly wipActions: WipActions,
     readonly repoRoot: string,
     revived?: vscode.WebviewPanel,
   ) {
@@ -78,7 +80,13 @@ class GraphPanel implements vscode.Disposable {
     });
     this.onDidDispose = this.panel.onDidDispose;
     const reload = () => void this.load();
+    // Working-tree edits don't touch the git dir the registry watches, so a staging panel watches the tree itself
+    // (one watcher per open tab; `files.watcherExclude` applies). Anything under a `.git` folder is the registry's job.
+    const tree = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(repoRoot), '**'));
+    // Checked relative to the root, so a root that itself lies under some `.git` folder still gets its events.
+    const kick = (uri: vscode.Uri): void => { if (!inGitDir(relative(repoRoot, uri.fsPath))) this.registry.schedule(this.repoRoot); };
     this.disposables.push(
+      tree, tree.onDidChange(kick), tree.onDidCreate(kick), tree.onDidDelete(kick),
       this.panel.onDidDispose(() => this.dispose()),
       this.panel.onDidChangeViewState(() => {
         if (this.panel.active) this.registry.setActive(this.repoRoot);
@@ -196,6 +204,22 @@ class GraphPanel implements vscode.Disposable {
         await this.open(m.area === 'staged' ? stagedPlan(f, this.head.sha === null) : unstagedPlan(f));
         return;
       }
+      case 'stage': await this.withWipBusy(() => this.wipActions.stage(this.repoRoot, m.files)); return;
+      case 'unstage': await this.withWipBusy(() => this.wipActions.unstage(this.repoRoot, m.files)); return;
+      case 'stageAll': await this.withWipBusy(() => this.wipActions.stageAll(this.repoRoot)); return;
+      case 'unstageAll': await this.withWipBusy(() => this.wipActions.unstageAll(this.repoRoot)); return;
+      case 'discard': await this.withWipBusy(() => this.wipActions.discard(this.repoRoot, m.file)); return;
+      case 'discardAll': await this.withWipBusy(() => this.wipActions.discardAll(this.repoRoot)); return;
+      case 'commit': {
+        const sha = await this.withWipBusy(() => this.wipActions.commit(this.repoRoot, m));
+        if (sha) this.post({ type: 'committed', sha });
+        return;
+      }
+      case 'amendInfo': {
+        const info = await this.wipActions.amendInfo(this.repoRoot);
+        if (info) this.post(info);
+        return;
+      }
       case 'openScm': await vscode.commands.executeCommand('workbench.view.scm'); return;
       case 'switchRepo':
         // The picked repo becomes active; open (or bring up) its own tab. A cancelled pick leaves this tab's repo active.
@@ -211,6 +235,18 @@ class GraphPanel implements vscode.Disposable {
       case 'openUrl':
         if (isAllowedUrl(m.url, readSettings().jira)) await vscode.env.openExternal(vscode.Uri.parse(m.url));
         return;
+    }
+  }
+
+  private wipRunning = 0;
+
+  /** Runs one WIP op with `wipBusy` on around it (a counter: the webview already disables its buttons, this is the backstop for racing messages). */
+  private async withWipBusy<T>(op: () => Promise<T>): Promise<T> {
+    if (this.wipRunning++ === 0) this.post({ type: 'wipBusy', on: true });
+    try {
+      return await op();
+    } finally {
+      if (--this.wipRunning === 0) this.post({ type: 'wipBusy', on: false });
     }
   }
 
@@ -233,7 +269,7 @@ class GraphPanel implements vscode.Disposable {
 }
 
 /** `showGraph`, `toggleAutoBuild`, the graph's context-menu copy commands and tree → graph reveal. */
-export function registerGraph(context: vscode.ExtensionContext, registry: Registry, log: (m: string) => void): void {
+export function registerGraph(context: vscode.ExtensionContext, registry: Registry, log: (m: string) => void, wip: WipActions): void {
   /** Open graph tabs by repo root: at most one per repo. */
   const panels = new Map<string, GraphPanel>();
 
@@ -251,7 +287,7 @@ export function registerGraph(context: vscode.ExtensionContext, registry: Regist
     }
     const open = panels.get(root);
     if (open) { open.reveal(preserveFocus); return; }
-    adopt(new GraphPanel(context, registry, log, root));
+    adopt(new GraphPanel(context, registry, log, wip, root));
   };
 
   /** The commit as loaded by any open tab (context-menu commands carry only the SHA). */
@@ -277,7 +313,7 @@ export function registerGraph(context: vscode.ExtensionContext, registry: Regist
       deserializeWebviewPanel: (revived, state: unknown) => {
         const root = (state as { root?: unknown } | undefined)?.root;
         if (typeof root !== 'string' || panels.has(root)) { revived.dispose(); return Promise.resolve(); }
-        adopt(new GraphPanel(context, registry, log, root, revived));
+        adopt(new GraphPanel(context, registry, log, wip, root, revived));
         return Promise.resolve();
       },
     }),
