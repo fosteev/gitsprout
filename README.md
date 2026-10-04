@@ -2,7 +2,7 @@
 
 A VS Code (and Cursor) extension for the everyday 90% of Git work across one or many repositories: switch branches, see what changed, browse the commit graph, fetch/pull/push, stash. No subscription, no accounts, no cloud. Every action runs your own `git`, so your config, hooks and SSH keys just work.
 
-Staging and committing stay in VS Code's built-in Source Control. Gitsprout adds what it lacks: a commit graph, a branch/remote/stash/tag tree, and an overview of every repository in a big workspace folder.
+Gitsprout adds what the built-in Source Control lacks: a commit graph with a GitKraken-style staging and commit panel, a branch/remote/stash/tag tree, and an overview of every repository in a big workspace folder.
 
 ## Scope (MVP)
 
@@ -12,8 +12,9 @@ Staging and committing stay in VS Code's built-in Source Control. Gitsprout adds
 - Diffs open in VS Code's native diff editor (commit files, stash files, uncommitted files)
 - Fetch, pull (fast-forward, merge when diverged), push with a clear message and a Pull button when rejected
 - Stash: push, apply, pop, drop
+- WIP panel in the graph (post-MVP, `roadmap-wip-panel.md`): stage, unstage and discard files or everything, commit summary + description, amend, commit and push
 
-Not planned for MVP: staging/commit UI (built-in SCM does it), interactive rebase, conflict editor, PR/issue integrations, AI features.
+Not planned: hunk/line staging, interactive rebase, conflict editor, PR/issue integrations, AI features.
 
 ## Install
 

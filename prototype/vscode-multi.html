@@ -201,6 +201,47 @@ a.jira:hover { text-decoration: underline; }
 .note .vbtn { margin-top: 8px; width: auto; display: inline-flex; padding: 0 12px; }
 .nodetail { padding: 24px 16px; color: var(--muted); text-align: center; }
 
+/* WIP panel: GitKraken-style staging + commit */
+.split.wipon { grid-template-columns: minmax(0, 1fr) 380px; }
+.details:has(.wp) { display: flex; flex-direction: column; overflow: hidden; }
+.wp { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.wph { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.wph .t { flex: 1; min-width: 0; text-align: center; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wph .brp { font-size: 12px; padding: 1px 7px; border-radius: 3px; color: var(--fg-strong); background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.wph .ib.danger { color: var(--deleted); }
+.wpbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px 2px; }
+.wpbar .lnk { font: 12px var(--ui); color: var(--muted); }
+.seg { margin-left: auto; display: inline-flex; border: 1px solid var(--input-line); border-radius: 3px; overflow: hidden; }
+.seg button { height: 22px; padding: 0 9px; border: 0; background: none; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--input-line); }
+.seg button:hover { color: var(--fg); }
+.seg button[aria-pressed="true"] { background: var(--sel); color: var(--fg-strong); }
+.wpl { flex: 1; min-height: 0; overflow: auto; padding-bottom: 6px; }
+.wpsh { display: flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px 0 4px; font-size: 12.5px; font-weight: 600; cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1; background: var(--editor); border-top: 1px solid var(--line); }
+.wps:first-child .wpsh { border-top: 0; }
+.wpsh .n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.wpsh .go { margin-left: auto; height: 22px; padding: 0 9px; border-radius: 3px; font-size: 12px; font-weight: 500; border: 1px solid var(--untracked); color: var(--untracked); background: color-mix(in srgb, var(--untracked) 14%, transparent); }
+.wpsh .go.un { border-color: var(--deleted); color: var(--deleted); background: color-mix(in srgb, var(--deleted) 14%, transparent); }
+.wpsh .go:hover { filter: brightness(1.2); }
+.wps .tr { padding-left: calc(var(--d, 0) * 12px + 10px); }
+.wps .empty { padding: 2px 16px 10px 30px; }
+.wpc { border-top: 1px solid var(--line); padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 8px; }
+.amend { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; user-select: none; width: max-content; }
+.amend input { margin: 0; accent-color: var(--accent); pointer-events: none; }
+.cbox { border: 1px solid var(--input-line); background: var(--input); border-radius: 3px; }
+.cbox:focus-within { border-color: var(--accent); }
+.cbox.bad { border-color: var(--err); }
+.cbox .sumrow { display: flex; align-items: center; }
+.cbox input { flex: 1; min-width: 0; border: 0; background: none; outline: none; padding: 7px 8px; font-size: 13px; font-weight: 600; }
+.cbox .cnt { font: 11.5px var(--mono); color: var(--muted); padding-right: 8px; font-variant-numeric: tabular-nums; }
+.cbox .cnt.over { color: var(--err); }
+.cbox textarea { display: block; width: 100%; min-height: 72px; resize: vertical; border: 0; border-top: 1px solid var(--line); background: none; outline: none; padding: 6px 8px; font-size: 12.5px; }
+.wpc .verr { color: var(--err); font-size: 12px; margin-top: -4px; }
+.wpc .vbtn { height: 30px; }
+.wpc .vbtn.stage { background: color-mix(in srgb, var(--untracked) 22%, var(--input)); color: var(--fg-strong); border: 1px solid color-mix(in srgb, var(--untracked) 55%, transparent); }
+.wpc .vbtn.stage:hover { background: color-mix(in srgb, var(--untracked) 32%, var(--input)); }
+.wpc .vbtns .vbtn.dd { height: 30px; }
+
 @container (max-width: 820px) {
   .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 42%); }
   .details { border-left: 0; border-top: 1px solid var(--line); }
@@ -769,7 +810,7 @@ function renderGraph() {
   const list = L.rows.map(r => {
     if (r.wip) {
       const n = G.wip.unstaged.length + G.wip.staged.length;
-      return `<div class="gr${S.sel === 'WIP' ? ' on' : ''}" data-row="WIP">${rowSvg(r, W)}<div class="gdesc"><span class="wip">Uncommitted Changes (${n})</span></div><div class="gwhen">*</div><div class="gwho">*</div><div class="gsha">*</div></div>`;
+      return `<div class="gr${S.sel === 'WIP' ? ' on' : ''}" data-row="WIP">${rowSvg(r, W)}<div class="gdesc"><span class="wip">${draft().sum.trim() ? esc(draft().sum) : '// WIP'}</span><span class="kind">${n} file${n === 1 ? '' : 's'}</span></div><div class="gwhen">*</div><div class="gwho">*</div><div class="gsha">*</div></div>`;
     }
     const c = r.c;
     const hit = !q || c.msg.toLowerCase().includes(q) || c.sha.startsWith(q) || c.author.toLowerCase().includes(q);
@@ -783,16 +824,68 @@ function renderGraph() {
     <div class="wvbar"><button class="vchip" data-act="qp-repo" title="Switch repository (⌥⌘R)">${small(I.repo, 13)} ${esc(G.name)} ${small(I.down, 11)}</button><input id="q" class="vin" placeholder="Search commits, SHA, P7-4040" value="${esc(S.q)}" autocomplete="off" aria-label="Search commits">
       <button class="vchip" data-act="toggle-ci" aria-pressed="${S.hideCI}">Hide AutoBuild · ${S.hideCI ? hiddenN + ' hidden' : G.commits.filter(isCI).length}</button>
       <span class="cnt">${L.rows.filter(r => !r.wip).length} commits</span>${ibtn(I.refresh, 'refresh', '', 'Refresh')}</div>
-    <div class="split"><div class="glist" id="graph" tabindex="0" style="--gw:${W}px"><div class="gcols"><span>Graph</span><span>Description</span><span class="gwhen">Date</span><span class="gwho">Author</span><span class="gsha">Commit</span></div>${list}</div>
+    <div class="split${S.sel === 'WIP' && dirty() ? ' wipon' : ''}"><div class="glist" id="graph" tabindex="0" style="--gw:${W}px"><div class="gcols"><span>Graph</span><span>Description</span><span class="gwhen">Date</span><span class="gwho">Author</span><span class="gsha">Commit</span></div>${list}</div>
       <div class="details">${renderDetails()}</div></div></div>`;
 }
+/* ---------- WIP panel (GitKraken-style): stage/unstage, tree/path, commit summary + description, amend ---------- */
+const draft = () => G.draft || (G.draft = { sum: '', desc: '', amend: false, err: '' });
+let WIPDIRS = [];
+function wipFiles(area) {
+  const files = G.wip[area];
+  const one = (f, depth, label, desc) => {
+    const acts = ibtn(I.open, 'noop', '', 'Open File') + (area === 'staged' ? ibtn(I.minus, 'unstage', f.path, 'Unstage File') : ibtn(I.discard, 'discard', f.path, 'Discard Changes') + ibtn(I.plus, 'stage', f.path, 'Stage File'));
+    return trow({ depth, icon: I.file, label, desc, key: `w${area}:${f.path}`, act: 'open-diff', arg: JSON.stringify({ src: area === 'staged' ? 'idx' : 'wt', path: f.path }), actions: acts, letter: f.st, title: f.path });
+  };
+  if (S.wipView === 'path') return files.map(f => { const [d, b] = split(f.path); return one(f, 0, esc(b), esc(d)); }).join('');
+  const root = { dirs: {}, files: [] };
+  files.forEach(f => { const parts = f.path.split('/'); let n = root; parts.slice(0, -1).forEach(p => { n = n.dirs[p] || (n.dirs[p] = { dirs: {}, files: [] }); }); n.files.push(f); });
+  const walk = (n, depth, base) => Object.keys(n.dirs).sort().map(name => {
+    let label = name, c = n.dirs[name];
+    while (!c.files.length && Object.keys(c.dirs).length === 1) { const k = Object.keys(c.dirs)[0]; label += '/' + k; c = c.dirs[k]; }
+    const key = `wd:${area}:${base}${label}`; WIPDIRS.push(key);
+    const o = !S.closed[key];
+    return trow({ depth, tw: o ? 'open' : 'closed', icon: I.folder, label: esc(label), key, act: 'pane', arg: key }) + (o ? walk(c, depth + 1, base + label + '/') : '');
+  }).join('') + n.files.slice().sort((a, b) => a.path.localeCompare(b.path)).map(f => one(f, depth, esc(split(f.path)[1]), '')).join('');
+  return walk(root, 0, '');
+}
+function renderWip() {
+  const u = G.wip.unstaged, s = G.wip.staged, d = draft(), n = u.length + s.length;
+  WIPDIRS = [];
+  const sec = (key, title, area, btn, empty) => {
+    const o = !S.closed[key], files = G.wip[area];
+    return `<div class="wps"><div class="wpsh" data-act="pane" data-arg="${key}" role="button" aria-expanded="${o}">${o ? I.chevD : I.chevR}<span>${title}</span><span class="n">(${files.length})</span>${files.length ? btn : ''}</div>
+      ${o ? (files.length ? wipFiles(area) : `<div class="empty">${empty}</div>`) : ''}</div>`;
+  };
+  const lists = sec('wp-unstaged', 'Unstaged Files', 'unstaged', `<button class="go" data-act="stage-all">Stage All Changes</button>`, 'No unstaged changes')
+    + sec('wp-staged', 'Staged Files', 'staged', `<button class="go un" data-act="unstage-all">Unstage All</button>`, u.length ? 'Stage files to include them in the commit' : 'No staged changes');
+  const anyOpen = WIPDIRS.some(k => !S.closed[k]);
+  const left = 72 - d.sum.length;
+  const main = d.amend ? `<button class="vbtn" data-act="wip-commit">${I.check} Amend Previous Commit</button>`
+    : s.length ? `<button class="vbtn" data-act="wip-commit">${I.check} Commit Changes to ${s.length} File${s.length > 1 ? 's' : ''}</button>`
+    : `<button class="vbtn stage" data-act="stage-all">${I.plus} Stage Changes to Commit</button>`;
+  return `<div class="wp">
+    <span class="api" style="right:10px;top:46px">webview · git add / restore --staged / commit -F -</span>
+    <div class="wph">${ibtn(I.trash, 'wip-discard-all', '', 'Discard All Changes').replace('class="ib"', 'class="ib danger"')}<span class="t">${n} file change${n === 1 ? '' : 's'} on <span class="brp">${esc(G.HEAD)}</span></span>${ibtn(I.refresh, 'refresh', '', 'Refresh')}</div>
+    <div class="wpbar">${S.wipView !== 'path' && WIPDIRS.length ? `<button class="lnk" data-act="wip-collapse">${anyOpen ? 'Collapse All' : 'Expand All'}</button>` : ''}
+      <span class="seg"><button data-act="wip-view" data-arg="path" aria-pressed="${S.wipView === 'path'}">${sv('<path d="M3 4.5h10M3 8h10M3 11.5h10"/>', 13)} Path</button><button data-act="wip-view" data-arg="tree" aria-pressed="${S.wipView !== 'path'}">${sv('<path d="M3 3v9.5h3M3 7h3"/><rect x="7.5" y="5.5" width="6" height="3" rx=".5"/><rect x="7.5" y="11" width="6" height="3" rx=".5"/><rect x="1.5" y="1" width="4" height="2.5" rx=".5"/>', 13)} Tree</button></span></div>
+    <div class="wpl">${lists}</div>
+    <div class="wpc">
+      <label class="amend" data-act="wip-amend"><input type="checkbox" tabindex="-1" ${d.amend ? 'checked' : ''}> Amend previous commit</label>
+      <div class="cbox${d.err ? ' bad' : ''}"><div class="sumrow"><input id="wsum" placeholder="Commit summary" value="${esc(d.sum)}" autocomplete="off" aria-label="Commit summary"><span id="wcnt" class="cnt${left < 0 ? ' over' : ''}" title="Characters left before 72">${left}</span></div>
+        <textarea id="wdesc" placeholder="Description" aria-label="Commit description">${esc(d.desc)}</textarea></div>
+      ${d.err ? `<div class="verr">${esc(d.err)}</div>` : ''}
+      <div class="vbtns">${main}${s.length && !d.amend ? `<button class="vbtn dd" data-act="wip-commit-menu" aria-label="More commit actions">${I.down}</button>` : ''}</div>
+    </div></div>`;
+}
+function wipCommit(push) {
+  const d = draft(), sum = d.sum.trim();
+  if (!sum) { d.err = 'Enter a commit summary.'; render(); return $('#wsum')?.focus(); }
+  if (!d.amend && !G.wip.staged.length) return act('stage-all');
+  S.msg = sum + (d.desc.trim() ? '\n\n' + d.desc.trim() : '');
+  commit({ push, amend: d.amend });
+}
 function renderDetails() {
-  if (S.sel === 'WIP' && dirty()) {
-    const all = [...G.wip.staged.map(f => [f, 'idx']), ...G.wip.unstaged.map(f => [f, 'wt'])];
-    return `<div class="dh"><div class="row1">Working tree · ${esc(G.HEAD)}</div><h2>Uncommitted Changes</h2></div>
-      <div class="note">Staging and committing happen in VS Code's built-in Source Control. Gitsprout only shows them here.<br><button class="vbtn" data-act="view" data-arg="scm">${I.scm.replace(/24/g, '14')} Open Source Control</button></div>
-      <div class="dsec"><div class="dsec-h">FILES<span class="n">${all.length}</span></div>${all.map(([f, src]) => { const [d, b] = split(f.path); return trow({ icon: I.file, label: esc(b), desc: esc(d) + (src === 'idx' ? ' · staged' : ''), key: 'd:' + f.path, act: 'open-diff', arg: JSON.stringify({ src, path: f.path }), letter: f.st }); }).join('')}</div>`;
-  }
+  if (S.sel === 'WIP' && dirty()) return renderWip();
   const c = MAP[S.sel];
   if (!c) return '<div class="nodetail">Select a commit to see its details</div>';
   const jira = c.msg.match(/^([A-Z][A-Z0-9]*)-(\d+)\s/);
@@ -1033,7 +1126,7 @@ function commit({ push = false, amend = false } = {}) {
     const c = newCommit(msg.split('\n')[0], files, [headSha()]); c.body = msg.split('\n').slice(2).join('\n');
     G.heads[G.HEAD] = c.sha;
   }
-  G.wip.staged = []; S.msg = ''; S.msgErr = '';
+  G.wip.staged = []; S.msg = ''; S.msgErr = ''; G.draft = null;
   S.sel = dirty() ? 'WIP' : headSha(); render();
   if (push) withProgress(`Pushing to ${G.upstream[G.HEAD] || 'origin'}…`, doPush);
 }
@@ -1148,6 +1241,18 @@ function actBase(name, arg, el, ev) {
     case 'discard': return openDialog({ title: `Are you sure you want to discard changes in '${arg.split('/').pop()}'?`, detail: 'This action is irreversible. Your current working set will be forever lost if you proceed.', buttons: [{ label: 'Discard File', primary: true, run: () => { G.wip.unstaged = G.wip.unstaged.filter(f => f.path !== arg); render(); } }] });
     case 'discard-all': return openDialog({ title: `Are you sure you want to discard ALL changes in ${G.wip.unstaged.length} files?`, detail: 'This action is irreversible. Your current working set will be forever lost if you proceed.', buttons: [{ label: `Discard All ${G.wip.unstaged.length} Files`, primary: true, run: () => { G.wip.unstaged = []; render(); } }] });
     case 'scm-commit': return commit();
+    case 'wip-view': S.wipView = arg; return render();
+    case 'wip-collapse': { const open = WIPDIRS.some(k => !S.closed[k]); WIPDIRS.forEach(k => { S.closed[k] = open; }); return render(); }
+    case 'wip-amend': {
+      const d = draft(), c = MAP[headSha()]; d.amend = !d.amend; d.err = '';
+      if (d.amend && !d.sum.trim()) { d.sum = c.msg; d.desc = c.body || ''; }
+      else if (!d.amend && d.sum === c.msg) { d.sum = ''; d.desc = ''; }
+      return render();
+    }
+    case 'wip-commit': return wipCommit(false);
+    case 'wip-commit-menu': { const r = el.getBoundingClientRect(); return showMenu(r.right - 200, r.top - 96, [{ label: 'Commit', act: 'wip-commit', k: '⌘↵' }, { label: 'Commit and Push', act: 'wip-commit-push' }], 'webview menu'); }
+    case 'wip-commit-push': return wipCommit(true);
+    case 'wip-discard-all': { const n = G.wip.unstaged.length + G.wip.staged.length; return openDialog({ title: `Discard all changes in ${n} file${n === 1 ? '' : 's'}?`, detail: 'Staged and unstaged changes are both reset to HEAD. Untracked files are deleted. This action is irreversible.', buttons: [{ label: 'Discard All', primary: true, run: () => { G.wip = { unstaged: [], staged: [] }; S.tabs = S.tabs.filter(t => !(t.repo === S.repo && (t.src === 'wt' || t.src === 'idx'))); render(); } }] }); }
     case 'scm-commit-menu': { const r = el.getBoundingClientRect(); return showMenu(r.left, r.bottom + 2, [{ label: 'Commit', act: 'scm-commit' }, { label: 'Commit (Amend)', act: 'scm-amend' }, '-', { label: 'Commit & Push', act: 'scm-commit-push' }], 'built-in SCM menu'); }
     case 'scm-amend': if (!S.msg.trim()) S.msg = MAP[headSha()].msg; return commit({ amend: true });
     case 'scm-commit-push': return commit({ push: true });
@@ -1185,6 +1290,13 @@ document.addEventListener('contextmenu', e => {
 document.addEventListener('input', e => {
   const t = e.target;
   if (t.id === 'q') { S.q = t.value; render(); }
+  else if (t.id === 'wsum') {
+    const d = draft(); d.sum = t.value; const left = 72 - t.value.length, c = $('#wcnt');
+    if (c) { c.textContent = left; c.classList.toggle('over', left < 0); }
+    const w = document.querySelector('[data-row="WIP"] .wip'); if (w) w.textContent = t.value.trim() || '// WIP';
+    if (d.err) { d.err = ''; render(); }
+  }
+  else if (t.id === 'wdesc') draft().desc = t.value;
   else if (t.id === 'scmmsg') { S.msg = t.value; if (S.msgErr) { S.msgErr = ''; render(); } }
   else if (t.id === 'qpin' && QP) { QP.value = t.value; if (QP.mode === 'pick') { QP.idx = 0; paintQP(); const i = $('#qpin'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } else if (QP.err) { QP.err = ''; } }
 });
@@ -1197,6 +1309,7 @@ document.addEventListener('keydown', e => {
     }
     return;
   }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && (e.target.id === 'wsum' || e.target.id === 'wdesc')) { e.preventDefault(); return wipCommit(false); }
   if (e.key === 'Escape') { if (!$('#scrim').hidden) return closeDialog(); if (!$('#menu').hidden) return hideMenu(); }
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); return act('palette'); }
   if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === 'KeyG') { e.preventDefault(); return showGraph(); }
