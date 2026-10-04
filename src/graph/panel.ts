@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { basename } from 'node:path';
 import * as vscode from 'vscode';
 import { openPlan } from '../diff/provider';
 import { commitFilePlan, stagedPlan, unstagedPlan } from '../diff/uri';
@@ -32,7 +33,7 @@ async function setSetting(key: string, value: unknown): Promise<void> {
   await c.update(key, value, target);
 }
 
-/** The single graph tab: follows the active repo, re-sends `state` when the repo refreshes. */
+/** One graph tab per repo: bound to `repoRoot`, re-sends `state` when that repo refreshes; focusing it makes the repo active. */
 class GraphPanel implements vscode.Disposable {
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
@@ -42,6 +43,7 @@ class GraphPanel implements vscode.Disposable {
   /** A refresh arrived while the tab was hidden: reload when it becomes visible. */
   private dirty = false;
   private lastState: string | undefined;
+  /** The repo whose history is loaded; undefined while the tab shows an error. */
   private root: string | undefined;
   private commits = new Map<string, Commit>();
   private head: Head = { branch: null, sha: null };
@@ -49,7 +51,13 @@ class GraphPanel implements vscode.Disposable {
   readonly onDidDispose: vscode.Event<void>;
 
   /** `revived`: the panel VS Code recreated after a window reload (see `registerGraph`); else a new tab is opened. */
-  constructor(context: vscode.ExtensionContext, private readonly registry: Registry, private readonly log: (m: string) => void, revived?: vscode.WebviewPanel) {
+  constructor(
+    context: vscode.ExtensionContext,
+    private readonly registry: Registry,
+    private readonly log: (m: string) => void,
+    readonly repoRoot: string,
+    revived?: vscode.WebviewPanel,
+  ) {
     const dist = vscode.Uri.joinPath(context.extensionUri, 'dist');
     const options = { enableScripts: true, localResourceRoots: [dist] };
     if (revived) {
@@ -59,6 +67,7 @@ class GraphPanel implements vscode.Disposable {
     } else {
       this.panel = vscode.window.createWebviewPanel(VIEW_TYPE, 'Graph', vscode.ViewColumn.Active, { ...options, retainContextWhenHidden: true });
     }
+    this.panel.title = `Graph · ${registry.get(repoRoot)?.name ?? basename(repoRoot)}`;
     this.panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'sprout.svg');
     const wv = this.panel.webview;
     wv.html = graphHtml({
@@ -71,18 +80,20 @@ class GraphPanel implements vscode.Disposable {
     const reload = () => void this.load();
     this.disposables.push(
       this.panel.onDidDispose(() => this.dispose()),
-      this.panel.onDidChangeViewState(() => { if (this.panel.visible && this.dirty) reload(); }),
+      this.panel.onDidChangeViewState(() => {
+        if (this.panel.active) this.registry.setActive(this.repoRoot);
+        if (this.panel.visible && this.dirty) reload();
+      }),
       wv.onDidReceiveMessage((m: unknown) => void this.onMessage(m)),
-      this.registry.onDidChangeActive(reload),
       this.registry.onDidChangeRepos(reload),
-      this.registry.onDidRefreshRepo((root) => { if (root === this.registry.active?.root) reload(); }),
+      this.registry.onDidRefreshRepo((root) => { if (root === this.repoRoot) reload(); }),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (['ciPattern', 'hideCi', 'jira', 'logLimit'].some((k) => e.affectsConfiguration(`gitsprout.${k}`))) reload();
       }),
     );
   }
 
-  reveal(): void { this.panel.reveal(this.panel.viewColumn, false); }
+  reveal(preserveFocus: boolean): void { this.panel.reveal(this.panel.viewColumn, preserveFocus); }
 
   /** A tree row was clicked: select the commit in the graph without taking focus. */
   revealCommit(sha: string): void {
@@ -101,7 +112,7 @@ class GraphPanel implements vscode.Disposable {
     if (!this.panel.visible) { this.dirty = true; return; }
     this.dirty = false;
     const mine = ++this.seq;
-    const active = this.registry.active;
+    const active = this.registry.get(this.repoRoot);
     if (!active && !this.registry.scanned) {
       // A tab restored after a reload, before the first scan: show "Loading…"; `onDidChangeRepos` reloads it.
       this.post({ type: 'busy', on: true });
@@ -109,9 +120,8 @@ class GraphPanel implements vscode.Disposable {
     }
     if (!active) {
       this.root = undefined; this.commits.clear(); this.lastState = undefined;
-      this.panel.title = 'Graph';
       this.post({ type: 'busy', on: false }); // a superseded load won't clear it
-      this.post({ type: 'error', message: 'No Git repository in the workspace.' });
+      this.post({ type: 'error', message: `${basename(this.repoRoot)} is no longer a Git repository in the workspace.` });
       return;
     }
     this.post({ type: 'busy', on: true });
@@ -187,12 +197,12 @@ class GraphPanel implements vscode.Disposable {
         return;
       }
       case 'openScm': await vscode.commands.executeCommand('workbench.view.scm'); return;
-      case 'switchRepo': await vscode.commands.executeCommand('gitsprout.switchRepository'); return;
-      case 'refresh': {
-        const root = this.registry.active?.root;
-        if (root) await this.registry.refreshRepo(root);
+      case 'switchRepo':
+        // The picked repo becomes active; open (or bring up) its own tab. A cancelled pick leaves this tab's repo active.
+        await vscode.commands.executeCommand('gitsprout.switchRepository');
+        await vscode.commands.executeCommand('gitsprout.showGraph');
         return;
-      }
+      case 'refresh': await this.registry.refreshRepo(this.repoRoot); return;
       case 'toggleCi': await setSetting('hideCi', m.hideCi); return;
       case 'copy':
         await vscode.env.clipboard.writeText(m.text);
@@ -224,20 +234,33 @@ class GraphPanel implements vscode.Disposable {
 
 /** `showGraph`, `toggleAutoBuild`, the graph's context-menu copy commands and tree → graph reveal. */
 export function registerGraph(context: vscode.ExtensionContext, registry: Registry, log: (m: string) => void): void {
-  let panel: GraphPanel | undefined;
+  /** Open graph tabs by repo root: at most one per repo. */
+  const panels = new Map<string, GraphPanel>();
 
   const adopt = (p: GraphPanel): void => {
-    panel = p;
-    p.onDidDispose(() => { if (panel === p) panel = undefined; });
+    panels.set(p.repoRoot, p);
+    p.onDidDispose(() => { if (panels.get(p.repoRoot) === p) panels.delete(p.repoRoot); });
   };
 
-  const show = (): void => {
-    if (panel) { panel.reveal(); return; }
-    if (!registry.active) {
+  /** Brings up the repo's tab, opening it the first time; `root` defaults to the active repo. */
+  const show = (root?: string, preserveFocus = false): void => {
+    root ??= registry.active?.root;
+    if (!root) {
       void vscode.window.showInformationMessage('Gitsprout: no Git repository in the workspace.');
       return;
     }
-    adopt(new GraphPanel(context, registry, log));
+    const open = panels.get(root);
+    if (open) { open.reveal(preserveFocus); return; }
+    adopt(new GraphPanel(context, registry, log, root));
+  };
+
+  /** The commit as loaded by any open tab (context-menu commands carry only the SHA). */
+  const commit = (s: string): Commit | undefined => {
+    for (const p of panels.values()) {
+      const c = p.commit(s);
+      if (c) return c;
+    }
+    return undefined;
   };
 
   const sha = (arg: unknown): string | undefined => {
@@ -247,31 +270,34 @@ export function registerGraph(context: vscode.ExtensionContext, registry: Regist
   };
 
   context.subscriptions.push(
-    { dispose: () => panel?.dispose() },
-    // Window reload: VS Code restores the tab and hands it back; the graph re-attaches and loads the active repo
-    // (during the first scan it shows "Loading…" and reloads on `onDidChangeRepos`).
+    { dispose: () => { for (const p of [...panels.values()]) p.dispose(); } },
+    // Window reload: VS Code restores the tabs and hands them back with the webview state (`{ root }`, set by the
+    // webview on every `state`); each re-attaches to its repo (during the first scan it shows "Loading…").
     vscode.window.registerWebviewPanelSerializer(VIEW_TYPE, {
-      deserializeWebviewPanel: (revived) => {
-        if (panel) { revived.dispose(); return Promise.resolve(); } // one graph tab only
-        adopt(new GraphPanel(context, registry, log, revived));
+      deserializeWebviewPanel: (revived, state: unknown) => {
+        const root = (state as { root?: unknown } | undefined)?.root;
+        if (typeof root !== 'string' || panels.has(root)) { revived.dispose(); return Promise.resolve(); }
+        adopt(new GraphPanel(context, registry, log, root, revived));
         return Promise.resolve();
       },
     }),
-    vscode.commands.registerCommand('gitsprout.showGraph', show),
+    vscode.commands.registerCommand('gitsprout.showGraph', (root?: unknown, preserveFocus?: unknown) =>
+      show(typeof root === 'string' ? root : undefined, preserveFocus === true)),
     vscode.commands.registerCommand('gitsprout.toggleAutoBuild', () => setSetting('hideCi', !readSettings().hideCi)),
     vscode.commands.registerCommand('gitsprout.copySha', async (arg?: unknown) => {
       const s = sha(arg);
       if (!s) return;
-      await vscode.env.clipboard.writeText(panel?.commit(s)?.sha ?? s);
+      await vscode.env.clipboard.writeText(commit(s)?.sha ?? s);
       vscode.window.setStatusBarMessage('Gitsprout: commit SHA copied', 2000);
     }),
     vscode.commands.registerCommand('gitsprout.copyMessage', async (arg?: unknown) => {
       const s = sha(arg);
-      const c = s ? panel?.commit(s) : undefined;
+      const c = s ? commit(s) : undefined;
       if (!c) return;
       await vscode.env.clipboard.writeText(c.body.trim() ? `${c.subject}\n\n${c.body.trim()}` : c.subject);
       vscode.window.setStatusBarMessage('Gitsprout: commit message copied', 2000);
     }),
-    onReveal((s) => panel?.revealCommit(s)),
+    // The ref trees show the active repo, so a tree click goes to that repo's tab (if open).
+    onReveal((s) => { const root = registry.active?.root; if (root) panels.get(root)?.revealCommit(s); }),
   );
 }

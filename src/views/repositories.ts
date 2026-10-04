@@ -24,7 +24,11 @@ export class RepositoriesView implements vscode.TreeDataProvider<RepoTreeNode>, 
     this.rebuild();
     this.disposables.push(
       this.emitter, this.view,
-      vscode.commands.registerCommand(ACTIVATE_CMD, (root: string) => registry.setActive(root)),
+      // A click: make the repo active and bring up its graph tab (opened once per repo), keeping focus in the tree.
+      vscode.commands.registerCommand(ACTIVATE_CMD, (root: string) => {
+        registry.setActive(root);
+        void vscode.commands.executeCommand('gitsprout.showGraph', root, true);
+      }),
       registry.onDidChangeRepos(() => this.refresh()),
       registry.onDidChangeRepo(() => this.refresh()),
       registry.onDidChangeActive((r) => { this.refresh(); if (r) this.reveal(r.root); }),

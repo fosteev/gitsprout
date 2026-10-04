@@ -32,7 +32,7 @@ Requires VS Code (or Cursor on a matching VS Code base) 1.90+ and git 2.24+ on t
 ## Usage
 
 - Gitsprout view in the activity bar: Repositories (multi-repo workspaces only), Branches, Remotes, Stashes, Tags. The status bar item shows the active repository and branch; the active repo follows the active editor.
-- Graph tab: `Gitsprout: Show Graph` (`⌥⌘G` on macOS, `Ctrl+Alt+G` elsewhere). The tab is restored after a window reload.
+- Graph tab: `Gitsprout: Show Graph` (`⌥⌘G` on macOS, `Ctrl+Alt+G` elsewhere). One tab per repository: clicking a repo in Repositories opens its graph the first time and brings the open tab back after that; focusing a graph tab makes its repo active. Tabs are restored after a window reload.
 - `Gitsprout: Switch Repository…`: `⌥⌘R` / `Ctrl+Alt+R`.
 - Commands (Command Palette, view toolbars and context menus): Checkout…, Create Branch…, Rename/Delete Branch, Stash… (push, apply, pop, drop), Fetch, Pull, Push, Fetch All.
 - Pull is `git pull --no-rebase --no-edit` (fast-forward when possible, a merge when diverged). Push of a branch without upstream is offered as "Publish Branch".

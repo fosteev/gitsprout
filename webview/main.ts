@@ -9,7 +9,7 @@ import {
   type FilesState, type RefPill, type RowEnv,
 } from './render';
 
-declare function acquireVsCodeApi(): { postMessage(m: FromWebview): void };
+declare function acquireVsCodeApi(): { postMessage(m: FromWebview): void; setState(s: unknown): void };
 const api = acquireVsCodeApi();
 const send = (m: FromWebview): void => api.postMessage(m);
 
@@ -181,7 +181,10 @@ function onState(s: State): void {
 window.addEventListener('message', (ev: MessageEvent<ToWebview>) => {
   const m = ev.data;
   switch (m.type) {
-    case 'state': onState(m); break;
+    case 'state':
+      api.setState({ root: m.repo.root }); // the serializer re-binds the tab to this repo after a window reload
+      onState(m);
+      break;
     case 'details':
       files.set(m.sha, m.error !== undefined ? { error: m.error } : m.files);
       if (m.sha === selected) renderDetails();
