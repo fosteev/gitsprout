@@ -3,6 +3,7 @@ import { COMMIT_COMMAND_IDS, registerCommitCommands } from './commands/commits';
 import { registerStubCommands } from './commands/stubs';
 import { MUTATION_COMMAND_IDS, registerMutations } from './commands/mutations';
 import { REF_COMMAND_IDS, registerRefViews } from './commands/refs';
+import { createWipActions } from './commands/wip';
 import { REPO_COMMAND_IDS, registerRepoCommands } from './commands/repos';
 import { GRAPH_COMMAND_IDS, registerGraph } from './graph/panel';
 import { createLog } from './util/log';
@@ -23,7 +24,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerRefViews(context, registry, log);
   const mutator = registerMutations(context, registry, log);
   registerCommitCommands(context, registry, log, mutator);
-  registerGraph(context, registry, log);
+  registerGraph(context, registry, log, createWipActions(registry, log, mutator));
   registerStubCommands(context, [...REPO_COMMAND_IDS, ...REF_COMMAND_IDS, ...MUTATION_COMMAND_IDS, ...COMMIT_COMMAND_IDS, ...GRAPH_COMMAND_IDS]);
 
   const checkScmDepth = createScmDepthCheck(registry, context.workspaceState, log);

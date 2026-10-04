@@ -7,6 +7,8 @@ import { makeRepoSummary, repoForPath, sameSummary, type FolderRef } from './mod
 
 const SUMMARY_CONCURRENCY = 8;
 const DEBOUNCE_MS = 300;
+/** A steady stream of events (a dev server writing a log in the tree) still gets a refresh this often. */
+const MAX_WAIT_MS = 2000;
 const GIT_WATCH = '{HEAD,index,FETCH_HEAD,ORIG_HEAD,packed-refs,refs/**}';
 /** Refs of a linked worktree live in the shared (common) git dir. */
 const COMMON_WATCH = '{packed-refs,refs/**}';
@@ -16,6 +18,8 @@ interface Entry {
   summary: RepoSummary;
   watchers: vscode.FileSystemWatcher[];
   timer?: NodeJS.Timeout;
+  /** When the first event of the pending debounce window arrived (cleared when the refresh runs). */
+  pendingSince?: number;
   /** The running `status` read; reads of one repo never overlap, so a stale result cannot overwrite a fresh one. */
   busy?: Promise<void>;
   /** One more read queued behind `busy`; later requests join it instead of spawning more processes. */
@@ -153,11 +157,14 @@ export class Registry implements vscode.Disposable {
     return ws;
   }
 
-  private schedule(root: string): void {
+  /** Debounced `refreshRepo` (DEBOUNCE_MS); every further call within the window restarts it, but never past MAX_WAIT_MS since the first one. */
+  schedule(root: string): void {
     const e = this.entries.get(root);
     if (!e) return;
+    const now = Date.now();
+    e.pendingSince ??= now;
     clearTimeout(e.timer);
-    e.timer = setTimeout(() => void this.refreshRepo(root), DEBOUNCE_MS);
+    e.timer = setTimeout(() => void this.refreshRepo(root), Math.max(0, Math.min(DEBOUNCE_MS, e.pendingSince + MAX_WAIT_MS - now)));
   }
 
   private disposeEntry(e: Entry): void {
@@ -175,6 +182,7 @@ export class Registry implements vscode.Disposable {
     if (!e) return Promise.resolve();
     clearTimeout(e.timer);
     e.timer = undefined;
+    e.pendingSince = undefined;
     if (e.queued) return e.queued;
     if (e.busy) {
       e.queued = e.busy.then(() => { e.queued = undefined; return this.startRead(e, root); });

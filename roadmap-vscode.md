@@ -21,7 +21,7 @@ A `.vsix` the user installs in VS Code and Cursor that replaces GitKraken for da
 | Build | esbuild script `scripts/build.mjs`: extension bundle (node, cjs, external `vscode`) + webview bundle (browser, iife) → `dist/`; `pnpm watch` for F5 |
 | Webview UI | plain TypeScript, string templates ported from the prototype, no framework; manual windowing (fixed 26 px rows) |
 | Git access | own runner over the system `git` (`execFile`, no shell); not the built-in `vscode.git` API. Git path: setting `git.path` if set, else `git` |
-| Staging/commit | not implemented; WIP row offers "Open Source Control" (`workbench.view.scm`) |
+| Staging/commit | WIP panel in the graph (see `roadmap-wip-panel.md`) |
 | Diffs | own `TextDocumentContentProvider`, scheme `gitsprout`, + `vscode.diff`. Untracked files open as a normal document |
 | Context menus in the graph | native `webview/context` menus via `data-vscode-context` |
 | Repo discovery | own scan of workspace folders, depth `gitsprout.scanDepth` (default 3); stop descending once a repo is found (nested repos ignored); skip `node_modules`, `vendor`, dot-dirs, symlinks; `.git` *file* pointing into `/modules/` (submodule) is skipped |
@@ -104,12 +104,19 @@ export type ToWebview =
   | { type: 'state'; repo: { root: string; name: string }; head: Head; commits: Commit[]; refs: Refs; wip: Status | null; settings: { ciPattern: string; hideCi: boolean; jira: Record<string, string> } }
   | { type: 'details'; sha: string; files: FileStat[] }
   | { type: 'reveal'; sha: string }                      // select + scroll (from tree views)
-  | { type: 'busy'; on: boolean };
+  | { type: 'busy'; on: boolean }
+  | { type: 'wipBusy'; on: boolean }                     // a WIP op is running: disable WIP buttons
+  | { type: 'committed'; sha: string }                   // clear the commit draft
+  | { type: 'amendInfo'; summary: string; description: string; pushed: boolean } | { type: 'amendInfo'; unborn: true };
 export type FromWebview =
   | { type: 'ready' }
   | { type: 'select'; sha: string }                      // extension answers with 'details'
   | { type: 'openCommitFile'; sha: string; file: FileStat }
   | { type: 'openWipFile'; file: FileChange; area: 'staged' | 'unstaged' }
+  | { type: 'stage'; files: FileChange[] } | { type: 'stageAll' } | { type: 'unstage'; files: FileChange[] } | { type: 'unstageAll' }
+  | { type: 'discard'; file: FileChange } | { type: 'discardAll' }
+  | { type: 'commit'; summary: string; description: string; amend: boolean; push: boolean }
+  | { type: 'amendInfo' }                                // extension answers with 'amendInfo'
   | { type: 'openScm' } | { type: 'switchRepo' } | { type: 'refresh' }
   | { type: 'toggleCi'; hideCi: boolean }
   | { type: 'openUrl'; url: string };

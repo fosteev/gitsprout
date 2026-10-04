@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  ACTION_LABEL, branchNameError, buildCheckoutEntries, errorPlan, existingBranchNote, localBranchFromArg, localNameOf, refNameFromArg, remoteBranchFromArg,
+  ACTION_LABEL, changedFileCount, committedFlash, discardAllConfirm, discardFileConfirm, matchFiles, branchNameError, buildCheckoutEntries, errorPlan, existingBranchNote, localBranchFromArg, localNameOf, refNameFromArg, remoteBranchFromArg,
   resolveStashIndex, rootFromArg, shQuote, stashShaFromArg, tagNameError, terminalCommand, upstreamCandidates,
 } from '../src/commands/messages';
 import { execFileSync } from 'node:child_process';
@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { COMMAND_IDS } from '../src/commands/ids';
 import { run } from '../src/git/run';
 import { GitError } from '../src/git/types';
-import type { Refs } from '../src/git/types';
+import type { FileChange, Refs } from '../src/git/types';
 import { MAX_COPY, parseFromWebview, stateMessage } from '../src/graph/validate';
 
 const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
@@ -206,5 +206,36 @@ describe('upstreamCandidates', () => {
       { name: 'origin/feat', sameName: true, current: false },
       { name: 'origin/a', sameName: false, current: true },
     ]);
+  });
+});
+
+describe('WIP panel helpers', () => {
+  const f = (path: string, o: Partial<FileChange> = {}): FileChange => ({ path, origPath: null, status: 'M', untracked: false, ...o });
+
+  it('matchFiles returns our own entries for the requested ones only', () => {
+    const list = [f('a'), f('b'), f('c', { origPath: 'old', status: 'R' })];
+    expect(matchFiles([f('b'), f('gone')], list)).toEqual([list[1]]);
+    expect(matchFiles([f('c')], list)).toEqual([]); // origPath differs
+    expect(matchFiles([f('c', { origPath: 'old', status: 'R' })], list)).toEqual([list[2]]);
+    expect(matchFiles([], list)).toEqual([]);
+  });
+
+  it('changedFileCount counts a partly staged file once', () => {
+    expect(changedFileCount({ staged: [f('a'), f('b')], unstaged: [f('a'), f('c')] })).toBe(3);
+    expect(changedFileCount({ staged: [], unstaged: [] })).toBe(0);
+  });
+
+  it('discard modal: untracked and intent-to-add rows say the file is deleted', () => {
+    expect(discardFileConfirm(f('x.ts'))).toEqual({ text: "Discard changes in 'x.ts'?", detail: "This can't be undone." });
+    expect(discardFileConfirm(f('n.ts', { status: 'A', untracked: true })).detail).toBe("The file will be deleted. This can't be undone.");
+    expect(discardFileConfirm(f('n.ts', { status: 'A' })).detail).toContain('deleted'); // intent-to-add
+    expect(discardFileConfirm(f('n.ts', { status: 'R', origPath: 'o' })).detail).toContain('deleted');
+  });
+
+  it('discard all modal and flash', () => {
+    expect(discardAllConfirm(1).text).toBe('Discard all changes in 1 file?');
+    expect(discardAllConfirm(3).text).toBe('Discard all changes in 3 files?');
+    expect(discardAllConfirm(3).detail).toContain('untracked files are deleted');
+    expect(committedFlash('abcdef0123456789')).toBe('Committed abcdef0');
   });
 });

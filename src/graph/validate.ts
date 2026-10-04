@@ -5,9 +5,10 @@ import type { FromWebview, GraphSettings, ToWebview } from './protocol';
 
 const STATUSES: readonly string[] = ['M', 'A', 'D', 'R', 'U'];
 
-/** A repo-relative path from the webview: non-empty, not absolute, no `..` segment, no NUL. */
+/** A repo-relative path from the webview: non-empty, not absolute, no `..` or `.git` segment (git itself never tracks one), no NUL. */
 export function isSafeRelPath(p: unknown): p is string {
-  return typeof p === 'string' && p.length > 0 && !p.startsWith('/') && !p.includes('\0') && !/(^|[\\/])\.\.([\\/]|$)/.test(p) && !/^[a-zA-Z]:/.test(p);
+  return typeof p === 'string' && p.length > 0 && !p.startsWith('/') && !p.startsWith('\\') && !p.includes('\0') && !/(^|[\\/])\.\.([\\/]|$)/.test(p)
+    && !/(^|[\\/])\.git([\\/]|$)/i.test(p) && !/^[a-zA-Z]:/.test(p);
 }
 
 const isPathOrNull = (p: unknown): p is string | null => p === null || isSafeRelPath(p);
@@ -26,17 +27,49 @@ export function asFileChange(f: unknown): FileChange | undefined {
   return { path: o.path, origPath: o.origPath, status: o.status, untracked: o.untracked };
 }
 
+/** A path inside some `.git` folder (also a nested repo's or a submodule's): the working-tree watcher skips it, the registry watches the git dir itself. */
+export const inGitDir = (p: string): boolean => /(^|[\\/])\.git([\\/]|$)/.test(p);
+
 /** Longest text the webview may put on the clipboard. */
 export const MAX_COPY = 1000;
+/** Longest commit summary / description accepted from the webview (UTF-16 code units). */
+export const MAX_COMMIT_TEXT = 64 * 1024;
+/** Most files one `stage`/`unstage` message may carry. */
+export const MAX_FILES = 10000;
+
+const asFileChanges = (a: unknown): FileChange[] | undefined => {
+  if (!Array.isArray(a) || a.length > MAX_FILES) return undefined;
+  const out: FileChange[] = [];
+  for (const x of a) {
+    const f = asFileChange(x);
+    if (!f) return undefined;
+    out.push(f);
+  }
+  return out;
+};
+const isText = (s: unknown): s is string => typeof s === 'string' && s.length <= MAX_COMMIT_TEXT;
 
 const isSha = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-f]{7,64}$/.test(s);
 
 /** Narrows an untrusted message to a well-formed `FromWebview`, or undefined. */
 export function parseFromWebview(m: unknown): FromWebview | undefined {
-  const o = m as { type?: unknown; sha?: unknown; file?: unknown; area?: unknown; hideCi?: unknown; url?: unknown; text?: unknown } | null;
+  const o = m as { type?: unknown; sha?: unknown; file?: unknown; area?: unknown; files?: unknown; summary?: unknown; description?: unknown; amend?: unknown; push?: unknown; hideCi?: unknown; url?: unknown; text?: unknown } | null;
   if (!o || typeof o !== 'object') return undefined;
   switch (o.type) {
-    case 'ready': case 'openScm': case 'switchRepo': case 'refresh': return { type: o.type };
+    case 'ready': case 'openScm': case 'switchRepo': case 'refresh':
+    case 'stageAll': case 'unstageAll': case 'discardAll': case 'amendInfo': return { type: o.type };
+    case 'stage': case 'unstage': {
+      const files = asFileChanges(o.files);
+      return files && files.length > 0 ? { type: o.type, files } : undefined;
+    }
+    case 'discard': {
+      const file = asFileChange(o.file);
+      return file ? { type: 'discard', file } : undefined;
+    }
+    case 'commit':
+      return isText(o.summary) && isText(o.description) && typeof o.amend === 'boolean' && typeof o.push === 'boolean'
+        ? { type: 'commit', summary: o.summary, description: o.description, amend: o.amend, push: o.push }
+        : undefined;
     case 'select': return isSha(o.sha) ? { type: 'select', sha: o.sha } : undefined;
     case 'openCommitFile': {
       const file = asFileStat(o.file);

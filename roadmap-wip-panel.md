@@ -1,6 +1,6 @@
 # WIP panel: stage and commit from the graph (GitKraken-style)
 
-> Status: stage 1 accepted 2026-10-04; next — stage 2 · created 2026-10-04 after the user approved the prototype. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-wip-panel.pending.md` (same format as `roadmap-vscode.pending.md`).
+> Status: stage 2 accepted 2026-10-04; next — stage 3 · created 2026-10-04 after the user approved the prototype. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-wip-panel.pending.md` (same format as `roadmap-vscode.pending.md`).
 
 ## Goal
 
@@ -125,18 +125,51 @@ Selecting the WIP row in a graph tab opens a staging and commit panel in the det
 
 The panel accepts the WIP messages and runs them through the mutator, with modals, busy and the working-tree watcher.
 
-- [ ] `src/graph/protocol.ts`:
+- [x] `src/graph/protocol.ts`:
   - FromWebview += `stage {files: FileChange[]}`, `stageAll {}`, `unstage {files: FileChange[]}`, `unstageAll {}`, `discard {file: FileChange}`, `discardAll {}`, `commit {summary: string; description: string; amend: boolean; push: boolean}`, `amendInfo {}`;
   - ToWebview += `wipBusy {on}`, `committed {sha}`, `amendInfo {summary, description, pushed: boolean} | {unborn: true}`
-- [ ] `src/graph/validate.ts`: cases for each new message (`asFileChange` + `isSafeRelPath` for files; strings capped at 64 KB; booleans checked); unit tests in `test/graph.render.test.ts` (or a new `test/graph.validate.test.ts`) for good and bad shapes
-- [ ] new `src/commands/wip.ts`: `createWipActions(registry, log, mutator)` → `{stage, stageAll, unstage, unstageAll, discard, discardAll, commit, amendInfo}`, each taking `root`. Files are re-checked against a fresh `repo.status()` (only files that are still in the list are acted on). Modals, progress, flash and push are as in Decisions; it returns whether the op succeeded
-- [ ] `src/graph/panel.ts`: `handle` cases call the actions with `this.repoRoot`; post `wipBusy` on/off around each; after a successful commit post `committed`; the actions object is injected through `show()`/the serializer (wire in `src/extension.ts`)
-- [ ] working-tree watcher per open panel (Decisions), disposed in the panel's `dispose`; a unit-free check: an F5 note in the pending file
-- [ ] `roadmap-vscode.md`: the Staging/commit row in the Decisions table → "WIP panel in the graph (see `roadmap-wip-panel.md`)"; the protocol listing gets the new messages
+- [x] `src/graph/validate.ts`: cases for each new message (`asFileChange` + `isSafeRelPath` for files; strings capped at 64 KB; booleans checked); unit tests in `test/graph.render.test.ts` (or a new `test/graph.validate.test.ts`) for good and bad shapes
+- [x] new `src/commands/wip.ts`: `createWipActions(registry, log, mutator)` → `{stage, stageAll, unstage, unstageAll, discard, discardAll, commit, amendInfo}`, each taking `root`. Files are re-checked against a fresh `repo.status()` (only files that are still in the list are acted on). Modals, progress, flash and push are as in Decisions; it returns whether the op succeeded
+- [x] `src/graph/panel.ts`: `handle` cases call the actions with `this.repoRoot`; post `wipBusy` on/off around each; after a successful commit post `committed`; the actions object is injected through `show()`/the serializer (wire in `src/extension.ts`)
+- [x] working-tree watcher per open panel (Decisions), disposed in the panel's `dispose`; a unit-free check: an F5 note in the pending file (the live check itself is **user**)
+- [x] `roadmap-vscode.md`: the Staging/commit row in the Decisions table → "WIP panel in the graph (see `roadmap-wip-panel.md`)"; the protocol listing gets the new messages
 
 **Done when:** `pnpm typecheck && pnpm test` green; `pnpm build` ok; validate tests cover every new message type.
 
 **Session:** sonnet, high; after stage 1.
+
+**Decisions (2026-10-04, session 2):**
+
+- **Layout.**
+  - `src/commands/wip.ts` (new): `createWipActions(registry, log, mutator): WipActions`, the only module that runs WIP git ops. It imports `vscode`, so it has no unit tests; its pure parts are in `src/commands/messages.ts` (section "WIP panel": `matchFiles`, `changedFileCount`, `discardDeletes`, `discardFileConfirm`, `discardAllConfirm`, `committedFlash`, the texts `NOTHING_TO_DISCARD_TO`, `NO_COMMIT_SUMMARY`, `NESTED_REPO_DISCARD`) and tested in `test/commands.messages.test.ts`.
+  - `src/graph/protocol.ts`, `src/graph/validate.ts` (new `inGitDir`, `MAX_COMMIT_TEXT`, `MAX_FILES`); tests in the new `test/graph.validate.test.ts`.
+  - `src/graph/panel.ts`: `handle` cases, `withWipBusy`, the watcher. `src/workspace/registry.ts`: `schedule(root)` made public (was private) for the watcher.
+- **Protocol.**
+  - FromWebview: `stage {files}`, `unstage {files}` (1..10000 `FileChange`, each through `asFileChange`; an empty list is rejected), `stageAll`, `unstageAll`, `discardAll`, `amendInfo` (no fields), `discard {file}`, `commit {summary, description, amend, push}` (strings up to 64K UTF-16 units each, booleans checked; an empty summary passes validation, the action refuses it).
+  - ToWebview: `wipBusy {on}`, `committed {sha}`, `amendInfo` = `{summary, description, pushed}` or `{unborn: true}`. `amendInfo` is a request/answer pair sharing one type name; the webview tells the direction by where it came from. The answer is not wrapped in `wipBusy` (read-only). No answer is posted when HEAD can't be read (a log line only).
+- **Actions injection.** `registerGraph(context, registry, log, wip)` takes the `WipActions` object; `extension.ts` builds it from the mutator returned by `registerMutations`. The serializer and `show()` pass the same object to each `GraphPanel`. Actions take `root` (the tab's `repoRoot`), so a tab never acts on another repo.
+- **Action contract.**
+  - `stage/unstage/stageAll/unstageAll/discard/discardAll` return `Promise<boolean>` (did the job; refusal, cancel and failure are `false` and are already shown). `commit` returns `Promise<string | undefined>`, the new HEAD sha (the panel needs it for `committed`); the other end of the contract is unchanged. `amendInfo` returns the `amendInfo` message or undefined.
+  - `stage`/`unstage`/`discard` read a fresh `status()` and act on the extension's **own** entries that match the request by `path` + `origPath`; none left (stale list) → `false` and `refreshRepo`. Stage All / Unstage All take no list (`add -A`, `reset`).
+  - `discard`: a `U` row or a vanished file → `false` + refresh (the webview must not offer Discard on `U`); a nested repository row (`path` ends with `/`) → info message, no git call; else the modal ("Discard changes in 'x'?", detail varies for untracked/intent-to-add via `discardDeletes`) then `mutate('discard')`.
+  - `discardAll`: unborn check (`headMessage() === null`) first → info "Nothing to discard to: the branch has no commits yet." (before the modal); N = distinct changed paths (a partly staged file counts once); N = 0 → refresh and `false`; modal; `mutate('discard')`.
+  - `commit`: `commitMessage` null → warning "Enter a commit summary." (backstop; the webview shows it inline) and no git call. Else `mutate(t, 'commit', …, 'Committing…')` (progress with Cancel); success → status-bar flash "Committed abc1234", return sha. `push && !amend` → `executeCommand('gitsprout.push', root)` fired **without awaiting**, so the panel does not stay `wipBusy` for a push; push has its own progress and error buttons. `push` together with `amend` is ignored (no force push in the extension; the webview doesn't offer it).
+  - Failure of a commit: `mutate` shows `errorPlan('commit')`; nothing is posted, so the webview keeps the draft.
+- **Panel.** `withWipBusy` counts running WIP ops: `wipBusy {on:true}` on the first, `{on:false}` after the last (a backstop; the webview also disables its buttons). `committed {sha}` is posted after `commit` resolves with a sha, i.e. after `mutate`'s refresh has queued the `state` reload. A `state` message may therefore arrive slightly before or after `committed`; the webview must not depend on the order.
+- **Watcher.** One `createFileSystemWatcher(new RelativePattern(repoRoot, '**'))` per `GraphPanel`, pushed into the panel's disposables (disposed with the tab, so it lives only while the tab is open, hidden or not). Any create/change/delete outside a `.git` folder (`inGitDir`, so also a nested repo's or submodule's `.git`) → `registry.schedule(repoRoot)` (the existing 300 ms debounce, then `refreshRepo`). Events while the tab is hidden still schedule a refresh; the hidden panel then just marks itself `dirty` (existing behaviour). A linked worktree's git dir lies outside the root and is watched by the registry itself.
+- **Deviations.** (1) `commit` returns the sha, not a boolean (above). (2) `amendInfo` uses `refs().head.sha` for `isOnRemote` rather than exposing the private `headSha`. (3) The pure helpers went to `messages.ts` (not `wip.ts`) so they can be unit-tested without `vscode`.
+- **Scope.** None beyond the roadmap; the "backstop" warning for an empty summary is user-visible only if the webview misbehaves.
+- **For stage 3.** The webview sends the new messages exactly as typed; it must (a) not offer Discard on `U` rows or on rows whose `path` ends with `/`, (b) treat `amendInfo` from the extension as `{summary, description, pushed}` or `{unborn: true}` and fill the draft only when the draft is still empty/unchanged, (c) clear the draft on `committed` and keep it otherwise, (d) not send `push: true` with `amend: true`. For the "Commit" button with nothing staged the webview sends `stageAll` (not `commit`). (e) send one file per row action (`stage`/`unstage` with a single-entry list); there is no folder-level stage/unstage in this roadmap, and a list of thousands of paths would overflow the command line (see Risks). (f) Paths containing a `.git` segment or starting with `\` are rejected by `validate.ts` (git never lists them).
+- **Not verified.** No live run: the panel wiring, modals, progress notification, the status-bar flash, `Commit and Push` and the watcher were not exercised in a real VS Code (no F5; there is no UI yet to send the messages). `wip.ts` has no automated tests (imports `vscode`); the `Repo` calls it makes are covered by stage 1's integration tests, its decision logic by the pure helpers' tests. The ordering of `committed` and `state` was reasoned, not observed.
+
+**Review (2026-10-04, stage 2 accepted).** Fixed at review (the first two found by the second pass):
+- Cancel during a slow post-commit hook with Commit and Push: the commit stands (stage 1 semantics) but the push no longer starts (`signal.aborted` after `Repo.commit`); the push also needs the root still registered (`gitsprout.push` falls back to the active repo for an unknown root).
+- `Registry.schedule` was a pure trailing debounce, so the new `**` watcher under a steady stream of events (a dev server writing a log in the tree, gitignored or not) starved every refresh of that repo, including the git-dir ones. It now fires at most `MAX_WAIT_MS` (2 s) after the first pending event.
+- `discard` re-reads `status()` inside the `mutate` work and skips (returns false, refresh) when the row vanished, became `U`, or changed between "deleted" and "restored" while the modal was open.
+- `matchFiles` keys on a `Set` (was O(requested × status)).
+- `isSafeRelPath` also rejects a `.git` segment (case-insensitive) and a leading `\`; the watcher tests `inGitDir` on the path relative to the root (an absolute root containing a `.git` segment ignored every event). Tests in `test/graph.validate.test.ts`.
+
+Left as is: the watcher is created even when a restored tab's root is not (yet) in the registry (the registry may finish discovery after the serializer runs; `schedule` ignores unknown roots); amend on an unborn branch is refused by git ("Commit failed: … nothing to amend") rather than by the action (the webview disables the checkbox); Discard All's N counts a nested repo's `dir/` row, which `clean -fd` keeps; argv length for huge `stage`/`unstage` lists (Risks).
 
 ### 3. Webview panel
 
@@ -219,7 +252,7 @@ Session 3 — Gitsprout WIP panel: webview · Model: sonnet, effort: high · aft
 
 Work in /Users/fost/Projects/gitsprout. Task: stage 3 of roadmap-wip-panel.md.
 
-Read: roadmap-wip-panel.md (Decisions — especially "Re-render rule" and "Draft persistence", stage 3); CLAUDE.md. Reference UI: prototype/vscode-multi.html — renderWip(), wipFiles(), wipCommit(), the `/* WIP panel */` CSS block, the wip-* cases in actBase, the 'wsum'/'wdesc' input handlers. Entry points: webview/main.ts:12 acquireVsCodeApi typing, :35-44 globals, :105 renderDetails, :162 onState, :185 setState, :216 details click delegation; webview/render.ts:98 fileRow, :147 wipDetailsHtml (replace); webview/format.ts splitPath; webview/styles.css (theme variables); test/graph.render.test.ts (style); vitest config for the per-file environment.
+Read: roadmap-wip-panel.md (Decisions — especially "Re-render rule" and "Draft persistence", stage 3, and stage 2's "Decisions (2026-10-04, session 2)" incl. "For stage 3" — the exact protocol); CLAUDE.md. Reference UI: prototype/vscode-multi.html — renderWip(), wipFiles(), wipCommit(), the `/* WIP panel */` CSS block, the wip-* cases in actBase, the 'wsum'/'wdesc' input handlers. Entry points: webview/main.ts:12 acquireVsCodeApi typing, :35-44 globals, :105 renderDetails, :162 onState, :185 setState, :216 details click delegation; webview/render.ts:98 fileRow, :147 wipDetailsHtml (replace); webview/format.ts splitPath; webview/styles.css (theme variables); test/graph.render.test.ts (style); vitest config for the per-file environment.
 
 Order: stage 3 checkboxes top to bottom; tick after checks. Write the DOM smoke test before reworking main.ts.
 DoD: pnpm typecheck && pnpm test green (incl. the smoke test), pnpm build ok, pnpm package builds the .vsix.
@@ -237,6 +270,7 @@ Don't commit or push. Last message — report: done (files) / deviations / not v
 - **Discard is destructive.**
   - Untracked files deleted by `clean` aren't recoverable; only the modal protects them.
   - Stashing before discarding would make the op recoverable but noisier. Rejected for now; revisit if the user asks.
+- **Long path lists.** `Repo.stage`/`unstage` put every path into one argv; `validate.ts` allows up to 10 000 files. Windows caps a command line at ~32K chars, so a few hundred deep paths would fail (`ENAMETOOLONG`). Harmless while the webview sends one file per row action (stage 3); if folder or multi-select staging ever comes, pass paths via `--pathspec-from-file=- --pathspec-file-nul` on stdin (git ≥ 2.25) or chunk them.
 - **Webview re-render.** The commit box must survive `state` messages; the stage 3 smoke test guards it. Without that test, a regression shows up only as "my text disappeared".
 - **`isOnRemote` on every amend toggle** runs `git branch -r --contains`, which is fine for one call per toggle. It is not done on every state.
 
