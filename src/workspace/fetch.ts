@@ -1,20 +1,26 @@
 import { mapPool } from '../util/pool';
-import type { RepoSummary } from '../git/types';
+import { GitError, type RepoSummary } from '../git/types';
 
 export interface FetchOutcome { root: string; name: string; ok: boolean; error?: string }
 
-/** Fetches every repo with bounded concurrency. Stops starting new fetches when `shouldStop()` turns true. */
+/**
+ * Fetches every repo with bounded concurrency. Stops starting new fetches when `shouldStop()` turns true.
+ * A fetch killed through an AbortSignal (`GitError` kind `Cancelled`) is not a failure: it counts as `skipped`.
+ */
 export async function fetchRepos(
   repos: readonly RepoSummary[],
   concurrency: number,
-  fetchOne: (repo: RepoSummary) => Promise<void>,
-  opts: { shouldStop?: () => boolean; onDone?: (outcome: FetchOutcome, done: number) => void } = {},
+  fetchOne: (repo: RepoSummary, signal?: AbortSignal) => Promise<void>,
+  opts: { signal?: AbortSignal; shouldStop?: () => boolean; onDone?: (outcome: FetchOutcome, done: number) => void } = {},
 ): Promise<{ outcomes: FetchOutcome[]; skipped: number }> {
   let done = 0;
-  const res = await mapPool(repos, concurrency, async (r): Promise<FetchOutcome> => {
+  const res = await mapPool(repos, concurrency, async (r): Promise<FetchOutcome | undefined> => {
     let o: FetchOutcome;
-    try { await fetchOne(r); o = { root: r.root, name: r.name, ok: true }; }
-    catch (e) { o = { root: r.root, name: r.name, ok: false, error: e instanceof Error ? e.message : String(e) }; }
+    try { await fetchOne(r, opts.signal); o = { root: r.root, name: r.name, ok: true }; }
+    catch (e) {
+      if (e instanceof GitError && e.kind === 'Cancelled') return undefined;
+      o = { root: r.root, name: r.name, ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
     opts.onDone?.(o, ++done);
     return o;
   }, opts.shouldStop);

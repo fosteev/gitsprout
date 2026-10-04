@@ -1,6 +1,7 @@
 // Pure checks for messages coming from the webview: the panel never trusts their shape.
 import type { FileChange, FileStat, FileStatus } from '../git/types';
-import type { FromWebview } from './protocol';
+import type { Commit, Refs, Status } from '../git/types';
+import type { FromWebview, GraphSettings, ToWebview } from './protocol';
 
 const STATUSES: readonly string[] = ['M', 'A', 'D', 'R', 'U'];
 
@@ -25,11 +26,14 @@ export function asFileChange(f: unknown): FileChange | undefined {
   return { path: o.path, origPath: o.origPath, status: o.status, untracked: o.untracked };
 }
 
+/** Longest text the webview may put on the clipboard. */
+export const MAX_COPY = 1000;
+
 const isSha = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-f]{7,64}$/.test(s);
 
 /** Narrows an untrusted message to a well-formed `FromWebview`, or undefined. */
 export function parseFromWebview(m: unknown): FromWebview | undefined {
-  const o = m as { type?: unknown; sha?: unknown; file?: unknown; area?: unknown; hideCi?: unknown; url?: unknown } | null;
+  const o = m as { type?: unknown; sha?: unknown; file?: unknown; area?: unknown; hideCi?: unknown; url?: unknown; text?: unknown } | null;
   if (!o || typeof o !== 'object') return undefined;
   switch (o.type) {
     case 'ready': case 'openScm': case 'switchRepo': case 'refresh': return { type: o.type };
@@ -44,6 +48,7 @@ export function parseFromWebview(m: unknown): FromWebview | undefined {
     }
     case 'toggleCi': return typeof o.hideCi === 'boolean' ? { type: 'toggleCi', hideCi: o.hideCi } : undefined;
     case 'openUrl': return typeof o.url === 'string' ? { type: 'openUrl', url: o.url } : undefined;
+    case 'copy': return typeof o.text === 'string' && o.text.length > 0 && o.text.length <= MAX_COPY ? { type: 'copy', text: o.text } : undefined;
     default: return undefined;
   }
 }
@@ -89,4 +94,11 @@ export function graphHtml(p: HtmlParts): string {
 <script nonce="${p.nonce}" src="${p.scriptUri}"></script>
 </body>
 </html>`;
+}
+
+/** The `state` message; `multiRepo` (more than one repo in the window) decides whether the toolbar shows the repo chip. */
+export function stateMessage(
+  repo: { root: string; name: string }, repoCount: number, refs: Refs, commits: Commit[], wip: Status | null, settings: GraphSettings,
+): Extract<ToWebview, { type: 'state' }> {
+  return { type: 'state', repo, multiRepo: repoCount > 1, head: refs.head, commits, refs, wip, settings };
 }

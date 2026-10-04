@@ -13,6 +13,9 @@ const LOCAL_CHANGES: Rule[] = [[/would be overwritten|local changes to the follo
 const CONFLICT: Rule[] = [[/^CONFLICT \(|Automatic merge failed|you have unmerged files|: needs merge$/m, 'Conflict']];
 const PUSH_REJECTED: Rule[] = [[/\[rejected\]/, 'PushRejected']];
 
+/** A fetch running longer than this in total is killed with its children (a dead VPN/remote would otherwise hang the progress forever). */
+export const FETCH_TIMEOUT_MS = 300_000;
+
 /** Methods that read: `GIT_OPTIONAL_LOCKS=0`. */
 const READ = { read: true } as const;
 
@@ -160,14 +163,14 @@ export class Repo {
   // ---- branches ----
 
   async checkout(name: string): Promise<void> {
-    await this.git(['switch', name], {}, LOCAL_CHANGES);
+    await this.git(['switch', '--end-of-options', name], {}, LOCAL_CHANGES);
   }
 
   async checkoutRemote(remote: string): Promise<void> {
     const local = remote.slice(remote.indexOf('/') + 1);
     const exists = await this.git(['rev-parse', '-q', '--verify', `refs/heads/${local}`], { ...READ, okCodes: [1] });
     if (exists.code === 0) await this.checkout(local);
-    else await this.git(['switch', '--track', remote], {}, LOCAL_CHANGES);
+    else await this.git(['switch', '--track', '--end-of-options', remote], {}, LOCAL_CHANGES);
   }
 
   async createBranch(name: string, start: string, checkout: boolean): Promise<void> {
@@ -179,22 +182,24 @@ export class Repo {
     });
     // --no-track: a branch started from `origin/main` must not track it, or Push would target `main`
     // (push.default=simple refuses; a forced refspec would push feature work to main). Push publishes it instead.
-    if (checkout) await this.git(['switch', '--no-track', '-c', name, start], {}, LOCAL_CHANGES);
-    else await this.git(['branch', '--no-track', name, start]);
+    // `--end-of-options`: a start ref from the trees may legally start with `-` (a cloned tag `--x`).
+    if (checkout) await this.git(['switch', '--no-track', '-c', name, '--end-of-options', start], {}, LOCAL_CHANGES);
+    else await this.git(['branch', '--no-track', '--end-of-options', name, start]);
   }
 
   async renameBranch(oldName: string, newName: string): Promise<void> {
-    await this.git(['branch', '-m', oldName, newName]);
+    await this.git(['branch', '-m', '--end-of-options', oldName, newName]);
   }
 
   async deleteBranch(name: string, force: boolean): Promise<void> {
-    await this.git(['branch', force ? '-D' : '-d', name], {}, [[/not fully merged/i, 'NotFullyMerged']]);
+    await this.git(['branch', force ? '-D' : '-d', '--end-of-options', name], {}, [[/not fully merged/i, 'NotFullyMerged']]);
   }
 
   // ---- network ----
 
-  async fetch(): Promise<void> {
-    await this.git(['fetch', '--all', '--prune']);
+  /** `signal` kills the running git (rejects with kind `Cancelled`); a stuck fetch is killed after `timeoutMs`. */
+  async fetch(opts: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<void> {
+    await this.git(['fetch', '--all', '--prune'], { signal: opts.signal, timeout: opts.timeoutMs ?? FETCH_TIMEOUT_MS });
   }
 
   /** Short name of the upstream of the current branch, or null (no upstream, detached, unborn). */
@@ -225,16 +230,18 @@ export class Repo {
     return configured ?? (remotes.includes('origin') ? 'origin' : remotes[0] ?? null);
   }
 
-  async pull(): Promise<void> {
+  /** `signal` kills git and its children (fetch + merge); rejects with kind `Cancelled`. */
+  async pull(opts: { signal?: AbortSignal } = {}): Promise<void> {
     if (!(await this.upstream())) {
       throw new GitError('NoUpstream', 'The current branch has no upstream branch', '', ['pull']);
     }
-    await this.git(['pull', '--no-rebase', '--no-edit'], {}, [...CONFLICT, ...LOCAL_CHANGES]);
+    await this.git(['pull', '--no-rebase', '--no-edit'], { signal: opts.signal }, [...CONFLICT, ...LOCAL_CHANGES]);
   }
 
-  async push(): Promise<void> {
+  /** `signal` kills git and its children (ssh/https helper); rejects with kind `Cancelled`. */
+  async push(opts: { signal?: AbortSignal } = {}): Promise<void> {
     if (await this.upstream()) {
-      await this.git(['push'], {}, PUSH_REJECTED);
+      await this.git(['push'], { signal: opts.signal }, PUSH_REJECTED);
       return;
     }
     const sym = await this.git(['symbolic-ref', '-q', '--short', 'HEAD'], { ...READ, okCodes: [1] });
@@ -242,7 +249,7 @@ export class Repo {
     if (!branch) throw new GitError('Other', 'HEAD is detached; check out a branch to push', '', ['symbolic-ref', 'HEAD']);
     const remote = await this.publishRemote(branch);
     if (!remote) throw new GitError('Other', 'No remote configured', '', ['remote']);
-    await this.git(['push', '-u', remote, 'HEAD'], {}, PUSH_REJECTED);
+    await this.git(['push', '-u', remote, 'HEAD'], { signal: opts.signal }, PUSH_REJECTED);
   }
 
   // ---- stash ----

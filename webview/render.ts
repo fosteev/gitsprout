@@ -131,7 +131,7 @@ export function commitDetailsHtml(c: Commit, files: FilesState, e: DetailsEnv): 
       f.origPath ? ` · from ${esc(f.origPath)}` : '',
       `${f.path}${f.add === null ? '  binary' : `  +${f.add} −${f.del}`}`)).join('');
   }
-  return `<div class="dh"><div class="row1">Commit <span class="sha">${c.sha}</span></div><h2>${subjectHtml(c.subject, e.jira, true)}</h2>`
+  return `<div class="dh"><div class="row1">Commit <span class="sha">${c.sha}</span><button class="vbtn" data-copy="${c.sha}" title="Copy commit SHA">Copy SHA</button></div><h2>${subjectHtml(c.subject, e.jira, true)}</h2>`
     + `${c.body.trim() ? `<div class="body">${esc(c.body.trim())}</div>` : ''}</div>`
     + `<dl class="dmeta"><dt>Author</dt><dd title="${esc(c.email)}">${esc(c.author)}</dd><dt>Date</dt><dd title="${esc(when)}">${fmtAgoLong(mins)}</dd>`
     + `<dt>Parent${merge ? 's' : ''}</dt><dd>${parents}</dd>`

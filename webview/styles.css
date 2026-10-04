@@ -100,6 +100,7 @@ button.jira:hover { text-decoration: underline; }
 .note code { font-family: var(--mono); }
 .vbtn { display: inline-flex; align-items: center; height: 26px; margin-top: 8px; padding: 0 12px; border: 0; border-radius: 2px; background: var(--accent); color: var(--accent-fg); }
 .vbtn:hover { background: var(--accent-hover); }
+.dh .row1 .vbtn { margin: 0 0 0 auto; height: 22px; padding: 0 8px; font-size: 11px; flex: none; }
 .nodetail { padding: 24px 16px; color: var(--muted); text-align: center; }
 
 .tr { display: flex; align-items: center; height: 22px; padding: 0 6px 0 14px; cursor: pointer; white-space: nowrap; }

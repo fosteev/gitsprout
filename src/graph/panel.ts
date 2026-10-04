@@ -7,7 +7,7 @@ import type { Commit, Head, Status } from '../git/types';
 import { onReveal } from '../views/refsStore';
 import type { Registry } from '../workspace/registry';
 import type { FromWebview, GraphSettings, ToWebview } from './protocol';
-import { graphHtml, isAllowedUrl, parseFromWebview, shaFromArg } from './validate';
+import { graphHtml, isAllowedUrl, parseFromWebview, shaFromArg, stateMessage } from './validate';
 
 export const VIEW_TYPE = 'gitsprout.graph';
 /** Ids implemented here; `registerStubCommands` skips them. */
@@ -117,7 +117,7 @@ class GraphPanel implements vscode.Disposable {
       this.head = refs.head;
       this.wip = wip;
       this.panel.title = `Graph · ${active.name}`;
-      const msg: ToWebview = { type: 'state', repo: { root: active.root, name: active.name }, head: refs.head, commits, refs, wip, settings };
+      const msg = stateMessage({ root: active.root, name: active.name }, this.registry.repos.length, refs, commits, wip, settings);
       const sig = JSON.stringify(msg);
       if (sig !== this.lastState) { this.lastState = sig; this.post(msg); }
     } catch (e) {
@@ -183,6 +183,10 @@ class GraphPanel implements vscode.Disposable {
         return;
       }
       case 'toggleCi': await setSetting('hideCi', m.hideCi); return;
+      case 'copy':
+        await vscode.env.clipboard.writeText(m.text);
+        vscode.window.setStatusBarMessage('Gitsprout: copied', 2000);
+        return;
       case 'openUrl':
         if (isAllowedUrl(m.url, readSettings().jira)) await vscode.env.openExternal(vscode.Uri.parse(m.url));
         return;
