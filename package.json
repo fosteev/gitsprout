@@ -216,6 +216,31 @@
         "category": "Gitsprout"
       },
       {
+        "command": "gitsprout.resetSoft",
+        "title": "Soft — keep changes staged",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.resetMixed",
+        "title": "Mixed — keep changes unstaged",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.resetHard",
+        "title": "Hard — discard changes",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.cherryPick",
+        "title": "Cherry Pick Commit",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.revert",
+        "title": "Revert Commit",
+        "category": "Gitsprout"
+      },
+      {
         "command": "gitsprout.createTag",
         "title": "Create Tag Here…",
         "category": "Gitsprout"
@@ -249,6 +274,12 @@
         "command": "gitsprout.setUpstream",
         "title": "Set Upstream…",
         "category": "Gitsprout"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "gitsprout.resetSubmenu",
+        "label": "Reset Current Branch to Here"
       }
     ],
     "menus": {
@@ -466,7 +497,27 @@
           "command": "gitsprout.copyCommitLink",
           "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
           "group": "2_copy@3"
+        },
+        {
+          "submenu": "gitsprout.resetSubmenu",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
+          "group": "3_modify@1"
+        },
+        {
+          "command": "gitsprout.cherryPick",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
+          "group": "3_modify@2"
+        },
+        {
+          "command": "gitsprout.revert",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
+          "group": "3_modify@3"
         }
+      ],
+      "gitsprout.resetSubmenu": [
+        { "command": "gitsprout.resetSoft", "group": "reset@1" },
+        { "command": "gitsprout.resetMixed", "group": "reset@2" },
+        { "command": "gitsprout.resetHard", "group": "reset@3" }
       ],
       "commandPalette": [
         {
@@ -555,6 +606,26 @@
         },
         {
           "command": "gitsprout.setUpstream",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.resetSoft",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.resetMixed",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.resetHard",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.cherryPick",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.revert",
           "when": "false"
         }
       ]

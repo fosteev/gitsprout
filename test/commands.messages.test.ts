@@ -47,7 +47,8 @@ describe('tag names and row roots', () => {
     expect(rootFromArg(undefined)).toBeUndefined();
   });
   it('errorPlan: cherry-pick/revert conflicts point to Source Control', () => {
-    expect(errorPlan({ kind: 'Conflict', message: 'x' }, 'cherryPick')).toMatchObject({ actions: ['scm'], text: expect.stringContaining('Cherry pick stopped') });
+    expect(errorPlan({ kind: 'Conflict', message: 'x' }, 'cherryPick')).toMatchObject({ actions: ['scm'], text: expect.stringContaining('git cherry-pick --abort') });
+    expect(errorPlan({ kind: 'Conflict', message: 'x' }, 'revert')).toMatchObject({ actions: ['scm'], text: expect.stringContaining('git revert --abort') });
     expect(errorPlan({ kind: 'Other', message: 'boom' }, 'tag')).toMatchObject({ text: 'Tag failed: boom' });
   });
 });

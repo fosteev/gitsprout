@@ -1,6 +1,6 @@
 # Git actions from GitKraken's context menus (batch 1)
 
-> Status: in progress · 2026-10-04 · stages 1–2 accepted (UI checks in the pending file), stage 3 next. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-git-actions.pending.md` (same format as `roadmap-vscode.pending.md`).
+> Status: in progress · 2026-10-04 · stages 1–3 accepted (UI checks in the pending file), stage 4 next. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-git-actions.pending.md` (same format as `roadmap-vscode.pending.md`).
 
 ## Goal
 
@@ -57,12 +57,12 @@ Row context carries the repo; mutations helpers become reusable from a new modul
 
 ### 3. Reset, Cherry Pick, Revert
 
-- [ ] `contributes.submenus`: `gitsprout.resetSubmenu` ("Reset Current Branch to Here"), placed in `webview/context` for commit rows (group `3_modify@1`), containing `resetSoft` / `resetMixed` / `resetHard` ("Soft — keep changes staged", "Mixed — keep changes unstaged", "Hard — discard changes")
-- [ ] `Repo.reset(mode, sha)`: `git reset --<mode> <sha> --` (the sha is hex-validated by `shaFromArg`, the trailing `--` stops path parsing); detached HEAD → info "Reset needs a branch checked out."; hard → modal "Reset 'b' to abc1234? Uncommitted changes will be lost." (button "Reset")
-- [ ] `cherryPick` and `revert` on commit rows (group `3_modify@2/3`): `git cherry-pick [-m 1] <sha>` / `git revert --no-edit [-m 1] <sha>` (`-m 1` when the row's commit has >1 parents — take parent count from `git rev-list --parents -n 1 <sha>`); rules `LOCAL_CHANGES` + `CONFLICT`
-- [ ] cherry-pick guards: sha already reachable from HEAD (`git merge-base --is-ancestor <sha> HEAD`, okCodes [1]) → info "abc1234 is already in 'b'."; git stopping on an empty pick (`/previous cherry-pick is now empty/` in stderr) → `git cherry-pick --abort` and info "Nothing to cherry-pick: the changes are already in 'b'."
-- [ ] success texts: "Reset 'b' to abc1234 (mixed)." / "Cherry-picked abc1234 onto 'b'." / "Reverted abc1234 on 'b'."; Conflict → error with "Open Source Control" ("Resolve the conflicts and commit in Source Control, or run `git cherry-pick --abort`.")
-- [ ] integration tests: each reset mode (HEAD moves, index/worktree state), cherry-pick clean + conflict (state = cherry-pick in progress, error kind Conflict), already-contained guard, revert of a normal and a merge commit
+- [x] `contributes.submenus`: `gitsprout.resetSubmenu` ("Reset Current Branch to Here"), placed in `webview/context` for commit rows (group `3_modify@1`), containing `resetSoft` / `resetMixed` / `resetHard` ("Soft — keep changes staged", "Mixed — keep changes unstaged", "Hard — discard changes")
+- [x] `Repo.reset(mode, sha)`: `git reset --<mode> <sha> --` (the sha is hex-validated by `shaFromArg`, the trailing `--` stops path parsing); detached HEAD → info "Reset needs a branch checked out."; hard → modal "Reset 'b' to abc1234? Uncommitted changes will be lost." (button "Reset")
+- [x] `cherryPick` and `revert` on commit rows (group `3_modify@2/3`): `git cherry-pick [-m 1] <sha>` / `git revert --no-edit [-m 1] <sha>` (`-m 1` when the row's commit has >1 parents — take parent count from `git rev-list --parents -n 1 <sha>`); rules `LOCAL_CHANGES` + `CONFLICT`
+- [x] cherry-pick guards: sha already reachable from HEAD (`git merge-base --is-ancestor <sha> HEAD`, okCodes [1]) → info "abc1234 is already in 'b'."; git stopping on an empty pick (`/previous cherry-pick is now empty/` in stderr) → `git cherry-pick --abort` and info "Nothing to cherry-pick: the changes are already in 'b'."
+- [x] success texts: "Reset 'b' to abc1234 (mixed)." / "Cherry-picked abc1234 onto 'b'." / "Reverted abc1234 on 'b'."; Conflict → error with "Open Source Control" ("Resolve the conflicts and commit in Source Control, or run `git cherry-pick --abort`.")
+- [x] integration tests: each reset mode (HEAD moves, index/worktree state), cherry-pick clean + conflict (state = cherry-pick in progress, error kind Conflict), already-contained guard, revert of a normal and a merge commit
 
 **Done when:** checks green; integration tests cover all bullets.
 

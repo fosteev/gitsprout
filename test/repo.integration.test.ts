@@ -576,3 +576,151 @@ describe('tags', () => {
     expect(await ra.linkRemote()).toBe('aaa'); // the branch's own remote wins over origin
   });
 });
+
+describe('reset, cherry-pick, revert', () => {
+  const head = (d: string) => g(d, 'rev-parse', 'HEAD').trim();
+  const status = (d: string) => g(d, 'status', '--porcelain').split('\n').filter(Boolean);
+
+  it('reset soft / mixed / hard: HEAD moves, index and worktree follow the mode', async () => {
+    const { a, ra } = scenario();
+    const c1 = head(a);
+    const c2 = commit(a, 'f.txt', 'two\n', 'Second');
+
+    await ra.reset('soft', c1);
+    expect(head(a)).toBe(c1);
+    expect(status(a)).toEqual(['A  f.txt']); // staged
+    g(a, 'commit', '-q', '-m', 'Second again');
+
+    await ra.reset('mixed', c1);
+    expect(head(a)).toBe(c1);
+    expect(status(a)).toEqual(['?? f.txt']); // kept, unstaged
+
+    g(a, 'add', '-A'); g(a, 'commit', '-q', '-m', 'Third');
+    await ra.reset('hard', c1);
+    expect(head(a)).toBe(c1);
+    expect(status(a)).toEqual([]);
+    expect(g(a, 'ls-files').trim()).toBe('README.md');
+    expect(c2).not.toBe(c1);
+  });
+
+  it('currentBranch: name, null when detached', async () => {
+    const { a, ra } = scenario();
+    expect(await ra.currentBranch()).toBe('main');
+    g(a, 'checkout', '-q', '--detach');
+    expect(await ra.currentBranch()).toBeNull();
+  });
+
+  it('parentCount and isInHead', async () => {
+    const { a, ra } = scenario();
+    const base = head(a);
+    g(a, 'switch', '-q', '-c', 'side');
+    const s1 = commit(a, 's.txt', 's\n', 'Side');
+    g(a, 'switch', '-q', 'main');
+    commit(a, 'm.txt', 'm\n', 'Main');
+    expect(await ra.isInHead(s1)).toBe(false);
+    g(a, 'merge', '-q', '--no-ff', '-m', 'Merge side', 'side');
+    expect(await ra.isInHead(s1)).toBe(true);
+    expect(await ra.parentCount(base)).toBe(0);
+    expect(await ra.parentCount(s1)).toBe(1);
+    expect(await ra.parentCount(head(a))).toBe(2);
+  });
+
+  it('cherry-pick: clean; the commit is new on top of HEAD', async () => {
+    const { a, ra } = scenario();
+    g(a, 'switch', '-q', '-c', 'side');
+    const s1 = commit(a, 's.txt', 's\n', 'Side change');
+    g(a, 'switch', '-q', 'main');
+    commit(a, 'm.txt', 'm\n', 'Main'); // HEAD differs from the pick's parent, so the pick makes a new commit
+    expect(await ra.isInHead(s1)).toBe(false);
+    expect(await ra.cherryPick(s1)).toBe(true);
+    expect(g(a, 'log', '-1', '--format=%s').trim()).toBe('Side change');
+    expect(head(a)).not.toBe(s1);
+    expect(status(a)).toEqual([]);
+  });
+
+  it('cherry-pick: conflict leaves the operation in progress, kind Conflict, plan opens Source Control', async () => {
+    const { a, ra } = scenario();
+    g(a, 'switch', '-q', '-c', 'side');
+    const s1 = commit(a, 'README.md', 'side\n', 'Side readme');
+    g(a, 'switch', '-q', 'main');
+    commit(a, 'README.md', 'main\n', 'Main readme');
+    let err: unknown;
+    try { await ra.cherryPick(s1); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(GitError);
+    expect((err as GitError).kind).toBe('Conflict');
+    expect(g(a, 'rev-parse', '-q', '--verify', 'CHERRY_PICK_HEAD').trim()).toBe(s1);
+    const plan = errorPlan(err as GitError, 'cherryPick', 'main');
+    expect(plan?.actions).toEqual(['scm']);
+    expect(plan?.text).toContain('git cherry-pick --abort');
+  });
+
+  it('cherry-pick: already in HEAD is detectable; an empty pick is aborted and reported as false', async () => {
+    const { a, ra } = scenario();
+    const base = head(a);
+    expect(await ra.isInHead(base)).toBe(true);
+
+    // The same change made independently on both branches: the pick is empty.
+    g(a, 'switch', '-q', '-c', 'side');
+    const s1 = commit(a, 'same.txt', 'same\n', 'Side same');
+    g(a, 'switch', '-q', 'main');
+    commit(a, 'same.txt', 'same\n', 'Main same');
+    const before = head(a);
+    expect(await ra.isInHead(s1)).toBe(false);
+    expect(await ra.cherryPick(s1)).toBe(false);
+    expect(head(a)).toBe(before);
+    expect(() => g(a, 'rev-parse', '-q', '--verify', 'CHERRY_PICK_HEAD')).toThrow(); // aborted, not left in progress
+    expect(status(a)).toEqual([]);
+  });
+
+  it('cherry-pick over conflicting local changes -> LocalChanges', async () => {
+    const { a, ra } = scenario();
+    g(a, 'switch', '-q', '-c', 'side');
+    const s1 = commit(a, 'README.md', 'side\n', 'Side readme');
+    g(a, 'switch', '-q', 'main');
+    put(a, 'README.md', 'dirty\n');
+    expect(await kind(ra.cherryPick(s1))).toBe('LocalChanges');
+  });
+
+  it('cherry-pick of a merge commit uses -m 1', async () => {
+    const { a, ra } = scenario();
+    g(a, 'switch', '-q', '-c', 'feat');
+    commit(a, 'feat.txt', 'f\n', 'Feat');
+    g(a, 'switch', '-q', 'main');
+    commit(a, 'm.txt', 'm\n', 'Main');
+    g(a, 'merge', '-q', '--no-ff', '-m', 'Merge feat', 'feat');
+    const merge = head(a);
+    g(a, 'switch', '-q', '-c', 'target', 'HEAD~1'); // main before the merge
+    expect(await ra.cherryPick(merge)).toBe(true);
+    expect(g(a, 'ls-files').split('\n')).toContain('feat.txt');
+  });
+
+  it('revert: a normal commit and a merge commit', async () => {
+    const { a, ra } = scenario();
+    const c = commit(a, 'x.txt', 'x\n', 'Add x');
+    await ra.revert(c);
+    expect(g(a, 'log', '-1', '--format=%s').trim()).toBe('Revert "Add x"');
+    expect(g(a, 'ls-files').split('\n')).not.toContain('x.txt');
+    // Reverting it again changes nothing: false, no revert left in progress.
+    const before = head(a);
+    expect(await ra.revert(c)).toBe(false);
+    expect(head(a)).toBe(before);
+    expect(g(a, 'status', '--porcelain').trim()).toBe('');
+
+    g(a, 'switch', '-q', '-c', 'feat');
+    commit(a, 'feat.txt', 'f\n', 'Feat');
+    g(a, 'switch', '-q', 'main');
+    commit(a, 'm.txt', 'm\n', 'Main');
+    g(a, 'merge', '-q', '--no-ff', '-m', 'Merge feat', 'feat');
+    await ra.revert(head(a));
+    expect(g(a, 'ls-files').split('\n')).not.toContain('feat.txt');
+    expect(g(a, 'ls-files').split('\n')).toContain('m.txt'); // the mainline side stays
+  });
+
+  it('revert conflict -> Conflict, revert in progress', async () => {
+    const { a, ra } = scenario();
+    const c = commit(a, 'README.md', 'one\n', 'One');
+    commit(a, 'README.md', 'two\n', 'Two');
+    expect(await kind(ra.revert(c))).toBe('Conflict');
+    expect(g(a, 'rev-parse', '-q', '--verify', 'REVERT_HEAD').trim()).toBe(c);
+  });
+});

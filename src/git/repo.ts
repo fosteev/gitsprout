@@ -229,6 +229,65 @@ export class Repo {
     return remote;
   }
 
+  // ---- reset, cherry-pick, revert ----
+
+  /** Current branch name, or null when HEAD is detached. */
+  async currentBranch(): Promise<string | null> {
+    const r = await this.git(['symbolic-ref', '-q', '--short', 'HEAD'], { ...READ, okCodes: [1] });
+    return r.code === 0 ? r.stdout.trim() || null : null;
+  }
+
+  /** Moves the current branch to `sha` (hex-validated by the caller). The trailing `--` stops path parsing. */
+  async reset(mode: 'soft' | 'mixed' | 'hard', sha: string): Promise<void> {
+    await this.git(['reset', `--${mode}`, sha, '--'], {}, LOCAL_CHANGES);
+  }
+
+  /** Number of parents of a commit (a merge has more than one). */
+  async parentCount(sha: string): Promise<number> {
+    const { stdout } = await this.git(['rev-list', '--parents', '-n', '1', sha, '--'], READ);
+    return Math.max(0, stdout.trim().split(/\s+/).filter(Boolean).length - 1);
+  }
+
+  /** Is the commit reachable from HEAD? */
+  async isInHead(sha: string): Promise<boolean> {
+    const r = await this.git(['merge-base', '--is-ancestor', sha, 'HEAD'], { ...READ, okCodes: [1] });
+    return r.code === 0;
+  }
+
+  /**
+   * Cherry-picks `sha` (`-m 1` for a merge commit). Resolves `false` when the pick turned out empty (the changes are
+   * already there): git stops in a "cherry-pick in progress" state, which is aborted here. Conflicts leave the
+   * operation in progress for Source Control and throw kind `Conflict`.
+   */
+  async cherryPick(sha: string): Promise<boolean> {
+    const mainline = (await this.parentCount(sha)) > 1 ? ['-m', '1'] : [];
+    try {
+      await this.git(['cherry-pick', ...mainline, sha], {}, [...LOCAL_CHANGES, ...CONFLICT]);
+      return true;
+    } catch (e) {
+      if (e instanceof GitError && /previous cherry-pick is now empty/.test(`${e.stderr}\n${e.stdout}`)) {
+        await this.git(['cherry-pick', '--abort']);
+        return false;
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Reverts `sha` with a new commit (`-m 1` for a merge commit). Resolves `false` when there is nothing to revert
+   * (the changes are already undone): git exits 1 with "nothing to commit" and leaves no revert in progress.
+   */
+  async revert(sha: string): Promise<boolean> {
+    const mainline = (await this.parentCount(sha)) > 1 ? ['-m', '1'] : [];
+    try {
+      await this.git(['revert', '--no-edit', ...mainline, sha], {}, [...LOCAL_CHANGES, ...CONFLICT]);
+      return true;
+    } catch (e) {
+      if (e instanceof GitError && e.kind !== 'Conflict' && /nothing to commit/.test(`${e.stderr}\n${e.stdout}`)) return false;
+      throw e;
+    }
+  }
+
   // ---- remotes and upstream ----
 
   async remotes(): Promise<string[]> {

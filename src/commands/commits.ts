@@ -3,11 +3,14 @@ import { shaFromArg } from '../graph/validate';
 import { branchLink, commitLink, splitRemoteRef, webBase } from '../git/remoteUrl';
 import type { Refs } from '../git/types';
 import type { Registry } from '../workspace/registry';
-import { localBranchFromArg, refNameFromArg, remoteBranchFromArg, rootFromArg, shortSha, tagNameError, upstreamCandidates } from './messages';
+import {
+  cherryPickDone, cherryPickEmpty, cherryPickHave, localBranchFromArg, refNameFromArg, remoteBranchFromArg, RESET_NEEDS_BRANCH, resetConfirm,
+  resetDone, revertDone, revertEmpty, rootFromArg, shortSha, tagNameError, upstreamCandidates, type ResetMode,
+} from './messages';
 import type { Mutator } from './mutations';
 
 /** Ids implemented here; `registerStubCommands` skips them. */
-export const COMMIT_COMMAND_IDS = ['createTag', 'createAnnotatedTag', 'deleteTag', 'pushTag', 'copyCommitLink', 'copyBranchLink', 'setUpstream'] as const;
+export const COMMIT_COMMAND_IDS = ['createTag', 'createAnnotatedTag', 'deleteTag', 'pushTag', 'copyCommitLink', 'copyBranchLink', 'setUpstream', 'resetSoft', 'resetMixed', 'resetHard', 'cherryPick', 'revert'] as const;
 
 /** Commands on commits (graph rows) and tags (Tags tree). Graph rows carry their repo root; trees act on the active repo. */
 export function registerCommitCommands(context: vscode.ExtensionContext, _registry: Registry, _log: (m: string) => void, m: Mutator): void {
@@ -124,6 +127,49 @@ export function registerCommitCommands(context: vscode.ExtensionContext, _regist
     await mutate(t, 'upstream', async () => {
       await t.repo.setUpstream(name, remote);
       return remote === null ? `'${name}' no longer tracks '${current}'.` : `'${name}' now tracks '${remote}'.`;
+    });
+  });
+
+  // ---- reset, cherry-pick, revert (graph rows; the row's own repo) ----
+
+  const reset = (mode: ResetMode) => async (arg?: unknown) => {
+    const sha = shaFromArg(arg);
+    const t = target(rootFromArg(arg));
+    if (!t) return;
+    if (!sha) { void vscode.window.showInformationMessage('Gitsprout: right-click a commit in the graph.'); return; }
+    let branch: string | null;
+    try { branch = await t.repo.currentBranch(); } catch (e) { await fail(e, 'reset', t.root); return; }
+    if (!branch) { void vscode.window.showInformationMessage(RESET_NEEDS_BRANCH); return; }
+    if (mode === 'hard') {
+      const ok = await vscode.window.showWarningMessage(resetConfirm(branch, sha), { modal: true }, 'Reset');
+      if (ok !== 'Reset') return;
+    }
+    await mutate(t, 'reset', async () => { await t.repo.reset(mode, sha); return resetDone(branch, sha, mode); });
+  };
+  reg('resetSoft', reset('soft'));
+  reg('resetMixed', reset('mixed'));
+  reg('resetHard', reset('hard'));
+
+  reg('cherryPick', async (arg?: unknown) => {
+    const sha = shaFromArg(arg);
+    const t = target(rootFromArg(arg));
+    if (!t) return;
+    if (!sha) { void vscode.window.showInformationMessage('Gitsprout: right-click a commit in the graph.'); return; }
+    await mutate(t, 'cherryPick', async () => {
+      const branch = (await t.repo.currentBranch()) ?? 'HEAD';
+      if (await t.repo.isInHead(sha)) return cherryPickHave(branch, sha);
+      return (await t.repo.cherryPick(sha)) ? cherryPickDone(branch, sha) : cherryPickEmpty(branch);
+    });
+  });
+
+  reg('revert', async (arg?: unknown) => {
+    const sha = shaFromArg(arg);
+    const t = target(rootFromArg(arg));
+    if (!t) return;
+    if (!sha) { void vscode.window.showInformationMessage('Gitsprout: right-click a commit in the graph.'); return; }
+    await mutate(t, 'revert', async () => {
+      const branch = (await t.repo.currentBranch()) ?? 'HEAD';
+      return (await t.repo.revert(sha)) ? revertDone(branch, sha) : revertEmpty(branch, sha);
     });
   });
 }

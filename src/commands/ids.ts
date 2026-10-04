@@ -8,6 +8,7 @@ export const COMMAND_IDS = [
   'toggleAutoBuild', 'toggleOnlyAttention', 'openSourceControl', 'repoShowGraph', 'repoFetch',
   'openStashFile', 'createTag', 'createAnnotatedTag', 'deleteTag', 'pushTag',
   'copyCommitLink', 'copyBranchLink', 'setUpstream',
+  'resetSoft', 'resetMixed', 'resetHard', 'cherryPick', 'revert',
 ] as const;
 
 export const VIEW_IDS = ['repositories', 'branches', 'remotes', 'stashes', 'tags'] as const;

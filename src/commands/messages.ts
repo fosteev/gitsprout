@@ -28,6 +28,18 @@ export const localNameOf = (remote: string): string => remote.slice(remote.index
 
 export const shortSha = (sha: string): string => sha.slice(0, 7);
 
+// ---- reset / cherry-pick / revert texts ----
+
+export type ResetMode = 'soft' | 'mixed' | 'hard';
+export const RESET_NEEDS_BRANCH = 'Gitsprout: Reset needs a branch checked out.';
+export const resetConfirm = (branch: string, sha: string): string => `Reset '${branch}' to ${shortSha(sha)}? Uncommitted changes will be lost.`;
+export const resetDone = (branch: string, sha: string, mode: ResetMode): string => `Reset '${branch}' to ${shortSha(sha)} (${mode}).`;
+export const cherryPickDone = (branch: string, sha: string): string => `Cherry-picked ${shortSha(sha)} onto '${branch}'.`;
+export const cherryPickHave = (branch: string, sha: string): string => `${shortSha(sha)} is already in '${branch}'.`;
+export const cherryPickEmpty = (branch: string): string => `Nothing to cherry-pick: the changes are already in '${branch}'.`;
+export const revertDone = (branch: string, sha: string): string => `Reverted ${shortSha(sha)} on '${branch}'.`;
+export const revertEmpty = (branch: string, sha: string): string => `Nothing to revert: the changes of ${shortSha(sha)} are already undone on '${branch}'.`;
+
 // ---- command arguments ----
 
 /** What a tree node / graph context / bare string stands for as a ref name: branch, remote branch or tag. */
@@ -204,7 +216,7 @@ function basePlan(e: { kind: ErrorKind; message: string }, op: Op, branch?: stri
         text: op === 'apply' || op === 'pop'
           ? 'The stash conflicts with your working tree. Resolve the conflicts in Source Control (a conflicting pop keeps the stash).'
           : op === 'cherryPick' || op === 'revert'
-            ? `${OP_WORD[op]} stopped on conflicts. Resolve them in Source Control, then commit there to continue.`
+            ? `Resolve the conflicts and commit in Source Control, or run \`git ${op === 'cherryPick' ? 'cherry-pick' : 'revert'} --abort\`.`
             : 'Merge conflicts. Resolve them in Source Control, then commit the merge.',
         level: 'error', actions: ['scm'],
       };

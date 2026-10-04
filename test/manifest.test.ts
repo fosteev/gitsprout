@@ -19,9 +19,21 @@ describe('manifest', () => {
   it('references only declared commands in menus and keybindings', () => {
     const ids = new Set(pkg.contributes.commands.map((c: { command: string }) => c.command));
     const used = [
-      ...Object.values<{ command: string }[]>(pkg.contributes.menus).flat().map((m) => m.command),
+      ...Object.values<{ command?: string }[]>(pkg.contributes.menus).flat().map((m) => m.command).filter((c): c is string => c !== undefined),
       ...pkg.contributes.keybindings.map((k: { command: string }) => k.command),
     ];
     for (const c of used) expect(ids.has(c), c).toBe(true);
+  });
+});
+
+describe('submenus', () => {
+  it('every submenu entry in a menu is declared and has its own menu', () => {
+    const declared = new Set(pkg.contributes.submenus.map((s: { id: string }) => s.id));
+    const used = Object.values<{ submenu?: string }[]>(pkg.contributes.menus).flat().map((m) => m.submenu).filter(Boolean);
+    expect(used.length).toBeGreaterThan(0);
+    for (const id of used) {
+      expect(declared.has(id), id).toBe(true);
+      expect(pkg.contributes.menus[id as string], id).toBeTruthy();
+    }
   });
 });
