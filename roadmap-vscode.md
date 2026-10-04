@@ -415,6 +415,7 @@ From the actual code (stage 4): tree commands receive the tree node, not a strin
 From the actual code (stage 5): `copySha` and `copyMessage` are already implemented in src/graph/panel.ts (`GRAPH_COMMAND_IDS`, skipped by `registerStubCommands`; they read the commit from the open graph and accept `{sha}` or a bare sha — hide them from the palette, don't re-register them). `showGraph` / `toggleAutoBuild` are real too. The graph reloads itself on `Registry.onDidRefreshRepo`, so after a mutation `registry.refreshRepo(root)` is enough. `createBranchFrom` is wired to the graph row context menu (`webview/context`) and receives the row context `{ sha, webviewSection, … }` there (`shaFromArg` in src/graph/validate.ts normalises it), and the tree node from the trees. `gitsprout.hideCi` is written by the graph itself.
 From the user (2026-10-04, stage 4 scope decision): keep auto-adding the parent repo of a workspace folder, but never climb to a repo whose root is the user's home directory (`os.homedir()`, dotfiles repo) — guard in `discoverWithParents` (src/workspace/discovery.ts), unit-test it.
 
+From the user (2026-10-04, stage 5 scope decisions): (1) add a "Copy SHA" button to the commit details card as in the prototype — new `FromWebview` message `copy { text }` handled in src/graph/panel.ts via `vscode.env.clipboard`, button in `commitDetailsHtml`; (2) hide the repo chip in the graph toolbar when the window has a single repo — add `multiRepo: boolean` to `state` (src/graph/protocol.ts) and set `hidden` on `#repo` in webview/main.ts. Unit-test the message validation and the state flag.
 Order: stage 6 checkboxes top to bottom.
 DoD: pnpm typecheck && pnpm test pass.
 Don't: staging/commit; reset/revert/cherry-pick.
@@ -430,6 +431,7 @@ Work in /Users/fost/Projects/gitsprout. Task: timing output, README install docs
 
 Read: roadmap-vscode.md section "7. Polish and package"; CLAUDE.md; README.md.
 From the actual code (stage 5): the graph `state` time is the body of `GraphPanel.load()` in src/graph/panel.ts (log + refs + status in parallel) — log it to the `Gitsprout` output channel there (the channel `log` function is already passed to `registerGraph`). The webview bundle emits `dist/webview.css` next to `dist/webview.js` (`.vscodeignore` already includes `dist/*.css`). README: mention the graph tab (⌥⌘G), `gitsprout.ciPattern` / `hideCi` / `logLimit` / `jira`.
+From the user (2026-10-04, stage 5 scope decision): restore the graph tab after window reload — `registerWebviewPanelSerializer('gitsprout.graph')` (re-attach `GraphPanel` to the revived panel) + `onWebviewPanel:gitsprout.graph` in activationEvents. This is the one allowed addition to "no new features".
 Already decided, don't ask: no marketplace/Open VSX publishing; README in English.
 DoD: pnpm package produces the .vsix; report contains the measured activation and graph times (run against /Users/fost/Projects read-only: summary and log only, no fetch).
 Don't: new features.
