@@ -52,7 +52,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .msg { padding: 32px 16px; color: var(--muted); text-align: center; }
 [hidden] { display: none !important; }
 
-.split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
+.split { flex: 1; min-height: 0; display: grid; position: relative; --pw: min(var(--dw, 340px), max(240px, 100% - 240px)); grid-template-columns: minmax(0, 1fr) var(--pw); }
+.sash { position: absolute; top: 0; bottom: 0; right: calc(var(--pw) - 3px); width: 6px; z-index: 3; cursor: col-resize; touch-action: none; }
+.sash:hover, .sash.on { background: var(--vscode-sash-hoverBorder, var(--accent)); transition: background .1s .3s; }
+.sash.on { transition: none; }
 .glist { overflow: auto; min-height: 0; padding-bottom: 10px; outline: none; --gw: 20px; }
 .gcols, .gr { display: grid; grid-template-columns: var(--gw) minmax(0, 1fr) 56px 120px 64px; column-gap: 10px; align-items: center; padding: 0 12px; }
 .gcols { height: 24px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 1; }
@@ -111,7 +114,7 @@ button.jira:hover { text-decoration: underline; }
 .tr .td { margin-left: 8px; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
 
 /* WIP panel (details pane while the WIP row is selected): staged/unstaged lists + commit box */
-@media (min-width: 901px) { .split.wipon { grid-template-columns: minmax(0, 1fr) 380px; } }
+.split.wipon { --pw: min(var(--dw, 380px), max(240px, 100% - 240px)); }
 .details.wipon { display: flex; flex-direction: column; overflow: hidden; }
 .wp { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .ib { width: 22px; height: 22px; border: 0; border-radius: 5px; background: none; color: var(--fg); display: inline-grid; place-items: center; padding: 0; flex: none; }
@@ -170,7 +173,8 @@ button.jira:hover { text-decoration: underline; }
 .wmenu .k { color: var(--muted); font-size: 11.5px; }
 
 @media (max-width: 900px) {
-  .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 42%); }
+  .split, .split.wipon { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 42%); }
+  .sash { display: none; }
   .details { border-left: 0; border-top: 1px solid var(--line); }
   /* the WIP panel needs more than 42% of a short window: give it the lower 60% and let the pane scroll as a whole */
   .split.wipon { grid-template-rows: minmax(0, 1fr) minmax(0, 60%); }

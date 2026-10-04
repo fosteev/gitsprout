@@ -69,11 +69,15 @@ let amendAsked: string | null | undefined;
 let wipMounted = false;
 /** The repo root the persisted state belongs to; a `state` for another root drops it. */
 let stateRoot: string | undefined;
+const PANE_MIN = 240, GRAPH_MIN = 240;
+/** Details pane width the user dragged the sash to; null = the CSS default. Not tied to a repo. */
+let paneWidth: number | null = null;
 
 function restore(): void {
   const raw = api.getState?.();
   if (typeof raw !== 'object' || raw === null) return;
-  const o = raw as { root?: unknown; draft?: unknown; view?: unknown; collapsed?: unknown };
+  const o = raw as { root?: unknown; draft?: unknown; view?: unknown; collapsed?: unknown; paneWidth?: unknown };
+  if (typeof o.paneWidth === 'number' && o.paneWidth > 0) paneWidth = o.paneWidth;
   if (typeof o.root === 'string') stateRoot = o.root;
   const d = o.draft as Partial<WipDraft> | null | undefined;
   if (d && typeof d.summary === 'string' && typeof d.description === 'string' && typeof d.amend === 'boolean') {
@@ -86,7 +90,7 @@ restore();
 
 function persist(): void {
   if (stateRoot === undefined) return;
-  api.setState({ root: stateRoot, draft, view: wipView, collapsed: [...collapsed] });
+  api.setState({ root: stateRoot, draft, view: wipView, collapsed: [...collapsed], paneWidth });
 }
 
 const app = document.getElementById('app') as HTMLElement;
@@ -106,6 +110,7 @@ app.innerHTML = `
       <div id="rows"></div>
     </div>
     <div class="details" id="details"></div>
+    <div class="sash" id="sash" title="Drag to resize, double-click to reset"></div>
   </div>`;
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const list = $('list'), rowsEl = $('rows'), details = $('details'), qEl = $<HTMLInputElement>('q');
@@ -373,6 +378,33 @@ list.addEventListener('scroll', () => {
   requestAnimationFrame(() => { rafPending = false; renderRows(); });
 }, { passive: true });
 new ResizeObserver(() => renderRows()).observe(list);
+
+// Sash between the graph and the details pane. The width lives in `--dw`; CSS clamps it to the split.
+const split = $('split'), sash = $('sash');
+const applyPaneWidth = (): void => {
+  if (paneWidth === null) split.style.removeProperty('--dw'); else split.style.setProperty('--dw', `${paneWidth}px`);
+};
+applyPaneWidth();
+sash.addEventListener('pointerdown', (ev) => {
+  if (ev.button !== 0) return;
+  ev.preventDefault();
+  sash.setPointerCapture(ev.pointerId);
+  sash.classList.add('on');
+  const right = split.getBoundingClientRect().right;
+  const move = (e: PointerEvent): void => {
+    paneWidth = Math.round(Math.min(Math.max(right - e.clientX, PANE_MIN), split.clientWidth - GRAPH_MIN));
+    applyPaneWidth();
+  };
+  const up = (): void => {
+    sash.removeEventListener('pointermove', move);
+    sash.classList.remove('on');
+    persist();
+  };
+  sash.addEventListener('pointermove', move);
+  sash.addEventListener('pointerup', up, { once: true });
+  sash.addEventListener('pointercancel', up, { once: true });
+});
+sash.addEventListener('dblclick', () => { paneWidth = null; applyPaneWidth(); persist(); });
 
 // Details card.
 details.addEventListener('click', (ev) => {
