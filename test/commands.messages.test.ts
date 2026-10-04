@@ -46,6 +46,15 @@ describe('tag names and row roots', () => {
     expect(rootFromArg('/r')).toBeUndefined();
     expect(rootFromArg(undefined)).toBeUndefined();
   });
+  it('errorPlan: a rejected commit shows git\'s line and Show Command Output; stage/discard stay generic', () => {
+    expect(errorPlan({ kind: 'Other', message: 'lint failed' }, 'commit')).toEqual({ text: 'Commit failed: lint failed', level: 'error', actions: ['output'] });
+    expect(errorPlan({ kind: 'Cancelled', message: 'Cancelled' }, 'commit')).toBeNull();
+    // a hook whose stderr classify() reads as Auth still offers the output
+    expect(errorPlan({ kind: 'Auth', message: 'authentication failed' }, 'commit')).toEqual({ text: 'Commit failed: authentication failed', level: 'error', actions: ['output'] });
+    for (const op of ['stage', 'unstage', 'discard'] as const) {
+      expect(errorPlan({ kind: 'Other', message: 'boom' }, op)).toEqual({ text: `${op[0].toUpperCase()}${op.slice(1)} failed: boom`, level: 'error', actions: [] });
+    }
+  });
   it('errorPlan: cherry-pick/revert conflicts point to Source Control', () => {
     expect(errorPlan({ kind: 'Conflict', message: 'x' }, 'cherryPick')).toMatchObject({ actions: ['scm'], text: expect.stringContaining('git cherry-pick --abort') });
     expect(errorPlan({ kind: 'Conflict', message: 'x' }, 'revert')).toMatchObject({ actions: ['scm'], text: expect.stringContaining('git revert --abort') });

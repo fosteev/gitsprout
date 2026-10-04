@@ -3,6 +3,7 @@ import {
   mergeFileStats, parseLog, parseNameStatusZ, parseNumstatZ, parseRefs, parseStashList, parseStatus, parseStatusSummary, parseTrack,
 } from '../src/git/parse';
 import { classify, gitEnv, lastLine } from '../src/git/run';
+import { commitMessage, splitMessage } from '../src/git/message';
 
 const z = (...recs: string[]) => recs.join('\0') + '\0';
 const H = 'a'.repeat(40);
@@ -178,5 +179,31 @@ describe('run helpers', () => {
     } finally {
       if (saved === undefined) delete process.env.GIT_DIR; else process.env.GIT_DIR = saved;
     }
+  });
+});
+
+describe('commit message helpers', () => {
+  it('commitMessage: trims, joins with a blank line, normalizes CRLF, null for an empty summary', () => {
+    expect(commitMessage('  Fix it  ', '')).toBe('Fix it');
+    expect(commitMessage('Fix it', '  \n ')).toBe('Fix it');
+    expect(commitMessage('Fix it   \r\n', '\r\nWhy:\r\n- a  \r\n- b\r\n\r\n')).toBe('Fix it\n\nWhy:\n- a  \n- b');
+    expect(commitMessage('Fix', 'para one\n\npara two')).toBe('Fix\n\npara one\n\npara two');
+    expect(commitMessage('', 'description only')).toBeNull();
+    expect(commitMessage('  \t ', 'x')).toBeNull();
+  });
+  it('splitMessage: first paragraph is the summary, the rest the description', () => {
+    expect(splitMessage('Subject\n')).toEqual({ summary: 'Subject', description: '' });
+    expect(splitMessage('Subject\n\nBody line\n')).toEqual({ summary: 'Subject', description: 'Body line' });
+    expect(splitMessage('Subject  \r\n\r\nBody  \r\n\r\nSecond para\r\n\r\n')).toEqual({ summary: 'Subject', description: 'Body  \n\nSecond para' });
+    expect(splitMessage('S\n  \nBody')).toEqual({ summary: 'S', description: 'Body' }); // whitespace-only line separates
+    expect(splitMessage('')).toEqual({ summary: '', description: '' });
+    expect(splitMessage('\n\nOnly after blanks\n\nbody')).toEqual({ summary: 'Only after blanks', description: 'body' });
+    // a multi-line first paragraph: only its first line is the summary, the rest moves to the description
+    expect(splitMessage('L1\nL2\n\nBody')).toEqual({ summary: 'L1', description: 'L2\n\nBody' });
+  });
+  it('round trip: commitMessage(splitMessage(x)) is x for a tidy message', () => {
+    const m = 'Add thing\n\nFirst paragraph.\n\nSecond paragraph\n- item';
+    const { summary, description } = splitMessage(m);
+    expect(commitMessage(summary, description)).toBe(m);
   });
 });

@@ -1,6 +1,6 @@
 # WIP panel: stage and commit from the graph (GitKraken-style)
 
-> Status: draft · 2026-10-04 · created after the user approved the prototype. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-wip-panel.pending.md` (same format as `roadmap-vscode.pending.md`).
+> Status: stage 1 accepted 2026-10-04; next — stage 2 · created 2026-10-04 after the user approved the prototype. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-wip-panel.pending.md` (same format as `roadmap-vscode.pending.md`).
 
 ## Goal
 
@@ -49,7 +49,7 @@ Selecting the WIP row in a graph tab opens a staging and commit panel in the det
   - Otherwise → "Stage Changes to Commit", which runs Stage All and does not commit.
   - The ▾ menu has "Commit and Push" only when not amending (no force push in the extension).
 - **Amend toggle.**
-  - On with an empty draft → prefill summary/description from HEAD (`git log -1 --format=%B`, split at the first blank line).
+  - On with an empty draft → prefill summary/description from HEAD (`git log -1 --format=%B`; the first line is the summary, the rest the description — changed at the stage 1 review from "split at the first blank line", see there).
   - Off while the draft still equals HEAD's message → clear it.
   - If HEAD is already on a remote (`isOnRemote`) → muted note under the checkbox: "HEAD is already pushed. Amending rewrites it; pushing will need --force."
   - Disabled on an unborn branch.
@@ -86,10 +86,10 @@ Selecting the WIP row in a graph tab opens a staging and commit panel in the det
 
 `Repo` gets the WIP operations, each pinned by integration tests on temp repos.
 
-- [ ] `src/git/repo.ts`: `stage(files: FileChange[])`, `stageAll()`, `unstage(files: FileChange[])`, `unstageAll()`, `discard(file: FileChange)`, `discardAll()`, `commit(message: string, opts: {amend: boolean; signal?: AbortSignal})`, `headMessage(): {summary, description} | null` (null when unborn). The exact git calls are in Decisions. `--literal-pathspecs` goes before the subcommand. Paths come from `FileChange` (`origPath` too for a staged rename)
-- [ ] pure `commitMessage(summary, description): string | null` (null = empty summary) and `splitMessage(body): {summary, description}`, next to the other pure helpers (`src/git/parse.ts` or a new `src/git/message.ts`), with literal-fixture unit tests (trailing spaces, CRLF, a description without a summary, a multi-paragraph body)
-- [ ] `src/commands/messages.ts`: `Op` += `'stage' | 'unstage' | 'discard' | 'commit'`; `errorPlan` gives `commit` + `Other` → "Commit failed: <message>" + Show Command Output; the others get the generic text
-- [ ] integration tests (style of `test/repo.integration.test.ts`):
+- [x] `src/git/repo.ts`: `stage(files: FileChange[])`, `stageAll()`, `unstage(files: FileChange[])`, `unstageAll()`, `discard(file: FileChange)`, `discardAll()`, `commit(message: string, opts: {amend: boolean; signal?: AbortSignal})`, `headMessage(): {summary, description} | null` (null when unborn). The exact git calls are in Decisions. `--literal-pathspecs` goes before the subcommand. Paths come from `FileChange` (`origPath` too for a staged rename)
+- [x] pure `commitMessage(summary, description): string | null` (null = empty summary) and `splitMessage(body): {summary, description}`, next to the other pure helpers (`src/git/parse.ts` or a new `src/git/message.ts`), with literal-fixture unit tests (trailing spaces, CRLF, a description without a summary, a multi-paragraph body)
+- [x] `src/commands/messages.ts`: `Op` += `'stage' | 'unstage' | 'discard' | 'commit'`; `errorPlan` gives `commit` + `Other` → "Commit failed: <message>" + Show Command Output; the others get the generic text
+- [x] integration tests (style of `test/repo.integration.test.ts`):
   - stage modified/untracked/deleted, plus a file named `-x` and one named `a*b.txt` (literal pathspecs);
   - unstage on a normal and an **unborn** branch, and a staged rename (both sides end up unstaged);
   - discard tracked (the staged part of a partially staged file survives) and untracked;
@@ -102,6 +102,24 @@ Selecting the WIP row in a graph tab opens a staging and commit panel in the det
 **Done when:** `pnpm typecheck && pnpm test` green; every bullet above is a passing test.
 
 **Session:** sonnet, high; first.
+
+**Decisions (2026-10-04, session 1):**
+
+- **Layout.** WIP methods are appended to `Repo` in `src/git/repo.ts` (section "WIP: stage, unstage, discard, commit"). The pure helpers live in the new `src/git/message.ts`. `Op` and `errorPlan` are in `src/commands/messages.ts`. Tests: `test/repo.integration.test.ts` (new `describe('WIP: ...')`), `test/parse.test.ts` (message helpers), `test/commands.messages.test.ts` (errorPlan).
+- **Contract (Repo).**
+  - `stage(files: FileChange[]): Promise<void>`, `unstage(files: FileChange[]): Promise<void>`: an empty list is a no-op; paths = `path` plus `origPath` (deduplicated).
+  - `stageAll()`, `unstageAll()`: `Promise<void>`.
+  - `discard(file: FileChange): Promise<void>`: untracked uses `clean`, tracked uses `restore --worktree`; intent-to-add (unstaged `A`/`R`, not untracked) uses `reset` + `clean` (+ `restore --worktree origPath` for `R`), i.e. the file is deleted; a `U` file and a nested repository (path ends with `/`) throw `GitError('Other')`.
+  - `discardAll(): Promise<void>`: **throws `GitError('Other', 'Nothing to discard to: the branch has no commits yet.')` on an unborn branch** (backstop; stage 2 should check `headMessage() === null` first and show the info message instead).
+  - `commit(message: string, opts: {amend: boolean; signal?: AbortSignal}): Promise<string>`: `commit --cleanup=whitespace -F -` with the message on stdin, plus `--amend`; returns the new HEAD sha. A cancel after the commit was made (slow post-commit hook) resolves with the new sha instead of rejecting `Cancelled`.
+  - `headMessage(): Promise<{summary, description} | null>`: null when unborn.
+  - Pure (`src/git/message.ts`): `commitMessage(summary, description): string | null` (trim, CRLF to LF, null on an empty summary) and `splitMessage(body): {summary, description}` (summary = the first line, description = the rest, trimmed).
+- **Errors.** `Op` += `stage | unstage | discard | commit`. `errorPlan(commit, …)` returns "Commit failed: <git's last line>" with actions `['output']` for any kind but Cancelled (a hook's text may classify as `Auth`/`NotARepo`); Cancelled returns null; the other new ops use the generic "<Op> failed: ...". A hook failure and "nothing to commit" both come out as kind `Other` (stderr/stdout kept on the `GitError`).
+- **Deviations.** None. The unborn-branch assumption (`git reset -q -- paths` and `git reset -q` work with no HEAD) holds on the local git; the `git rm --cached` fallback was not needed.
+- **Notes for stage 2.** `discard` takes a single file; the modal text "The file will be deleted…" is for `file.untracked` **and** for an intent-to-add row (unstaged `A`/`R`), tracked otherwise; a nested repository row (`path` ends with `/`) gets no Discard (it would only fail). `committed {sha}` and the "Committed abc1234" flash take the sha `Repo.commit` returns. `Repo.commit` does not check for an empty message; the caller uses `commitMessage` (null means no git call).
+- **Not verified.** Only the local git version (2.49 in the temp-repo tests); older git (< 2.23, no `restore`) is not covered. Signing/GPG failures are not tested (no key in the test env).
+
+**Review (2026-10-04, stage 1 accepted).** Tests added at review: paths with spaces, a leading `:` and non-ASCII (stage/unstage/discard); stage on a real merge conflict (`U` → resolved, the merge commit takes our message, `headMessage` on a merge commit); amend with nothing staged (message only, tree unchanged); a commit cancelled during a slow pre-commit hook (`Cancelled`, no commit, no `index.lock` left). Fixed at review (found by the second pass, each with a test): discard of an intent-to-add file truncated it to the empty index blob, and of an unstaged rename left both sides broken; discard of a nested repository was a silent no-op (now refused); Cancel during a slow post-commit hook reported `Cancelled` although the commit existed, so a retry would commit or amend twice (now success when HEAD moved); `splitMessage` put a multi-line first paragraph into the single-line summary (amend prefill would glue the lines); a commit failure classified as `Auth`/`NotARepo` lost Show Command Output; the output channel now logs git's stdout too (`nothing to commit` is there). Left as is: untracked discard leaves empty parent folders (git doesn't show them); staging a path that vanished since the last status fails with git's `pathspec did not match` (a refresh follows).
 
 ### 2. Protocol and extension wiring
 
@@ -187,7 +205,7 @@ Session 2 — Gitsprout WIP panel: protocol and extension wiring · Model: sonne
 
 Work in /Users/fost/Projects/gitsprout. Task: stage 2 of roadmap-wip-panel.md.
 
-Read: roadmap-wip-panel.md (Decisions, stage 2); CLAUDE.md. Entry points: src/graph/protocol.ts (FromWebview/ToWebview); src/graph/validate.ts:9 isSafeRelPath, :23 asFileChange, :35 parseFromWebview; src/graph/panel.ts:110 load, :154 onMessage, :165 handle, :190 openWipFile (re-check pattern), :238 panels map + show(), :276 serializer; src/commands/mutations.ts:23-77 Mutator/mutate (progress + signal), :92 push; src/commands/commits.ts (pattern: a module that takes the Mutator; modal confirm examples at :61, :147); src/workspace/registry.ts:144-161 watch/schedule, refreshRepo; src/extension.ts wiring.
+Read: roadmap-wip-panel.md (Decisions, stage 2, and stage 1's "Decisions (2026-10-04, session 1)" — the Repo contract you call); CLAUDE.md. Before Discard All, check `repo.headMessage() === null` and show the info message "Nothing to discard to: the branch has no commits yet." yourself (`Repo.discardAll()` throws `GitError('Other')` on an unborn branch only as a backstop). Entry points: src/graph/protocol.ts (FromWebview/ToWebview); src/graph/validate.ts:9 isSafeRelPath, :23 asFileChange, :35 parseFromWebview; src/graph/panel.ts:110 load, :154 onMessage, :165 handle, :190 openWipFile (re-check pattern), :238 panels map + show(), :276 serializer; src/commands/mutations.ts:23-77 Mutator/mutate (progress + signal), :92 push; src/commands/commits.ts (pattern: a module that takes the Mutator; modal confirm examples at :61, :147); src/workspace/registry.ts:144-161 watch/schedule, refreshRepo; src/extension.ts wiring.
 
 Order: stage 2 checkboxes top to bottom; tick after checks.
 DoD: pnpm typecheck && pnpm test green, pnpm build ok.

@@ -3,8 +3,9 @@ import {
   mergeFileStats, parseLog, parseNameStatusZ, parseNumstatZ, parseRefs, parseStashList, parseStatus, parseStatusSummary,
 } from './parse';
 import type { NameStatus } from './parse';
+import { splitMessage } from './message';
 import {
-  GitError, type Commit, type ErrorKind, type FileStat, type Refs, type Stash, type StashFile, type Status, type SummaryStatus,
+  GitError, type Commit, type ErrorKind, type FileChange, type FileStat, type Refs, type Stash, type StashFile, type Status, type SummaryStatus,
 } from './types';
 
 type Rule = [RegExp, ErrorKind];
@@ -422,4 +423,101 @@ export class Repo {
   async stashDrop(i: number): Promise<void> {
     await this.git(['stash', 'drop', `stash@{${i}}`]);
   }
+
+  // ---- WIP: stage, unstage, discard, commit ----
+
+  /**
+   * HEAD's message split into summary and description; null on an unborn branch. Used to prefill the amend box.
+   */
+  async headMessage(): Promise<{ summary: string; description: string } | null> {
+    if ((await this.headSha()) === null) return null;
+    const { stdout } = await this.git(['log', '-1', '--format=%B', 'HEAD', '--'], READ);
+    return splitMessage(stdout);
+  }
+
+  /** `add -A` for the files (untracked, deleted and conflicted ones too; for a conflicted file this marks it resolved). */
+  async stage(files: FileChange[]): Promise<void> {
+    const paths = pathsOf(files);
+    if (paths.length) await this.git(['--literal-pathspecs', 'add', '-A', '--', ...paths]);
+  }
+
+  async stageAll(): Promise<void> {
+    await this.git(['add', '-A']);
+  }
+
+  /** `reset -q` for the files; a rename contributes both sides, so both end up unstaged. Works on an unborn branch. */
+  async unstage(files: FileChange[]): Promise<void> {
+    const paths = pathsOf(files);
+    if (paths.length) await this.git(['--literal-pathspecs', 'reset', '-q', '--', ...paths]);
+  }
+
+  async unstageAll(): Promise<void> {
+    await this.git(['reset', '-q']);
+  }
+
+  /**
+   * Throws away an unstaged change. Tracked: restores the worktree from the index (a staged part survives).
+   * Untracked: deletes the file. Intent-to-add (`git add -N`, unstaged `A`/`R`): drops the index entry and deletes the
+   * file (restoring the rename's original). A conflicted (`U`) file and a nested repository (`dir/`) are refused.
+   */
+  async discard(file: FileChange): Promise<void> {
+    if (file.status === 'U') throw new GitError('Other', `Cannot discard a conflicted file: ${file.path}`, '', ['restore', file.path]);
+    // `clean -f` without `-ff` silently skips a nested repository; refuse instead of reporting a no-op as success.
+    if (file.path.endsWith('/')) throw new GitError('Other', `Cannot discard a nested repository: ${file.path}`, '', ['clean', file.path]);
+    if (file.untracked) {
+      await this.git(['--literal-pathspecs', 'clean', '-f', '-q', '--', file.path]);
+    } else if (file.status === 'A' || file.status === 'R') {
+      // The index holds an empty intent-to-add entry: `restore --worktree` would truncate the file to it.
+      await this.git(['--literal-pathspecs', 'reset', '-q', '--', file.path]);
+      await this.git(['--literal-pathspecs', 'clean', '-f', '-q', '--', file.path]);
+      if (file.origPath) await this.git(['--literal-pathspecs', 'restore', '--worktree', '--', file.origPath]);
+    } else {
+      await this.git(['--literal-pathspecs', 'restore', '--worktree', '--', file.path]);
+    }
+  }
+
+  /** `reset --hard` + `clean -fd`: staged and unstaged changes go back to HEAD, untracked files are deleted (ignored ones stay). Needs a commit to reset to. */
+  async discardAll(): Promise<void> {
+    if ((await this.headSha()) === null) {
+      throw new GitError('Other', 'Nothing to discard to: the branch has no commits yet.', '', ['reset', '--hard']);
+    }
+    await this.git(['reset', '--hard', '-q']);
+    await this.git(['clean', '-fd', '-q']);
+  }
+
+  /**
+   * Commits the index with `message` (stdin, so no editor and no argv limits) and returns the new HEAD sha. Hooks run and
+   * signing follows the user's config; a failure (hook, nothing to commit, GPG) is an `Other` GitError with git's output
+   * kept. `amend` rewrites HEAD. A cancel that lands after the commit was made (e.g. during a slow post-commit hook)
+   * counts as success: HEAD has moved, so a retry must not commit or amend again.
+   */
+  async commit(message: string, opts: { amend: boolean; signal?: AbortSignal }): Promise<string> {
+    const before = await this.headSha();
+    const args = ['commit', '--cleanup=whitespace', '-F', '-', ...(opts.amend ? ['--amend'] : [])];
+    try {
+      await this.git(args, { stdin: message, signal: opts.signal });
+    } catch (e) {
+      const after = e instanceof GitError && e.kind === 'Cancelled' ? await this.headSha() : before;
+      if (after === null || after === before) throw e;
+      return after;
+    }
+    const after = await this.headSha();
+    if (after === null) throw new GitError('Other', 'HEAD is missing after the commit', '', args);
+    return after;
+  }
+
+  private async headSha(): Promise<string | null> {
+    const r = await this.git(['rev-parse', '-q', '--verify', 'HEAD'], { ...READ, okCodes: [1] });
+    return r.code === 0 ? r.stdout.trim() || null : null;
+  }
+}
+
+/** Paths to act on: each file's path plus, for a rename, its original path; deduplicated. */
+function pathsOf(files: FileChange[]): string[] {
+  const out = new Set<string>();
+  for (const f of files) {
+    out.add(f.path);
+    if (f.origPath) out.add(f.origPath);
+  }
+  return [...out];
 }

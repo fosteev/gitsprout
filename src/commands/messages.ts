@@ -174,7 +174,8 @@ export function pushMessage(before: Sum, after: Pick<SummaryStatus, 'upstream'>)
 // ---- error -> notification ----
 
 export type Op = 'fetch' | 'pull' | 'push' | 'checkout' | 'create' | 'rename' | 'delete' | 'stash' | 'apply' | 'pop' | 'drop'
-  | 'tag' | 'reset' | 'cherryPick' | 'revert' | 'upstream' | 'compare';
+  | 'tag' | 'reset' | 'cherryPick' | 'revert' | 'upstream' | 'compare'
+  | 'stage' | 'unstage' | 'discard' | 'commit';
 export type ActionId = 'pull' | 'publish' | 'terminal' | 'scm' | 'stash' | 'output';
 export interface ErrorPlan { text: string; level: 'error' | 'warn' | 'info'; actions: ActionId[] }
 
@@ -186,6 +187,7 @@ const OP_WORD: Record<Op, string> = {
   fetch: 'Fetch', pull: 'Pull', push: 'Push', checkout: 'Checkout', create: 'Create branch', rename: 'Rename branch',
   delete: 'Delete branch', stash: 'Stash', apply: 'Apply stash', pop: 'Pop stash', drop: 'Drop stash',
   tag: 'Tag', reset: 'Reset', cherryPick: 'Cherry pick', revert: 'Revert', upstream: 'Set upstream', compare: 'Compare',
+  stage: 'Stage', unstage: 'Unstage', discard: 'Discard', commit: 'Commit',
 };
 const NETWORK: readonly Op[] = ['fetch', 'pull', 'push'];
 
@@ -197,6 +199,8 @@ export function errorPlan(e: { kind: ErrorKind; message: string }, op: Op, branc
   const plan = basePlan(e, op, branch);
   // Failed fetch/pull/push: the full git output (stderr) is in the `Gitsprout` channel. Not for the publish prompt (not a failure to read).
   if (plan && NETWORK.includes(op) && e.kind !== 'NoUpstream') plan.actions.push('output');
+  // A rejected commit (hook, nothing to commit, GPG): the details are in the output channel, whatever classify() made of a hook's text.
+  if (plan && op === 'commit' && !plan.actions.includes('output')) plan.actions.push('output');
   return plan;
 }
 

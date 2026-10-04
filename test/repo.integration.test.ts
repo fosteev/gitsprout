@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Repo } from '../src/git/repo';
-import { GitError } from '../src/git/types';
+import { GitError, type FileChange } from '../src/git/types';
 import { deleteDetail, errorPlan, pullMessage, pushMessage, resolveStashIndex, terminalCommand } from '../src/commands/messages';
 
 // Everything happens in a temp dir under an isolated git environment: no global/system config, no hooks,
@@ -761,5 +761,299 @@ describe('compare with working tree and patch', () => {
     expect(patch).toContain('+++ b/b.txt');
     expect(await repo.commitSubject(side)).toBe('Side: work');
     expect(await repo.formatPatch('HEAD')).toBe('');
+  });
+});
+
+describe('WIP: stage, unstage, discard, commit', () => {
+  const porcelain = (dir: string) => g(dir, 'status', '--porcelain=v1', '--untracked-files=all').split('\n').filter(Boolean);
+  const fc = (path: string, status: FileChange['status'] = 'M', extra: Partial<FileChange> = {}): FileChange =>
+    ({ path, origPath: null, status, untracked: false, ...extra });
+
+  it('stage: modified, untracked and deleted files; stageAll', async () => {
+    const dir = init('stage');
+    commit(dir, 'mod.txt', 'one\n', 'init');
+    commit(dir, 'del.txt', 'gone\n', 'del');
+    put(dir, 'mod.txt', 'two\n');
+    put(dir, 'new.txt', 'n\n');
+    put(dir, 'other.txt', 'o\n');
+    rmSync(join(dir, 'del.txt'));
+    const repo = new Repo(dir);
+    await repo.stage([fc('mod.txt'), fc('new.txt', 'A', { untracked: true }), fc('del.txt', 'D')]);
+    expect(porcelain(dir)).toEqual(['D  del.txt', 'M  mod.txt', 'A  new.txt', '?? other.txt']);
+    await repo.stage([]); // no-op
+    await repo.stageAll();
+    expect(porcelain(dir)).toContain('A  other.txt');
+    const st = await repo.status();
+    expect(st.unstaged).toEqual([]);
+    expect(st.staged.map((f) => f.path).sort()).toEqual(['del.txt', 'mod.txt', 'new.txt', 'other.txt']);
+  });
+
+  it('stage and unstage treat paths literally (-x, a*b.txt)', async () => {
+    const dir = init('literal');
+    commit(dir, 'seed.txt', 's\n', 'init');
+    put(dir, '-x', 'dash\n');
+    put(dir, 'a*b.txt', 'star\n');
+    put(dir, 'aXb.txt', 'x\n');
+    const repo = new Repo(dir);
+    await repo.stage([fc('-x', 'A', { untracked: true }), fc('a*b.txt', 'A', { untracked: true })]);
+    expect(porcelain(dir)).toEqual(['A  -x', 'A  a*b.txt', '?? aXb.txt']); // the glob did not catch aXb.txt
+    await repo.unstage([fc('a*b.txt', 'A')]);
+    expect(porcelain(dir)).toEqual(['A  -x', '?? a*b.txt', '?? aXb.txt']);
+    await repo.unstage([fc('-x', 'A')]);
+    expect(porcelain(dir)).toEqual(['?? -x', '?? a*b.txt', '?? aXb.txt']);
+  });
+
+  it('unstage: normal branch, unstageAll, a staged rename (both sides), and an unborn branch', async () => {
+    const dir = init('unstage');
+    commit(dir, 'mod.txt', 'one\n', 'init');
+    commit(dir, 'ren.txt', 'rename me please\nsome more lines\nand more\n', 'ren');
+    put(dir, 'mod.txt', 'two\n');
+    g(dir, 'mv', 'ren.txt', 'renamed.txt');
+    g(dir, 'add', '-A');
+    const repo = new Repo(dir);
+    const staged = (await repo.status()).staged;
+    const rename = staged.find((f) => f.status === 'R')!;
+    expect(rename).toMatchObject({ path: 'renamed.txt', origPath: 'ren.txt' });
+    await repo.unstage([rename]);
+    expect(porcelain(dir).sort()).toEqual(['?? renamed.txt', 'M  mod.txt', ' D ren.txt'].sort());
+    await repo.unstage([fc('mod.txt')]);
+    expect(porcelain(dir)).toContain(' M mod.txt');
+    g(dir, 'add', '-A');
+    await repo.unstageAll();
+    expect((await repo.status()).staged).toEqual([]);
+
+    const unborn = init('unborn');
+    put(unborn, 'a.txt', 'a\n');
+    put(unborn, 'b.txt', 'b\n');
+    g(unborn, 'add', '-A');
+    const ur = new Repo(unborn);
+    await ur.unstage([fc('a.txt', 'A')]);
+    expect(porcelain(unborn)).toEqual(['A  b.txt', '?? a.txt']);
+    await ur.unstageAll();
+    expect(porcelain(unborn)).toEqual(['?? a.txt', '?? b.txt']);
+  });
+
+  it('discard: tracked (a staged part survives) and untracked; refuses a conflicted file', async () => {
+    const dir = init('discard');
+    commit(dir, 'a.txt', 'v1\n', 'init');
+    commit(dir, 'b.txt', 'b1\n', 'b');
+    put(dir, 'a.txt', 'v2\n');
+    g(dir, 'add', 'a.txt');
+    put(dir, 'a.txt', 'v3\n'); // partially staged
+    put(dir, 'b.txt', 'b2\n');
+    put(dir, 'u/new.txt', 'untracked\n');
+    put(dir, 'keep.txt', 'k\n');
+    const repo = new Repo(dir);
+    await repo.discard(fc('a.txt'));
+    expect(readFileSync(join(dir, 'a.txt'), 'utf8')).toBe('v2\n');
+    expect(g(dir, 'show', ':a.txt')).toBe('v2\n');
+    await repo.discard(fc('b.txt'));
+    expect(readFileSync(join(dir, 'b.txt'), 'utf8')).toBe('b1\n');
+    await repo.discard(fc('u/new.txt', 'A', { untracked: true }));
+    expect(existsSync(join(dir, 'u/new.txt'))).toBe(false);
+    expect(existsSync(join(dir, 'keep.txt'))).toBe(true);
+    expect(await kind(repo.discard(fc('a.txt', 'U')))).toBe('Other');
+  });
+
+  it('discardAll: resets staged and unstaged, deletes untracked, keeps ignored; refuses an unborn branch', async () => {
+    const dir = init('discardall');
+    commit(dir, '.gitignore', 'ignored.log\n', 'init');
+    commit(dir, 'a.txt', 'v1\n', 'a');
+    put(dir, 'a.txt', 'v2\n');
+    g(dir, 'add', 'a.txt');
+    put(dir, 'a.txt', 'v3\n');
+    put(dir, 'staged-new.txt', 's\n');
+    g(dir, 'add', 'staged-new.txt');
+    put(dir, 'dir/untracked.txt', 'u\n');
+    put(dir, 'ignored.log', 'i\n');
+    const repo = new Repo(dir);
+    await repo.discardAll();
+    expect(porcelain(dir)).toEqual([]);
+    expect(readFileSync(join(dir, 'a.txt'), 'utf8')).toBe('v1\n');
+    expect(existsSync(join(dir, 'dir'))).toBe(false);
+    expect(existsSync(join(dir, 'ignored.log'))).toBe(true);
+
+    const unborn = init('discardall-unborn');
+    put(unborn, 'x.txt', 'x\n');
+    expect(await kind(new Repo(unborn).discardAll())).toBe('Other');
+    expect(existsSync(join(unborn, 'x.txt'))).toBe(true);
+  });
+
+  it('commit: two-paragraph message, first commit on an unborn branch; headMessage', async () => {
+    const dir = init('commit');
+    const repo = new Repo(dir);
+    expect(await repo.headMessage()).toBeNull();
+    put(dir, 'a.txt', 'a\n');
+    g(dir, 'add', 'a.txt');
+    await repo.commit('First commit\n\nSecond paragraph\nstill second', { amend: false });
+    expect(g(dir, 'log', '-1', '--format=%B').trimEnd()).toBe('First commit\n\nSecond paragraph\nstill second');
+    expect(await repo.headMessage()).toEqual({ summary: 'First commit', description: 'Second paragraph\nstill second' });
+    put(dir, 'b.txt', 'b\n');
+    g(dir, 'add', 'b.txt');
+    await repo.commit('Only summary', { amend: false });
+    expect(await repo.headMessage()).toEqual({ summary: 'Only summary', description: '' });
+    expect(g(dir, 'rev-list', '--count', 'HEAD').trim()).toBe('2');
+  });
+
+  it('amend: message replaced, parent unchanged, staged changes folded in', async () => {
+    const dir = init('amend');
+    const first = commit(dir, 'a.txt', 'a\n', 'Base');
+    commit(dir, 'b.txt', 'b\n', 'Old message');
+    put(dir, 'c.txt', 'c\n');
+    g(dir, 'add', 'c.txt');
+    await new Repo(dir).commit('New message\n\nWith body', { amend: true });
+    expect(g(dir, 'log', '-1', '--format=%B').trimEnd()).toBe('New message\n\nWith body');
+    expect(g(dir, 'rev-parse', 'HEAD~1').trim()).toBe(first);
+    expect(g(dir, 'rev-list', '--count', 'HEAD').trim()).toBe('2');
+    expect(g(dir, 'show', '--name-only', '--format=', 'HEAD').split('\n').filter(Boolean).sort()).toEqual(['b.txt', 'c.txt']);
+  });
+
+  it('commit: a failing pre-commit hook gives GitError(Other) with stderr, and no commit', async () => {
+    const dir = init('hook');
+    const base = commit(dir, 'a.txt', 'a\n', 'Base');
+    const hooks = join(dir, 'myhooks');
+    mkdirSync(hooks);
+    writeFileSync(join(hooks, 'pre-commit'), '#!/bin/sh\necho "lint failed: no semicolons" >&2\nexit 1\n');
+    chmodSync(join(hooks, 'pre-commit'), 0o755);
+    g(dir, 'config', 'core.hooksPath', hooks);
+    put(dir, 'b.txt', 'b\n');
+    g(dir, 'add', 'b.txt');
+    let err: unknown;
+    try { await new Repo(dir).commit('Should not land', { amend: false }); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(GitError);
+    expect((err as GitError).kind).toBe('Other');
+    expect((err as GitError).stderr).toContain('lint failed');
+    expect((err as GitError).message).toContain('lint failed');
+    expect(g(dir, 'rev-parse', 'HEAD').trim()).toBe(base);
+  });
+
+  it('commit: nothing staged is a GitError(Other)', async () => {
+    const dir = init('empty-commit');
+    commit(dir, 'a.txt', 'a\n', 'Base');
+    expect(await kind(new Repo(dir).commit('Empty', { amend: false }))).toBe('Other');
+  });
+
+  it('stage, unstage and discard paths with spaces, a leading colon and non-ASCII', async () => {
+    const dir = init('names');
+    for (const f of ['my file.txt', ':colon.txt', 'тест ü.txt']) commit(dir, f, 'v1\n', `add ${f}`);
+    for (const f of ['my file.txt', ':colon.txt', 'тест ü.txt']) put(dir, f, 'v2\n');
+    const repo = new Repo(dir);
+    const files = (await repo.status()).unstaged;
+    expect(files.map((f) => f.path).sort()).toEqual([':colon.txt', 'my file.txt', 'тест ü.txt']);
+    await repo.stage(files);
+    expect((await repo.status()).staged.map((f) => f.path).sort()).toEqual([':colon.txt', 'my file.txt', 'тест ü.txt']);
+    await repo.unstage(files);
+    expect((await repo.status()).staged).toEqual([]);
+    for (const f of files) await repo.discard(f);
+    expect((await repo.status()).unstaged).toEqual([]);
+    expect(readFileSync(join(dir, 'тест ü.txt'), 'utf8')).toBe('v1\n');
+  });
+
+  it('stage on a conflicted (U) file marks it resolved; the merge commit gets our message; headMessage reads it', async () => {
+    const dir = init('conflict');
+    commit(dir, 'c.txt', 'base\n', 'Base');
+    g(dir, 'checkout', '-q', '-b', 'side');
+    commit(dir, 'c.txt', 'side\n', 'Side');
+    g(dir, 'checkout', '-q', 'main');
+    commit(dir, 'c.txt', 'main\n', 'Main');
+    expect(() => g(dir, 'merge', '-q', 'side')).toThrow();
+    const repo = new Repo(dir);
+    const u = (await repo.status()).unstaged.find((f) => f.path === 'c.txt')!;
+    expect(u.status).toBe('U');
+    expect(await kind(repo.discard(u))).toBe('Other');
+    put(dir, 'c.txt', 'resolved\n');
+    await repo.stage([u]);
+    const st = await repo.status();
+    expect(st.unstaged).toEqual([]);
+    expect(st.staged.map((f) => [f.path, f.status])).toEqual([['c.txt', 'M']]);
+    await repo.commit('Merge side\n\nResolved c.txt', { amend: false });
+    expect(g(dir, 'rev-list', '--parents', '-n', '1', 'HEAD').trim().split(' ')).toHaveLength(3);
+    expect(await repo.headMessage()).toEqual({ summary: 'Merge side', description: 'Resolved c.txt' });
+  });
+
+  it('discard: intent-to-add file and an unstaged (intent-to-add) rename; a nested repository is refused', async () => {
+    const dir = init('ita');
+    commit(dir, 'old.txt', 'rename me please\nsome more lines\nand more\n', 'init');
+    put(dir, 'ita.txt', 'hi\n');
+    g(dir, 'add', '-N', 'ita.txt');
+    g(dir, 'mv', 'old.txt', 'new.txt');
+    g(dir, 'reset', '-q', '--', 'old.txt', 'new.txt');
+    g(dir, 'add', '-N', 'new.txt');
+    const repo = new Repo(dir);
+    const un = (await repo.status()).unstaged;
+    const ita = un.find((f) => f.path === 'ita.txt')!;
+    const ren = un.find((f) => f.path === 'new.txt')!;
+    expect(ita).toMatchObject({ status: 'A', untracked: false });
+    expect(ren).toMatchObject({ status: 'R', origPath: 'old.txt' });
+    await repo.discard(ita);
+    await repo.discard(ren);
+    expect(porcelain(dir)).toEqual([]);
+    expect(existsSync(join(dir, 'ita.txt'))).toBe(false);
+    expect(readFileSync(join(dir, 'old.txt'), 'utf8')).toBe('rename me please\nsome more lines\nand more\n');
+
+    const nested = join(dir, 'nested');
+    mkdirSync(nested);
+    g(nested, 'init', '-q');
+    put(nested, 'x.txt', 'x\n');
+    const n = (await repo.status()).unstaged.find((f) => f.path.startsWith('nested'))!;
+    expect(n.path).toBe('nested/');
+    expect(await kind(repo.discard(n))).toBe('Other');
+    expect(existsSync(join(nested, 'x.txt'))).toBe(true);
+  });
+
+  it('commit returns the new HEAD; a cancel during a slow post-commit hook still counts as committed', async () => {
+    const dir = init('post-commit');
+    commit(dir, 'a.txt', 'a\n', 'Base');
+    put(dir, 'b.txt', 'b\n');
+    g(dir, 'add', 'b.txt');
+    const repo = new Repo(dir);
+    expect(await repo.commit('Plain', { amend: false })).toBe(g(dir, 'rev-parse', 'HEAD').trim());
+    const hooks = join(dir, 'posthooks');
+    mkdirSync(hooks);
+    writeFileSync(join(hooks, 'post-commit'), '#!/bin/sh\nsleep 30\n');
+    chmodSync(join(hooks, 'post-commit'), 0o755);
+    g(dir, 'config', 'core.hooksPath', hooks);
+    put(dir, 'c.txt', 'c\n');
+    g(dir, 'add', 'c.txt');
+    const ac = new AbortController();
+    const before = g(dir, 'rev-parse', 'HEAD').trim();
+    const p = repo.commit('Landed', { amend: false, signal: ac.signal });
+    // abort only once the commit exists (the hook is then sleeping)
+    for (let i = 0; i < 100 && g(dir, 'rev-parse', 'HEAD').trim() === before; i++) await new Promise((r) => setTimeout(r, 50));
+    ac.abort();
+    const sha = await p;
+    expect(sha).toBe(g(dir, 'rev-parse', 'HEAD').trim());
+    expect(g(dir, 'log', '-1', '--format=%s').trim()).toBe('Landed');
+  });
+
+  it('amend with nothing staged only rewrites the message', async () => {
+    const dir = init('amend-msg');
+    const first = commit(dir, 'a.txt', 'a\n', 'Base');
+    const old = commit(dir, 'b.txt', 'b\n', 'Old');
+    await new Repo(dir).commit('Reworded', { amend: true });
+    expect(g(dir, 'log', '-1', '--format=%s').trim()).toBe('Reworded');
+    expect(g(dir, 'rev-parse', 'HEAD~1').trim()).toBe(first);
+    expect(g(dir, 'rev-parse', 'HEAD^{tree}').trim()).toBe(g(dir, 'rev-parse', `${old}^{tree}`).trim());
+  });
+
+  it('commit cancelled during a slow pre-commit hook: Cancelled, no commit, no index.lock left', async () => {
+    const dir = init('cancel');
+    const base = commit(dir, 'a.txt', 'a\n', 'Base');
+    const hooks = join(dir, 'slowhooks');
+    mkdirSync(hooks);
+    writeFileSync(join(hooks, 'pre-commit'), '#!/bin/sh\nsleep 30\n');
+    chmodSync(join(hooks, 'pre-commit'), 0o755);
+    g(dir, 'config', 'core.hooksPath', hooks);
+    put(dir, 'b.txt', 'b\n');
+    g(dir, 'add', 'b.txt');
+    const ac = new AbortController();
+    const p = new Repo(dir).commit('Never', { amend: false, signal: ac.signal });
+    await new Promise((r) => setTimeout(r, 500));
+    ac.abort();
+    expect(await kind(p)).toBe('Cancelled');
+    await new Promise((r) => setTimeout(r, 200));
+    expect(existsSync(join(dir, '.git', 'index.lock'))).toBe(false);
+    expect(g(dir, 'rev-parse', 'HEAD').trim()).toBe(base);
+    expect(porcelain(dir)).toContain('A  b.txt');
   });
 });
