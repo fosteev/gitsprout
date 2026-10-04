@@ -1,6 +1,6 @@
 # WIP panel: stage and commit from the graph (GitKraken-style)
 
-> Status: stage 2 accepted 2026-10-04; next — stage 3 · created 2026-10-04 after the user approved the prototype. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-wip-panel.pending.md` (same format as `roadmap-vscode.pending.md`).
+> Status: roadmap done — stages 1-3 accepted (stage 3 on 2026-10-04); waiting for the user's manual checks and scope confirmations in `roadmap-wip-panel.pending.md` · created 2026-10-04 after the user approved the prototype. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-wip-panel.pending.md` (same format as `roadmap-vscode.pending.md`).
 
 ## Goal
 
@@ -175,23 +175,23 @@ Left as is: the watcher is created even when a restored tab's root is not (yet) 
 
 The details pane renders the prototype's panel; a DOM smoke test pins the re-render rule.
 
-- [ ] pure `webview/wipTree.ts`: `buildTree(files): TreeNode` with folder compaction + stable sort (folders first, then files, by name); unit tests with literal fixtures (`pulse/widgets/a.php`, a root-level `.DS_Store`, a single-child chain, the same path in both areas)
-- [ ] `webview/render.ts`: replace `wipDetailsHtml` with builders ported from the prototype: `wipHeaderHtml(n, branch)`, `wipListsHtml(wip, view, collapsed)` (sections, Stage All / Unstage All, row actions open/discard/stage or unstage, letters, empty texts) and `wipCommitHtml(draft, ctx)` (amend checkbox + note, summary input with counter, description, primary button + ▾ per Decisions). Unit tests: escaping of paths, button label per state, no discard on `U` rows, Stage All hidden on an empty list
-- [ ] `webview/main.ts`:
+- [x] pure `webview/wipTree.ts`: `buildTree(files): TreeNode` with folder compaction + stable sort (folders first, then files, by name); unit tests with literal fixtures (`pulse/widgets/a.php`, a root-level `.DS_Store`, a single-child chain, the same path in both areas)
+- [x] `webview/render.ts`: replace `wipDetailsHtml` with builders ported from the prototype: `wipHeaderHtml(n, branch)`, `wipListsHtml(wip, view, collapsed)` (sections, Stage All / Unstage All, row actions open/discard/stage or unstage, letters, empty texts) and `wipCommitHtml(draft, ctx)` (amend checkbox + note, summary input with counter, description, primary button + ▾ per Decisions). Unit tests: escaping of paths, button label per state, no discard on `U` rows, Stage All hidden on an empty list
+- [x] `webview/main.ts`:
   - **WIP layout.** WIP selected → the details pane holds the header, `#wip-lists` (re-rendered on every `state`) and `#wip-commit` (built once per WIP selection, patched afterwards).
   - **Clicks** (delegated) post the stage 2 messages.
   - **Keys:** ⌘/Ctrl+Enter in summary/description = primary action.
   - **Draft and view state** go to `setState` (merged with `root`) and are restored on load.
   - **Server messages:** `committed` clears the draft; `wipBusy` disables WIP buttons; `amendInfo` fills the draft.
   - **WIP row label:** the graph's WIP row shows the draft summary when one is set, else `// WIP`, plus the file count (prototype `renderGraph`).
-- [ ] `webview/styles.css`: port the prototype's `/* WIP panel */` block onto VS Code theme variables (`--vscode-*`, as the rest of the file does); the details column is 380 px while WIP is selected (prototype `.split.wipon`)
-- [ ] DOM smoke test (devDependency `happy-dom`, or `jsdom` if it fits better; the file uses `// @vitest-environment happy-dom`). Stub `acquireVsCodeApi`, load `webview/main.ts`, then:
+- [x] `webview/styles.css`: port the prototype's `/* WIP panel */` block onto VS Code theme variables (`--vscode-*`, as the rest of the file does); the details column is 380 px while WIP is selected (prototype `.split.wipon`)
+- [x] DOM smoke test (devDependency `happy-dom`, or `jsdom` if it fits better; the file uses `// @vitest-environment happy-dom`). Stub `acquireVsCodeApi`, load `webview/main.ts`, then:
   - post a `state` with WIP and select WIP;
   - type a summary, then post another `state` → the input value and focus survive;
   - click stage on a row → a `stage` message is posted with that file;
   - click the primary button with an empty summary → error shown, no `commit` posted;
   - post `committed` → draft cleared
-- [ ] `README.md` Usage gets a short WIP-panel paragraph; `CHANGELOG.md` gets an "Unreleased" entry; `roadmap-wip-panel.pending.md` lists the user's checks (below)
+- [x] `README.md` Usage gets a short WIP-panel paragraph; `CHANGELOG.md` gets an "Unreleased" entry; `roadmap-wip-panel.pending.md` lists the user's checks (below)
 
 **Done when:** `pnpm typecheck && pnpm test` green (incl. the smoke test); `pnpm build` ok; `pnpm package` builds the `.vsix`.
 
@@ -207,6 +207,48 @@ The details pane renders the prototype's panel; a DOM smoke test pins the re-ren
   - the draft survives switching tabs and a window reload;
   - a file saved in the editor appears in Unstaged within ~1 s;
   - light and dark themes.
+
+**Decisions (2026-10-04, session 3):**
+
+- **Layout.**
+  - `webview/wipTree.ts` (new, pure): `buildTree(files)` (root `TreeDir`; nodes `TreeDir {path, label, children}` / `TreeFile {name, file, index}`), `dirPaths`.
+  - `webview/render.ts`: `wipHeaderHtml`, `wipBarHtml` (Collapse All + Path/Tree switch), `wipListsHtml`, `wipCommitHtml`, `wipPrimary`, `wipDirKeys`, `wipFileCount`, `canDiscard`; `wipDetailsHtml` is gone. `RowEnv` gets `wipSummary`; the WIP row reads `// WIP` or the draft summary plus "N file(s)" (was "Uncommitted Changes (N)").
+  - `webview/main.ts`: WIP state, `renderWip`/`renderWipLists`/`patchCommit`/`applyBusy`, delegated handlers. `webview/styles.css`: the WIP block, before the media queries. The `openScm` message stays in the protocol (the extension still handles it); the webview no longer sends it.
+  - Tests: `test/wip.tree.test.ts` (tree + html builders), `test/wip.webview.test.ts` (DOM smoke test, `happy-dom` devDependency); `test/graph.render.test.ts` lost the old `wipDetailsHtml` test. The smoke test imports `webview/main.ts`, so it is type-checked by `webview/tsconfig.json` (DOM lib) and excluded from the root `tsconfig.json`.
+- **Persistent commit box.** WIP selected → `details` holds `.wp` with three containers: `#wip-head` (header + bar) and `#wip-lists` (re-rendered on every `state`; `#wip-lists` is the scroller, so the scroll position survives) and `#wip-commit` (`wipCommitHtml`, built once when `wipMounted` is false). `patchCommit()` only touches ids: `#wcnt`, `#wbox.bad`, `#werr`, `#wamend`, `#wamendnote`, `#wprimary`, `#wmore`, `#wmenu`. The two inputs are never rewritten after mount (their values are set as properties once). Selecting another row resets `wipMounted`, so coming back rebuilds the box from the draft. The smoke test asserts the same `<input>` node, value, focus and caret after a `state`.
+- **setState scheme.** `{root, draft: {summary, description, amend}, view: 'path'|'tree', collapsed: string[]}`, written on every draft/view/collapse change and on every `state`. Restored at load; a first `state` with another `root` drops all of it. Collapsed keys: `sec:unstaged|staged` for sections, `<area>:<folder path>` for folders (the compacted chain's deepest path, so a chain that gains a file or sibling gets a new key and opens). Not persisted: the inline error, `wipBusy`, HEAD info.
+- **Amend.**
+  - Ticking sends `amendInfo`; the answer fills the draft only if it is still empty and Amend is on. `{unborn: true}` unticks.
+  - The note ("HEAD is already pushed…") shows while Amend is on and the answer's HEAD sha equals the current HEAD (the answer carries no sha; the webview records `state.head.sha` at receipt).
+  - Unticking clears the draft only when it still equals the last reported HEAD message.
+  - A restored draft with Amend on re-asks `amendInfo` once per HEAD sha (HEAD info is not persisted, so the note comes back).
+  - The checkbox is disabled when `head.sha` is null.
+- **Primary action.** The button with nothing staged sends `stageAll` without a summary (as the prototype: `data-act="stage-all"`); ⌘/Ctrl+Enter and the ▾ menu go through `commitAction`: empty summary → inline error + focus, no message; nothing staged and not amending → `stageAll`; else `commit` (`push` is never true with `amend`). One file per row action; Discard is not rendered on `U` rows or `path/` rows (and `onWipAct` re-checks).
+- **Busy.** `wipBusy` disables every `<button>` in the details pane and the Amend checkbox; git-sending actions are also ignored in the handler while busy (view-only actions — sections, folders, Path/Tree, Collapse All, the ▾ menu — still work). `state` and `committed` do not depend on each other's order (smoke-tested both ways).
+- **CSP.** The page forbids inline style, so the markup carries no `style=""`. Tree indentation is `data-d` + `el.style.setProperty('--d', …)` after render (CSSOM is allowed). A test asserts the builders emit no style attributes.
+- **Deviations from the prototype.**
+  - No "Open File" icon on rows (the protocol has no such message; clicking the row already opens the diff).
+  - The header count and the WIP row count are distinct paths (a partly staged file counts once), consistent with Discard All's confirmation; the prototype summed the two lists.
+  - Untracked rows keep status `A` with an "untracked" suffix (in this app `U` is a conflict).
+  - A rename shows "from <origPath>" in both views.
+  - The Commit ▾ menu is a small in-webview popup (closes on outside click and Escape), not a native menu: the extension has no message for it and a one-item menu is not worth one.
+  - Row action buttons are transparent rather than `display: none` until hover, so they stay reachable by Tab.
+  - Unstaged/Staged sections are collapsible, state stored with the folder keys.
+  - The prototype's "Commit with nothing staged?" prompt is not ported; Stage Changes to Commit covers it.
+  - The 380 px column applies only at widths above 900 px (below, the details pane sits under the graph).
+- **Scope.** None beyond the roadmap.
+- **Not verified.** No F5 and no browser (per the user's rule). Not seen with real eyes: layout and spacing at 380 px, the row action buttons, the ▾ menu position, light/dark themes, narrow-window layout, focus rings. happy-dom has no layout, so the CSS and `ResizeObserver`/virtual scrolling behaviour of the graph list are untested; the smoke test also does not cover the extension side (panel posts, modals) or typing with a real IME.
+
+**Review (2026-10-04, stage 3 accepted).** Two passes (own + an independent reviewer). Fixed at review:
+- No local guard between a click and the extension's `wipBusy`: a double click on Commit or a held ⌘/Ctrl+Enter sent 2-3 `commit` messages (`mutate`'s guard then showed "another operation is still running"), and a quick second click on a row could stage the neighbour after the list re-rendered. `main.ts` now sends git actions through `sendWip`, which sets `wipPending` ('sent' → cleared by `wipBusy{on:true}`, 3 s fallback if the message never gets an answer; 'done' after `wipBusy{on:false}` → cleared by the next `state`, 0.6 s fallback). While pending, git buttons are disabled and git acts ignored.
+- ⌘/Ctrl+Enter ignored during an IME composition (`isComposing` / keyCode 229) and on key repeat.
+- A draft with Amend on stuck on a branch that became unborn (`checkout --orphan`, or a restored draft): the disabled checkbox stayed checked and "Amend Previous Commit" failed in git. `onState` now unticks Amend when `head.sha` is null.
+- `applyBusy` disabled every button, including the view-only Path/Tree and Collapse All (contradicting session 3's decision); now only git buttons and ▾.
+- Narrow window (≤ 900 px): the WIP pane got 42% of the height with `overflow: hidden`, so a short editor squeezed the lists to nothing and cut the Commit button. There the WIP pane now gets 60% and scrolls as a whole (lists at least 96 px).
+- Menu shadow uses `--vscode-widget-shadow` (was a hard-coded rgba); `package.json` reformatting noise from `pnpm add` reverted.
+- Tests: 3 new smoke cases (double click / repeat / IME, the pending timeout, unborn Amend); the Commit/Commit and Push case now simulates the extension's round-trip between sends.
+
+Left as is: collapsed keys of vanished folders accumulate in the webview state (small strings, per tab); the `amendInfo` answer is bound to the HEAD seen at receipt (a HEAD moving between the request and the answer could prefill the old message; the pushed note corrects itself on the next ask); in the Path view a nested repo `dir/` row duplicates its folder label; `.wpsh`/`.dir` rows are `role="button"` without `tabindex` (sections and folders are mouse-only, the row buttons are reachable by Tab); arrow keys with the ▾ menu open move the graph selection, not the menu items; the ▾ menu stays open across a `state` (closes on outside click, Escape and busy).
 
 ## Session prompts
 

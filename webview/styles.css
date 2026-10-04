@@ -110,9 +110,72 @@ button.jira:hover { text-decoration: underline; }
 .tr .tl { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tr .td { margin-left: 8px; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
 
+/* WIP panel (details pane while the WIP row is selected): staged/unstaged lists + commit box */
+@media (min-width: 901px) { .split.wipon { grid-template-columns: minmax(0, 1fr) 380px; } }
+.details.wipon { display: flex; flex-direction: column; overflow: hidden; }
+.wp { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ib { width: 22px; height: 22px; border: 0; border-radius: 5px; background: none; color: var(--fg); display: inline-grid; place-items: center; padding: 0; flex: none; }
+.ib:hover { background: var(--hover); }
+.ib:disabled, .vbtn:disabled, .wpsh .go:disabled, .seg button:disabled, .wpbar .lnk:disabled { opacity: .45; cursor: default; }
+.ib:disabled:hover { background: none; }
+.wph { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.wph .t { flex: 1; min-width: 0; text-align: center; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wph .brp { font-size: 12px; padding: 1px 7px; border-radius: 3px; color: var(--fg-strong); background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.wph .ib.danger { color: var(--deleted); }
+.wpbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px 2px; }
+.wpbar .lnk { font-size: 12px; font-family: inherit; color: var(--muted); }
+.seg { margin-left: auto; display: inline-flex; border: 1px solid var(--input-line); border-radius: 3px; overflow: hidden; }
+.seg button { height: 22px; padding: 0 9px; border: 0; background: none; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--input-line); }
+.seg button:hover { color: var(--fg); }
+.seg button[aria-pressed="true"] { background: var(--sel); color: var(--sel-fg); }
+.wpl { flex: 1; min-height: 0; overflow: auto; padding-bottom: 6px; }
+.wpsh { display: flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px 0 4px; font-size: 12.5px; font-weight: 600; cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1; background: var(--bg); border-top: 1px solid var(--line); }
+.wps:first-child .wpsh { border-top: 0; }
+.wpsh .n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.wpsh .go { margin-left: auto; height: 22px; padding: 0 9px; border-radius: 3px; font-size: 12px; font-weight: 500; border: 1px solid var(--added); color: var(--added); background: color-mix(in srgb, var(--added) 14%, transparent); }
+.wpsh .go.un { border-color: var(--deleted); color: var(--deleted); background: color-mix(in srgb, var(--deleted) 14%, transparent); }
+.wpsh .go:hover:not(:disabled) { filter: brightness(1.2); }
+.wps .tr { padding-left: calc(var(--d, 0) * 12px + 10px); user-select: none; }
+.tr.w .tw { width: 16px; flex: none; display: grid; place-items: center; }
+.tr.w .ti { width: 20px; flex: none; display: grid; place-items: center; margin-right: 4px; color: var(--muted); }
+.tr.w .ta { display: flex; gap: 1px; margin-left: 4px; opacity: 0; flex: none; }
+.tr.w:hover .ta, .tr.w:focus-within .ta { opacity: 1; }
+.tr.w .ta .ib { width: 20px; height: 20px; }
+.tr.w .st { margin: 0 0 0 6px; }
+.wps .empty { padding: 2px 16px 10px 30px; color: var(--muted); font-size: 12px; }
+.wpc { position: relative; border-top: 1px solid var(--line); padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 8px; }
+.wpc .note { padding: 0; }
+.amend { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; user-select: none; width: max-content; }
+.amend input { margin: 0; accent-color: var(--accent); }
+.cbox { border: 1px solid var(--input-line); background: var(--input); border-radius: 3px; }
+.cbox:focus-within { border-color: var(--vscode-focusBorder, var(--accent)); }
+.cbox.bad { border-color: var(--err); }
+.cbox .sumrow { display: flex; align-items: center; }
+.cbox input, .cbox textarea { color: var(--vscode-input-foreground, var(--fg)); font-family: inherit; }
+.cbox input { flex: 1; min-width: 0; border: 0; background: none; outline: none; padding: 7px 8px; font-size: 13px; font-weight: 600; }
+.cbox .cnt { font: 11.5px var(--mono); color: var(--muted); padding-right: 8px; font-variant-numeric: tabular-nums; }
+.cbox .cnt.over { color: var(--err); }
+.cbox textarea { display: block; width: 100%; min-height: 72px; resize: vertical; border: 0; border-top: 1px solid var(--line); background: none; outline: none; padding: 6px 8px; font-size: 12.5px; }
+.wpc .verr { color: var(--err); font-size: 12px; margin-top: -4px; }
+.vbtns { display: flex; }
+.vbtns .vbtn { flex: 1; justify-content: center; gap: 6px; height: 30px; margin: 0; }
+.vbtns .vbtn.dd { flex: none; width: 30px; padding: 0; margin-left: 1px; }
+.vbtn.stage { background: color-mix(in srgb, var(--added) 22%, var(--input)); color: var(--fg-strong); border: 1px solid color-mix(in srgb, var(--added) 55%, transparent); }
+.vbtn.stage:hover:not(:disabled) { background: color-mix(in srgb, var(--added) 32%, var(--input)); }
+.wmenu { position: absolute; right: 10px; bottom: 44px; min-width: 200px; display: flex; flex-direction: column; padding: 4px 0; z-index: 5;
+  background: var(--vscode-menu-background, var(--bg)); color: var(--vscode-menu-foreground, var(--fg)); border: 1px solid var(--vscode-menu-border, var(--line)); border-radius: 5px; box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent); }
+.wmenu button { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 26px; padding: 0 12px; border: 0; background: none; text-align: left; }
+.wmenu button:hover:not(:disabled), .wmenu button:focus-visible { background: var(--vscode-menu-selectionBackground, var(--hover)); color: var(--vscode-menu-selectionForeground, var(--fg)); outline: none; }
+.wmenu .k { color: var(--muted); font-size: 11.5px; }
+
 @media (max-width: 900px) {
   .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 42%); }
   .details { border-left: 0; border-top: 1px solid var(--line); }
+  /* the WIP panel needs more than 42% of a short window: give it the lower 60% and let the pane scroll as a whole */
+  .split.wipon { grid-template-rows: minmax(0, 1fr) minmax(0, 60%); }
+  .details.wipon { overflow: auto; }
+  .wpl { flex: 1 0 auto; min-height: 96px; }
   .gcols, .gr { grid-template-columns: var(--gw) minmax(0, 1fr) 56px 64px; }
   .gwho { display: none; }
 }

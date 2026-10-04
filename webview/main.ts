@@ -5,11 +5,12 @@ import './styles.css';
 import { ciMatcher } from './format';
 import { graphWidth, layout, RH, visibleRows, WIP_SHA, type LaidRow } from './layout';
 import {
-  commitDetailsHtml, keepSet, noDetailsHtml, refsBySha, rowHtml, wipDetailsHtml, wipFile,
-  type FilesState, type RefPill, type RowEnv,
+  canDiscard, commitDetailsHtml, HEAD_PUSHED_NOTE, keepSet, NO_SUMMARY_ERROR, noDetailsHtml, primaryClass, primaryInnerHtml, refsBySha, rowHtml,
+  SUMMARY_LIMIT, WIP_LABEL, wipBarHtml, wipCommitHtml, wipDirKeys, wipFile, wipFileCount, wipHeaderHtml, wipListsHtml, wipPrimary,
+  type CommitCtx, type FilesState, type RefPill, type RowEnv, type WipDraft, type WipView,
 } from './render';
 
-declare function acquireVsCodeApi(): { postMessage(m: FromWebview): void; setState(s: unknown): void };
+declare function acquireVsCodeApi(): { postMessage(m: FromWebview): void; setState(s: unknown): void; getState?(): unknown };
 const api = acquireVsCodeApi();
 const send = (m: FromWebview): void => api.postMessage(m);
 
@@ -42,6 +43,51 @@ let end = -1;
 let pendingReveal: string | null = null;
 let rafPending = false;
 const files = new Map<string, FileStat[] | { error: string }>();
+
+// WIP panel state. The draft, the Path/Tree view and the collapsed keys live in vscode's webview state (per tab = per repo).
+const emptyDraft = (): WipDraft => ({ summary: '', description: '', amend: false });
+let draft: WipDraft = emptyDraft();
+let wipView: WipView = 'tree';
+let collapsed = new Set<string>();
+/** A WIP operation is running (extension's `wipBusy`): every WIP button is disabled. */
+let wipBusy = false;
+/**
+ * A git action was sent and its `wipBusy` round-trip has not finished: guards double clicks and key repeat between the
+ * click and the extension's `wipBusy`, and keeps the old rows inert until the `state` that follows the op.
+ * 'sent' → waiting for wipBusy{on:true} (a 3 s fallback, in case the message was rejected); 'done' → op finished,
+ * waiting for the next state (a 0.6 s fallback).
+ */
+let wipPending: 'sent' | 'done' | null = null;
+let pendingTimer: ReturnType<typeof setTimeout> | undefined;
+/** Inline error under the commit box (cleared on the next keystroke). */
+let draftErr = '';
+/** HEAD's message and pushed flag as the extension last reported them (`amendInfo`), valid while HEAD is still `sha`. */
+let headInfo: { sha: string | null; summary: string; description: string; pushed: boolean } | null = null;
+/** The HEAD sha we last asked `amendInfo` for (so a state message does not re-ask in a loop). */
+let amendAsked: string | null | undefined;
+/** The commit box is in the DOM: it is built once per WIP selection and only patched afterwards. */
+let wipMounted = false;
+/** The repo root the persisted state belongs to; a `state` for another root drops it. */
+let stateRoot: string | undefined;
+
+function restore(): void {
+  const raw = api.getState?.();
+  if (typeof raw !== 'object' || raw === null) return;
+  const o = raw as { root?: unknown; draft?: unknown; view?: unknown; collapsed?: unknown };
+  if (typeof o.root === 'string') stateRoot = o.root;
+  const d = o.draft as Partial<WipDraft> | null | undefined;
+  if (d && typeof d.summary === 'string' && typeof d.description === 'string' && typeof d.amend === 'boolean') {
+    draft = { summary: d.summary, description: d.description, amend: d.amend };
+  }
+  if (o.view === 'path' || o.view === 'tree') wipView = o.view;
+  if (Array.isArray(o.collapsed)) collapsed = new Set(o.collapsed.filter((k): k is string => typeof k === 'string'));
+}
+restore();
+
+function persist(): void {
+  if (stateRoot === undefined) return;
+  api.setState({ root: stateRoot, draft, view: wipView, collapsed: [...collapsed] });
+}
 
 const app = document.getElementById('app') as HTMLElement;
 app.innerHTML = `
@@ -83,7 +129,7 @@ function build(s: State): Model {
 function rowEnv(s: State, m: Model): RowEnv {
   return {
     root: s.repo.root, width: m.width, selected, headSha: s.head.sha, jira: s.settings.jira, pills: m.pills, isCi: m.isCi,
-    query: query.trim().toLowerCase(), nowMs: Date.now(), wipCount: s.wip ? s.wip.staged.length + s.wip.unstaged.length : 0,
+    query: query.trim().toLowerCase(), nowMs: Date.now(), wipCount: s.wip ? wipFileCount(s.wip) : 0, wipSummary: draft.summary,
   };
 }
 
@@ -102,9 +148,108 @@ function renderRows(force = false): void {
   rowsEl.innerHTML = model.rows.slice(s, e).map((r) => rowHtml(r, env)).join('');
 }
 
+function setWipLayout(on: boolean): void {
+  $('split').classList.toggle('wipon', on);
+  details.classList.toggle('wipon', on);
+  if (!on) wipMounted = false;
+}
+
+/** Acts that only change the view; the rest talk to git and wait while an operation runs. */
+const UI_ACTS = new Set(['sec', 'dir', 'view', 'collapse', 'menu']);
+
+const headInfoValid = (): boolean => !!st && headInfo !== null && headInfo.sha === st.head.sha;
+
+function commitCtx(): CommitCtx {
+  return {
+    staged: st?.wip?.staged.length ?? 0, unborn: !!st && st.head.sha === null, busy: wipBusy,
+    headPushed: headInfoValid() && !!headInfo?.pushed, error: draftErr,
+  };
+}
+
+/** WIP selected: header and lists are rebuilt on every call; the commit box is built once and patched. */
+function renderWip(s: State, wip: NonNullable<State['wip']>): void {
+  if (!wipMounted) {
+    details.innerHTML = '<div class="wp"><div id="wip-head"></div><div class="wpl" id="wip-lists"></div><div id="wip-commit"></div></div>';
+    $('wip-commit').innerHTML = wipCommitHtml(draft, commitCtx());
+    wipMounted = true;
+    // properties, not attributes: a leading newline or odd characters round-trip exactly
+    $<HTMLInputElement>('wsum').value = draft.summary;
+    $<HTMLTextAreaElement>('wdesc').value = draft.description;
+  }
+  renderWipLists(s, wip);
+  patchCommit();
+}
+
+function renderWipLists(s: State, wip: NonNullable<State['wip']>): void {
+  const keys = wipDirKeys(wip);
+  const where = s.head.branch ?? (s.head.sha ? 'detached HEAD' : 'no commits yet');
+  $('wip-head').innerHTML = wipHeaderHtml(wipFileCount(wip), where) + wipBarHtml(wipView, keys.length > 0, keys.some((k) => !collapsed.has(k)));
+  $('wip-lists').innerHTML = wipListsHtml(wip, wipView, collapsed);
+  // CSP forbids style attributes in markup; CSSOM is fine
+  for (const el of details.querySelectorAll<HTMLElement>('[data-d]')) el.style.setProperty('--d', el.dataset.d as string);
+  applyBusy();
+}
+
+/** Updates the parts of the commit box that depend on state, never the inputs themselves. */
+function patchCommit(): void {
+  if (!wipMounted || !st?.wip) return;
+  const ctx = commitCtx();
+  const p = wipPrimary(draft.amend, ctx.staged);
+  const left = SUMMARY_LIMIT - draft.summary.length;
+  const cnt = $('wcnt');
+  cnt.textContent = String(left);
+  cnt.classList.toggle('over', left < 0);
+  $('wbox').classList.toggle('bad', ctx.error !== '');
+  const err = $('werr');
+  err.hidden = ctx.error === '';
+  err.textContent = ctx.error;
+  const amend = $<HTMLInputElement>('wamend');
+  amend.checked = draft.amend;
+  const note = $('wamendnote');
+  note.hidden = !(draft.amend && ctx.headPushed);
+  note.textContent = HEAD_PUSHED_NOTE;
+  const main = $('wprimary');
+  main.className = primaryClass(p);
+  main.innerHTML = primaryInnerHtml(p);
+  $('wmore').hidden = !p.menu;
+  if (!p.menu) $('wmenu').hidden = true;
+  applyBusy();
+}
+
+function setPending(p: 'sent' | 'done' | null, ms = 0): void {
+  wipPending = p;
+  clearTimeout(pendingTimer);
+  pendingTimer = p ? setTimeout(() => { wipPending = null; applyBusy(); }, ms) : undefined;
+  applyBusy();
+}
+
+/** Sends a git-running WIP message and blocks further ones until the op's round-trip is over. */
+function sendWip(m: FromWebview): void {
+  send(m);
+  setPending('sent', 3000);
+}
+
+const gitBlocked = (): boolean => wipBusy || wipPending !== null;
+
+function applyBusy(): void {
+  if (!wipMounted) return;
+  // view-only buttons (Path/Tree, Collapse All) stay usable; the ▾ menu only holds git actions
+  for (const b of details.querySelectorAll<HTMLButtonElement>('button')) b.disabled = gitBlocked() && (b.id === 'wmore' || !UI_ACTS.has(b.dataset.act ?? ''));
+  const amend = document.getElementById('wamend') as HTMLInputElement | null;
+  if (amend) amend.disabled = wipBusy || !st || st.head.sha === null;
+  if (gitBlocked()) { const m = document.getElementById('wmenu'); if (m) m.hidden = true; }
+}
+
+/** Live label of the graph's WIP row while typing (the rows are virtual; the next render reads the draft too). */
+function syncWipRow(): void {
+  const el = rowsEl.querySelector('.gr[data-sha="WIP"] .wip');
+  if (el) el.textContent = draft.summary.trim() || WIP_LABEL;
+}
+
 function renderDetails(): void {
-  if (!st || !model) { details.innerHTML = noDetailsHtml; return; }
-  if (selected === WIP_SHA && st.wip) { details.innerHTML = wipDetailsHtml(st.wip, st.head); return; }
+  if (!st || !model) { setWipLayout(false); details.innerHTML = noDetailsHtml; return; }
+  if (selected === WIP_SHA && st.wip) { setWipLayout(true); renderWip(st, st.wip); return; }
+  setWipLayout(false);
   const c = selected ? model.bySha.get(selected) : undefined;
   if (!c) { details.innerHTML = noDetailsHtml; return; }
   const f = files.get(c.sha);
@@ -161,6 +306,14 @@ function showMessage(text: string | null): void {
 
 function onState(s: State): void {
   if (st && st.repo.root !== s.repo.root) { files.clear(); selected = null; list.scrollTop = 0; }
+  if (stateRoot !== undefined && stateRoot !== s.repo.root) {
+    // the persisted draft belongs to another repo
+    draft = emptyDraft(); wipView = 'tree'; collapsed = new Set(); draftErr = ''; headInfo = null; amendAsked = undefined; wipMounted = false;
+  }
+  stateRoot = s.repo.root;
+  if (wipPending === 'done') setPending(null);
+  // HEAD became unborn (e.g. `checkout --orphan`) under a draft with Amend on: there is nothing to amend
+  if (s.head.sha === null && draft.amend) { draft.amend = false; headInfo = null; }
   if (files.size > 500) files.clear();
   st = s;
   model = build(s);
@@ -176,14 +329,16 @@ function onState(s: State): void {
   renderDetails();
   // Ask for the files of a commit we have none for (first state, or the selection moved to a new commit).
   if (sel && sel !== WIP_SHA && !files.has(sel) && model.bySha.has(sel)) send({ type: 'select', sha: sel });
+  // A restored draft with Amend on has no HEAD info yet (it is not persisted): ask once per HEAD.
+  if (draft.amend && s.head.sha !== null && !headInfoValid() && amendAsked !== s.head.sha) { amendAsked = s.head.sha; send({ type: 'amendInfo' }); }
 }
 
 window.addEventListener('message', (ev: MessageEvent<ToWebview>) => {
   const m = ev.data;
   switch (m.type) {
     case 'state':
-      api.setState({ root: m.repo.root }); // the serializer re-binds the tab to this repo after a window reload
       onState(m);
+      persist(); // `root` is what the serializer uses to re-bind the tab to this repo after a window reload
       break;
     case 'details':
       files.set(m.sha, m.error !== undefined ? { error: m.error } : m.files);
@@ -194,6 +349,13 @@ window.addEventListener('message', (ev: MessageEvent<ToWebview>) => {
       else pendingReveal = m.sha;
       break;
     case 'busy': $('busy').hidden = !m.on; break;
+    case 'wipBusy':
+      wipBusy = m.on;
+      if (m.on) setPending(null);
+      else setPending('done', 600);
+      break;
+    case 'committed': onCommitted(); break;
+    case 'amendInfo': onAmendInfo(m); break;
     case 'error': st = undefined; model = undefined; selected = null; renderRows(); renderDetails(); showMessage(m.message); break;
   }
 });
@@ -214,12 +376,14 @@ new ResizeObserver(() => renderRows()).observe(list);
 
 // Details card.
 details.addEventListener('click', (ev) => {
-  const t = (ev.target as HTMLElement).closest<HTMLElement>('[data-url],[data-select],[data-scm],[data-file],[data-copy]');
-  if (!t || !st) return;
+  if (!st) return;
+  const a = (ev.target as HTMLElement).closest<HTMLElement>('[data-act]');
+  if (a && wipMounted) { onWipAct(a); return; }
+  const t = (ev.target as HTMLElement).closest<HTMLElement>('[data-url],[data-select],[data-file],[data-copy]');
+  if (!t) return;
   if (t.dataset.copy) send({ type: 'copy', text: t.dataset.copy });
   else if (t.dataset.url) send({ type: 'openUrl', url: t.dataset.url });
   else if (t.dataset.select) { if (model?.known.has(t.dataset.select)) select(t.dataset.select, { center: true }); }
-  else if (t.dataset.scm) send({ type: 'openScm' });
   else if (t.dataset.file !== undefined) {
     const i = Number(t.dataset.file);
     if (t.dataset.area === 'commit') {
@@ -230,6 +394,146 @@ details.addEventListener('click', (ev) => {
       if (file) send({ type: 'openWipFile', file, area: t.dataset.area });
     }
   }
+});
+
+// WIP panel.
+
+function onWipAct(el: HTMLElement): void {
+  const act = el.dataset.act as string;
+  const wip = st?.wip;
+  if (!wip || (gitBlocked() && !UI_ACTS.has(act))) return;
+  const file = el.dataset.file !== undefined && (el.dataset.area === 'staged' || el.dataset.area === 'unstaged')
+    ? wipFile(wip, el.dataset.area, Number(el.dataset.file)) : undefined;
+  switch (act) {
+    case 'stage': if (file) sendWip({ type: 'stage', files: [file] }); break;
+    case 'unstage': if (file) sendWip({ type: 'unstage', files: [file] }); break;
+    case 'discard': if (file && canDiscard(file)) sendWip({ type: 'discard', file }); break;
+    case 'stageAll': sendWip({ type: 'stageAll' }); break;
+    case 'unstageAll': sendWip({ type: 'unstageAll' }); break;
+    case 'discardAll': sendWip({ type: 'discardAll' }); break;
+    case 'refresh': send({ type: 'refresh' }); break;
+    case 'sec': case 'dir': {
+      const key = el.dataset.key as string;
+      if (!collapsed.delete(key)) collapsed.add(key);
+      persist();
+      renderWipLists(st as State, wip);
+      break;
+    }
+    case 'view':
+      wipView = el.dataset.view === 'path' ? 'path' : 'tree';
+      persist();
+      renderWipLists(st as State, wip);
+      break;
+    case 'collapse': {
+      const keys = wipDirKeys(wip);
+      if (keys.some((k) => !collapsed.has(k))) keys.forEach((k) => collapsed.add(k)); else keys.forEach((k) => collapsed.delete(k));
+      persist();
+      renderWipLists(st as State, wip);
+      break;
+    }
+    case 'primary':
+      if (wipPrimary(draft.amend, wip.staged.length).kind === 'stage') sendWip({ type: 'stageAll' });
+      else commitAction(false);
+      break;
+    case 'menu': $('wmenu').hidden = !$('wmenu').hidden; break;
+    case 'commit': $('wmenu').hidden = true; commitAction(false); break;
+    case 'commitPush': $('wmenu').hidden = true; commitAction(true); break;
+  }
+}
+
+/** Commit (or Commit and Push). Nothing staged and not amending → stage everything first, like the prototype. */
+function commitAction(push: boolean): void {
+  const wip = st?.wip;
+  if (!wip || gitBlocked()) return;
+  if (!draft.summary.trim()) {
+    draftErr = NO_SUMMARY_ERROR;
+    patchCommit();
+    document.getElementById('wsum')?.focus();
+    return;
+  }
+  if (!draft.amend && wip.staged.length === 0) { sendWip({ type: 'stageAll' }); return; }
+  sendWip({ type: 'commit', summary: draft.summary, description: draft.description, amend: draft.amend, push: push && !draft.amend });
+}
+
+function onCommitted(): void {
+  draft = emptyDraft();
+  draftErr = '';
+  headInfo = null;
+  amendAsked = undefined;
+  if (wipMounted) {
+    $<HTMLInputElement>('wsum').value = '';
+    $<HTMLTextAreaElement>('wdesc').value = '';
+  }
+  patchCommit();
+  syncWipRow();
+  persist();
+}
+
+function onAmendInfo(m: Extract<ToWebview, { type: 'amendInfo' }>): void {
+  if ('unborn' in m) { draft.amend = false; headInfo = null; patchCommit(); persist(); return; }
+  headInfo = { sha: st?.head.sha ?? null, summary: m.summary, description: m.description, pushed: m.pushed };
+  // prefill only a still-empty draft, and only while Amend is still on
+  if (draft.amend && !draft.summary.trim() && !draft.description.trim()) {
+    draft.summary = m.summary;
+    draft.description = m.description;
+    if (wipMounted) {
+      $<HTMLInputElement>('wsum').value = draft.summary;
+      $<HTMLTextAreaElement>('wdesc').value = draft.description;
+    }
+    syncWipRow();
+  }
+  patchCommit();
+  persist();
+}
+
+function onAmendToggle(on: boolean): void {
+  draft.amend = on;
+  draftErr = '';
+  if (on) {
+    amendAsked = st?.head.sha;
+    send({ type: 'amendInfo' });
+  } else if (headInfoValid() && headInfo && draft.summary === headInfo.summary && draft.description === headInfo.description) {
+    // still HEAD's own message: drop the prefill
+    draft.summary = '';
+    draft.description = '';
+    $<HTMLInputElement>('wsum').value = '';
+    $<HTMLTextAreaElement>('wdesc').value = '';
+    syncWipRow();
+  }
+  patchCommit();
+  persist();
+}
+
+details.addEventListener('input', (ev) => {
+  const t = ev.target as HTMLElement;
+  if (t.id === 'wsum') {
+    draft.summary = (t as HTMLInputElement).value;
+    draftErr = '';
+    syncWipRow();
+    patchCommit();
+    persist();
+  } else if (t.id === 'wdesc') {
+    draft.description = (t as HTMLTextAreaElement).value;
+    persist();
+  }
+});
+details.addEventListener('change', (ev) => {
+  const t = ev.target as HTMLElement;
+  if (t.id === 'wamend') onAmendToggle((t as HTMLInputElement).checked);
+});
+details.addEventListener('keydown', (ev) => {
+  const t = ev.target as HTMLElement;
+  if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey) && (t.id === 'wsum' || t.id === 'wdesc')) {
+    ev.preventDefault();
+    // an IME composition owns Enter; a held key must not fire several commits
+    if (!ev.isComposing && ev.keyCode !== 229 && !ev.repeat) commitAction(false);
+  }
+  else if (ev.key === 'Escape' && wipMounted && !$('wmenu').hidden) { $('wmenu').hidden = true; document.getElementById('wmore')?.focus(); }
+});
+// Close the Commit ▾ menu on a click anywhere else.
+document.addEventListener('click', (ev) => {
+  const m = document.getElementById('wmenu');
+  if (m && !m.hidden && !(ev.target as HTMLElement).closest('#wmenu, #wmore')) m.hidden = true;
 });
 
 // Toolbar.

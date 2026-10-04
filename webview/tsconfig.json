@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["."]
+  "include": [".", "../test/wip.webview.test.ts"]
 }

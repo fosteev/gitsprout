@@ -3,6 +3,7 @@ import type { CommitContext } from '../src/graph/protocol';
 import type { Commit, FileChange, FileStat, Head, Refs, Status } from '../src/git/types';
 import { esc, fmtAgo, fmtAgoLong, jiraUrl, minutesAgo, parseSubject, splitPath } from './format';
 import { LANE_COLORS, rowSvg, WIP_SHA, type LaidRow } from './layout';
+import { buildTree, dirPaths, type TreeNode } from './wipTree';
 
 export interface RefPill { kind: 'local' | 'remote' | 'tag'; name: string; head: boolean }
 
@@ -72,8 +73,13 @@ export interface RowEnv {
   /** Lower-cased search text; '' = no search. Non-matching rows are dimmed. */
   query: string;
   nowMs: number;
+  /** changed files, for the WIP row */
   wipCount: number;
+  /** the draft commit summary; the WIP row shows it, or `// WIP` when empty */
+  wipSummary: string;
 }
+
+export const WIP_LABEL = '// WIP';
 
 export function rowMatches(c: Commit, q: string): boolean {
   return !q || c.subject.toLowerCase().includes(q) || c.sha.startsWith(q) || c.author.toLowerCase().includes(q);
@@ -82,7 +88,7 @@ export function rowMatches(c: Commit, q: string): boolean {
 export function rowHtml(r: LaidRow, e: RowEnv): string {
   if (r.wip) {
     return `<div class="gr${e.selected === WIP_SHA ? ' on' : ''}" data-sha="${WIP_SHA}">${rowSvg(r, e.width, { head: false, ci: false })}`
-      + `<div class="gdesc"><span class="wip">Uncommitted Changes (${e.wipCount})</span></div><div class="gwhen">*</div><div class="gwho">*</div><div class="gsha">*</div></div>`;
+      + `<div class="gdesc"><span class="wip">${esc(e.wipSummary.trim() || WIP_LABEL)}</span><span class="kind">${e.wipCount} file${e.wipCount === 1 ? '' : 's'}</span></div><div class="gwhen">*</div><div class="gwho">*</div><div class="gsha">*</div></div>`;
   }
   const c = r.commit as Commit;
   const cls = c.parents.length > 1 ? 'merge' : e.isCi(c) ? 'ci' : '';
@@ -144,16 +150,152 @@ export function commitDetailsHtml(c: Commit, files: FilesState, e: DetailsEnv): 
     + list + '</div>';
 }
 
-export function wipDetailsHtml(wip: Status, head: Head): string {
-  const rows = [
-    ...wip.staged.map((f, i) => fileRow(i, 'staged', f, ' · staged', f.path)),
-    ...wip.unstaged.map((f, i) => fileRow(i, 'unstaged', f, f.untracked ? ' · untracked' : '', f.path)),
-  ];
-  const where = head.branch ?? (head.sha ? 'detached HEAD' : 'no commits yet');
-  return `<div class="dh"><div class="row1">Working tree · ${esc(where)}</div><h2>Uncommitted Changes</h2></div>`
-    + `<div class="note">Staging and committing happen in VS Code's built-in Source Control. Gitsprout only shows them here.<br>`
-    + `<button class="vbtn" data-scm="1">Open Source Control</button></div>`
-    + `<div class="dsec"><div class="dsec-h">FILES<span class="n">${rows.length}</span></div>${rows.join('')}</div>`;
+// ---- WIP panel (prototype: renderWip / wipFiles / wipCommit) ----
+
+export type WipView = 'path' | 'tree';
+/** What the user typed; persisted per tab. */
+export interface WipDraft { summary: string; description: string; amend: boolean }
+
+const wi = (d: string, w = 14): string =>
+  `<svg width="${w}" height="${w}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const WI = {
+  chevR: wi('<path d="m6 3.5 4.5 4.5L6 12.5"/>'),
+  chevD: wi('<path d="m3.5 6 4.5 4.5L12.5 6"/>'),
+  refresh: wi('<path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v3h-3"/>'),
+  plus: wi('<path d="M8 3v10M3 8h10"/>'),
+  minus: wi('<path d="M3 8h10"/>'),
+  discard: wi('<path d="M3.5 6.5h6a3.5 3.5 0 0 1 0 7h-3M6 4 3.5 6.5 6 9"/>'),
+  trash: wi('<path d="M3 4.5h10M6.5 4.5v-2h3v2M4.5 4.5l.6 9h5.8l.6-9"/>'),
+  file: wi('<path d="M9.5 1.5h-6v13h9V4.5zM9.5 1.5v3h3"/>'),
+  folder: wi('<path d="M1.5 3.5h4.5l1.5 1.5h7v8.5h-13z"/>'),
+  down: wi('<path d="M4 6l4 4 4-4"/>'),
+  check: wi('<path d="M3 8.5l3.2 3.2L13 5"/>'),
+  path: wi('<path d="M3 4.5h10M3 8h10M3 11.5h10"/>', 13),
+  tree: wi('<path d="M3 3v9.5h3M3 7h3"/><rect x="7.5" y="5.5" width="6" height="3" rx=".5"/><rect x="7.5" y="11" width="6" height="3" rx=".5"/><rect x="1.5" y="1" width="4" height="2.5" rx=".5"/>', 13),
+};
+
+const ib = (act: string, title: string, attrs = '', cls = ''): string => {
+  const ico = act === 'refresh' ? WI.refresh : act === 'discardAll' ? WI.trash : act === 'stage' ? WI.plus : act === 'unstage' ? WI.minus : WI.discard;
+  return `<button class="ib${cls}" data-act="${act}"${attrs} title="${esc(title)}" aria-label="${esc(title)}">${ico}</button>`;
+};
+
+/** Number of changed files; a partly staged file counts once (as Discard All's confirmation does). */
+export function wipFileCount(wip: Status): number {
+  return new Set([...wip.staged, ...wip.unstaged].map((f) => f.path)).size;
+}
+
+/** Discard is offered on unstaged rows only: not on a conflict (`U`) and not on a nested repository (`path/`). */
+export function canDiscard(f: FileChange): boolean {
+  return f.status !== 'U' && !f.path.endsWith('/');
+}
+
+/** `branch` is what the header shows after "on" (a branch name, `detached HEAD` or `no commits yet`). */
+export function wipHeaderHtml(n: number, branch: string): string {
+  return `<div class="wph">${ib('discardAll', 'Discard All Changes', '', ' danger')}`
+    + `<span class="t">${n} file change${n === 1 ? '' : 's'} on <span class="brp">${esc(branch)}</span></span>${ib('refresh', 'Refresh')}</div>`;
+}
+
+/** Collapse/Expand All (tree only, when there are folders) and the Path/Tree switch. */
+export function wipBarHtml(view: WipView, hasDirs: boolean, anyOpen: boolean): string {
+  return `<div class="wpbar">${view === 'tree' && hasDirs ? `<button class="lnk" data-act="collapse">${anyOpen ? 'Collapse All' : 'Expand All'}</button>` : ''}`
+    + `<span class="seg"><button data-act="view" data-view="path" aria-pressed="${view === 'path'}">${WI.path} Path</button>`
+    + `<button data-act="view" data-view="tree" aria-pressed="${view === 'tree'}">${WI.tree} Tree</button></span></div>`;
+}
+
+/** Collapsed-set key of a folder row (the same path may exist in both lists). */
+export const dirKey = (area: 'staged' | 'unstaged', path: string): string => `${area}:${path}`;
+export const sectionKey = (area: 'staged' | 'unstaged'): string => `sec:${area}`;
+
+/** All folder keys of both lists in the given status (what Collapse All / Expand All toggle). */
+export function wipDirKeys(wip: Status): string[] {
+  return (['unstaged', 'staged'] as const).flatMap((area) => dirPaths(buildTree(wip[area])).map((p) => dirKey(area, p)));
+}
+
+function wipFileRow(f: FileChange, i: number, area: 'staged' | 'unstaged', depth: number, label: string, desc: string, spacer: boolean): string {
+  const acts = area === 'staged'
+    ? ib('unstage', 'Unstage File', ` data-area="staged" data-file="${i}"`)
+    : (canDiscard(f) ? ib('discard', 'Discard Changes', ` data-area="unstaged" data-file="${i}"`) : '') + ib('stage', 'Stage File', ` data-area="unstaged" data-file="${i}"`);
+  const extra = f.origPath ? ` · from ${esc(f.origPath)}` : f.untracked ? ' · untracked' : '';
+  const title = f.untracked ? 'Untracked' : LETTER_TITLE[f.status] ?? '';
+  return `<div class="tr w" data-file="${i}" data-area="${area}" data-d="${depth}" title="${esc(f.path)}">${spacer ? '<span class="tw"></span>' : ''}`
+    + `<span class="ti">${WI.file}</span><span class="tl">${esc(label)}</span><span class="td">${esc(desc)}${extra}</span><span class="ta">${acts}</span>`
+    + `<span class="st ${esc(f.status)}" title="${esc(title)}">${esc(f.status)}</span></div>`;
+}
+
+function wipTreeRows(nodes: TreeNode[], area: 'staged' | 'unstaged', depth: number, collapsed: ReadonlySet<string>): string {
+  return nodes.map((n) => {
+    if (n.kind === 'file') return wipFileRow(n.file, n.index, area, depth, n.name, '', true);
+    const key = dirKey(area, n.path);
+    const open = !collapsed.has(key);
+    return `<div class="tr w dir" data-act="dir" data-key="${esc(key)}" data-d="${depth}" role="button" aria-expanded="${open}" title="${esc(n.path)}">`
+      + `<span class="tw">${open ? WI.chevD : WI.chevR}</span><span class="ti">${WI.folder}</span><span class="tl">${esc(n.label)}</span></div>`
+      + (open ? wipTreeRows(n.children, area, depth + 1, collapsed) : '');
+  }).join('');
+}
+
+/** The Unstaged and Staged sections. Re-rendered on every `state`; `collapsed` holds section and folder keys. */
+export function wipListsHtml(wip: Status, view: WipView, collapsed: ReadonlySet<string>): string {
+  const section = (area: 'staged' | 'unstaged', title: string, btn: string, empty: string): string => {
+    const files = wip[area];
+    const key = sectionKey(area);
+    const open = !collapsed.has(key);
+    let body = '';
+    if (open) {
+      if (!files.length) body = `<div class="empty">${esc(empty)}</div>`;
+      else if (view === 'path') {
+        body = files.map((f, i) => { const [dir, base] = splitPath(f.path); return wipFileRow(f, i, area, 0, base || f.path, dir, false); }).join('');
+      } else body = wipTreeRows(buildTree(files).children, area, 0, collapsed);
+    }
+    return `<div class="wps"><div class="wpsh" data-act="sec" data-key="${key}" role="button" aria-expanded="${open}">${open ? WI.chevD : WI.chevR}`
+      + `<span>${title}</span><span class="n">(${files.length})</span>${files.length ? btn : ''}</div>${body}</div>`;
+  };
+  return section('unstaged', 'Unstaged Files', '<button class="go" data-act="stageAll">Stage All Changes</button>', 'No unstaged changes')
+    + section('staged', 'Staged Files', '<button class="go un" data-act="unstageAll">Unstage All</button>',
+      wip.unstaged.length ? 'Stage files to include them in the commit' : 'No staged changes');
+}
+
+export interface PrimaryButton {
+  kind: 'amend' | 'commit' | 'stage';
+  label: string;
+  /** the ▾ menu with "Commit and Push" is offered (never while amending: no force push) */
+  menu: boolean;
+}
+
+/** The primary button of the commit box: Amend / Commit Changes to N File(s) / Stage Changes to Commit (stages all, does not commit). */
+export function wipPrimary(amend: boolean, staged: number): PrimaryButton {
+  if (amend) return { kind: 'amend', label: 'Amend Previous Commit', menu: false };
+  if (staged > 0) return { kind: 'commit', label: `Commit Changes to ${staged} File${staged === 1 ? '' : 's'}`, menu: true };
+  return { kind: 'stage', label: 'Stage Changes to Commit', menu: false };
+}
+export const primaryInnerHtml = (p: PrimaryButton): string => `${p.kind === 'stage' ? WI.plus : WI.check} ${esc(p.label)}`;
+export const primaryClass = (p: PrimaryButton): string => `vbtn${p.kind === 'stage' ? ' stage' : ''}`;
+
+export const SUMMARY_LIMIT = 72;
+export const HEAD_PUSHED_NOTE = 'HEAD is already pushed. Amending rewrites it; pushing will need --force.';
+export const NO_SUMMARY_ERROR = 'Enter a commit summary.';
+
+export interface CommitCtx { staged: number; unborn: boolean; busy: boolean; headPushed: boolean; error: string }
+
+/**
+ * The commit box. Built once per WIP selection; afterwards main.ts only patches the pieces that carry an id
+ * (#wamend, #wamendnote, #wbox, #wcnt, #werr, #wprimary, #wmore, #wmenu) so typing, focus and caret survive a `state`.
+ */
+export function wipCommitHtml(d: WipDraft, c: CommitCtx): string {
+  const p = wipPrimary(d.amend, c.staged);
+  const left = SUMMARY_LIMIT - d.summary.length;
+  const dis = c.busy ? ' disabled' : '';
+  // the HTML parser drops one leading newline inside <textarea>, so always emit one
+  return `<div class="wpc">`
+    + `<label class="amend"><input type="checkbox" id="wamend"${d.amend ? ' checked' : ''}${c.busy || c.unborn ? ' disabled' : ''}> Amend previous commit</label>`
+    + `<div class="note" id="wamendnote"${d.amend && c.headPushed ? '' : ' hidden'}>${HEAD_PUSHED_NOTE}</div>`
+    + `<div class="cbox${c.error ? ' bad' : ''}" id="wbox"><div class="sumrow"><input id="wsum" placeholder="Commit summary" value="${esc(d.summary)}" autocomplete="off" aria-label="Commit summary">`
+    + `<span id="wcnt" class="cnt${left < 0 ? ' over' : ''}" title="Characters left before ${SUMMARY_LIMIT}">${left}</span></div>`
+    + `<textarea id="wdesc" placeholder="Description" aria-label="Commit description">\n${esc(d.description)}</textarea></div>`
+    + `<div class="verr" id="werr"${c.error ? '' : ' hidden'}>${esc(c.error)}</div>`
+    + `<div class="vbtns"><button class="${primaryClass(p)}" id="wprimary" data-act="primary"${dis}>${primaryInnerHtml(p)}</button>`
+    + `<button class="vbtn dd" id="wmore" data-act="menu" aria-label="More commit actions"${p.menu ? '' : ' hidden'}${dis}>${WI.down}</button></div>`
+    + `<div class="wmenu" id="wmenu" role="menu" hidden><button data-act="commit" role="menuitem"${dis}>Commit <span class="k">⌘↵</span></button>`
+    + `<button data-act="commitPush" role="menuitem"${dis}>Commit and Push</button></div></div>`;
 }
 
 export const noDetailsHtml = '<div class="nodetail">Select a commit to see its details</div>';
