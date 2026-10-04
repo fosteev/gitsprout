@@ -229,6 +229,40 @@ export class Repo {
     return remote;
   }
 
+  // ---- remotes and upstream ----
+
+  async remotes(): Promise<string[]> {
+    const { stdout } = await this.git(['remote'], READ);
+    return stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+  }
+
+  async remoteUrl(remote: string): Promise<string | null> {
+    const r = await this.git(['remote', 'get-url', '--end-of-options', remote], { ...READ, okCodes: [1, 2, 128] });
+    return r.code === 0 ? r.stdout.trim() || null : null;
+  }
+
+  /** Remote for web links: the current branch's own remote, `origin`, first remote. */
+  async linkRemote(): Promise<string | null> {
+    const remotes = await this.remotes();
+    const sym = await this.git(['symbolic-ref', '-q', '--short', 'HEAD'], { ...READ, okCodes: [1] });
+    const branch = sym.code === 0 ? sym.stdout.trim() : '';
+    const own = branch ? await this.config(`branch.${branch}.remote`) : null;
+    if (own && remotes.includes(own)) return own;
+    return remotes.includes('origin') ? 'origin' : remotes[0] ?? null;
+  }
+
+  /** Is the commit reachable from any remote-tracking branch? */
+  async isOnRemote(sha: string): Promise<boolean> {
+    const { stdout } = await this.git(['branch', '-r', '--contains', sha], READ);
+    return stdout.trim() !== '';
+  }
+
+  /** `remoteBranch` = `origin/x`; null unsets the upstream. */
+  async setUpstream(branch: string, remoteBranch: string | null): Promise<void> {
+    if (remoteBranch === null) await this.git(['branch', '--unset-upstream', '--end-of-options', branch]);
+    else await this.git(['branch', `--set-upstream-to=${remoteBranch}`, '--end-of-options', branch]);
+  }
+
   // ---- network ----
 
   /** `signal` kills the running git (rejects with kind `Cancelled`); a stuck fetch is killed after `timeoutMs`. */

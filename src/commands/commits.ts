@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 import { shaFromArg } from '../graph/validate';
+import { branchLink, commitLink, splitRemoteRef, webBase } from '../git/remoteUrl';
+import type { Refs } from '../git/types';
 import type { Registry } from '../workspace/registry';
-import { refNameFromArg, rootFromArg, shortSha, tagNameError } from './messages';
+import { localBranchFromArg, refNameFromArg, remoteBranchFromArg, rootFromArg, shortSha, tagNameError, upstreamCandidates } from './messages';
 import type { Mutator } from './mutations';
 
 /** Ids implemented here; `registerStubCommands` skips them. */
-export const COMMIT_COMMAND_IDS = ['createTag', 'createAnnotatedTag', 'deleteTag', 'pushTag'] as const;
+export const COMMIT_COMMAND_IDS = ['createTag', 'createAnnotatedTag', 'deleteTag', 'pushTag', 'copyCommitLink', 'copyBranchLink', 'setUpstream'] as const;
 
 /** Commands on commits (graph rows) and tags (Tags tree). Graph rows carry their repo root; trees act on the active repo. */
 export function registerCommitCommands(context: vscode.ExtensionContext, _registry: Registry, _log: (m: string) => void, m: Mutator): void {
@@ -62,5 +64,66 @@ export function registerCommitCommands(context: vscode.ExtensionContext, _regist
     if (!name) { void vscode.window.showInformationMessage('Gitsprout: use the Tags view.'); return; }
     // Op 'push': Auth -> Run in Terminal, Show Command Output (a rejected tag push is a plain failure, see Repo.pushTag).
     await mutate(t, 'push', async (signal) => `Pushed tag '${name}' to ${await t.repo.pushTag(name, { signal })}.`, `Pushing tag '${name}'…`);
+  });
+
+  const flash = (msg: string): void => { vscode.window.setStatusBarMessage(`Gitsprout: ${msg}`, 4000); };
+
+  reg('copyCommitLink', async (arg?: unknown) => {
+    const sha = shaFromArg(arg);
+    const t = target(rootFromArg(arg));
+    if (!t) return;
+    if (!sha) { void vscode.window.showInformationMessage('Gitsprout: right-click a commit in the graph.'); return; }
+    try {
+      const remote = await t.repo.linkRemote();
+      const url = remote ? await t.repo.remoteUrl(remote) : null;
+      const base = url ? webBase(url) : undefined;
+      if (!remote || !url || !base) {
+        void vscode.window.showInformationMessage(remote && url
+          ? `Gitsprout: can't build a web link from the remote URL '${url}'.` : 'Gitsprout: no remote configured.');
+        return;
+      }
+      await vscode.env.clipboard.writeText(commitLink(base, sha));
+      flash((await t.repo.isOnRemote(sha)) ? 'commit link copied' : `link copied — ${shortSha(sha)} isn't on any remote branch yet`);
+    } catch (e) { void vscode.window.showErrorMessage(`Gitsprout: can't copy the link: ${e instanceof Error ? e.message : String(e)}`); }
+  });
+
+  reg('copyBranchLink', async (arg?: unknown) => {
+    const t = target();
+    if (!t) return;
+    try {
+      const refs = await t.repo.refs();
+      const local = localBranchFromArg(arg);
+      const full = remoteBranchFromArg(arg) ?? (local ? refs.locals.find((b) => b.name === local)?.upstream ?? undefined : undefined);
+      if (!full) { void vscode.window.showInformationMessage(local ? `Gitsprout: '${local}' has no upstream branch.` : 'Gitsprout: use the Branches or Remotes view.'); return; }
+      const split = splitRemoteRef(full, await t.repo.remotes());
+      const url = split ? await t.repo.remoteUrl(split.remote) : null;
+      const base = url ? webBase(url) : undefined;
+      if (!split || !url || !base) { void vscode.window.showInformationMessage(`Gitsprout: can't build a web link for '${full}'.`); return; }
+      await vscode.env.clipboard.writeText(branchLink(base, split.branch));
+      flash('branch link copied');
+    } catch (e) { void vscode.window.showErrorMessage(`Gitsprout: can't copy the link: ${e instanceof Error ? e.message : String(e)}`); }
+  });
+
+  reg('setUpstream', async (arg?: unknown) => {
+    const name = localBranchFromArg(arg);
+    const t = target();
+    if (!t) return;
+    if (!name) { void vscode.window.showInformationMessage('Gitsprout: use the Branches view.'); return; }
+    let refs: Refs;
+    try { refs = await t.repo.refs(); } catch (e) { await fail(e, 'upstream', t.root); return; }
+    const current = refs.locals.find((b) => b.name === name)?.upstream ?? null;
+    type Item = vscode.QuickPickItem & { remote?: string | null };
+    const items: Item[] = upstreamCandidates(name, refs.remotes.map((r) => r.name), current).map((c) => ({
+      label: c.name, description: c.current ? 'current' : c.sameName ? 'same name' : undefined, remote: c.name,
+    }));
+    if (current) items.push({ label: 'Unset Upstream', description: `stop tracking ${current}`, remote: null });
+    if (!items.length) { void vscode.window.showInformationMessage('Gitsprout: there are no remote branches to track.'); return; }
+    const pick = await vscode.window.showQuickPick(items, { placeHolder: `Upstream branch for '${name}'` });
+    if (!pick || pick.remote === undefined) return;
+    const remote = pick.remote;
+    await mutate(t, 'upstream', async () => {
+      await t.repo.setUpstream(name, remote);
+      return remote === null ? `'${name}' no longer tracks '${current}'.` : `'${name}' now tracks '${remote}'.`;
+    });
   });
 }

@@ -545,4 +545,34 @@ describe('tags', () => {
     await rl.createTag('t', g(lone, 'rev-parse', 'HEAD').trim());
     expect(errorPlan(await rl.pushTag('t').catch((x: unknown) => x as GitError) as GitError, 'push')).toMatchObject({ text: expect.stringContaining('No remote') });
   });
+
+  it('upstream: set/unset, remoteUrl, linkRemote, isOnRemote before/after push', async () => {
+    const { origin, a, ra } = scenario();
+    expect(await ra.remotes()).toEqual(['origin']);
+    expect(await ra.remoteUrl('origin')).toBe(origin);
+    expect(await ra.remoteUrl('nope')).toBeNull();
+    expect(await ra.linkRemote()).toBe('origin');
+
+    g(a, 'switch', '-q', '-c', 'feat');
+    const c = commit(a, 'f.txt', 'x', 'On feat');
+    expect(await ra.isOnRemote(c)).toBe(false);
+    expect(await ra.isOnRemote(g(a, 'rev-parse', 'main').trim())).toBe(true);
+    expect((await ra.refs()).locals.find((b) => b.name === 'feat')?.upstream).toBeNull();
+
+    g(a, 'push', '-q', 'origin', 'feat');
+    g(a, 'fetch', '-q', 'origin');
+    expect(await ra.isOnRemote(c)).toBe(true);
+
+    await ra.setUpstream('feat', 'origin/feat');
+    expect((await ra.refs()).locals.find((b) => b.name === 'feat')?.upstream).toBe('origin/feat');
+    await ra.setUpstream('feat', null);
+    expect((await ra.refs()).locals.find((b) => b.name === 'feat')?.upstream).toBeNull();
+    expect(await kind(ra.setUpstream('feat', 'origin/missing'))).toBe('Other');
+
+    const other = fresh('other');
+    g(other, 'init', '-q', '--bare', '-b', 'main');
+    g(a, 'remote', 'add', 'aaa', other);
+    g(a, 'config', 'branch.feat.remote', 'aaa');
+    expect(await ra.linkRemote()).toBe('aaa'); // the branch's own remote wins over origin
+  });
 });

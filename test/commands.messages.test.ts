@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ACTION_LABEL, branchNameError, buildCheckoutEntries, errorPlan, existingBranchNote, localBranchFromArg, localNameOf, refNameFromArg, remoteBranchFromArg,
-  resolveStashIndex, rootFromArg, shQuote, stashShaFromArg, tagNameError, terminalCommand,
+  resolveStashIndex, rootFromArg, shQuote, stashShaFromArg, tagNameError, terminalCommand, upstreamCandidates,
 } from '../src/commands/messages';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
@@ -186,5 +186,15 @@ describe('manifest: palette', () => {
     const { commitDetailsHtml } = await import('../webview/render');
     const c = { sha: SHA, parents: [], author: 'a', email: 'a@b', time: 0, subject: 'S', body: '' };
     expect(commitDetailsHtml(c, [], { jira: {}, pills: new Map(), nowMs: 0, known: new Set() })).toContain(`data-copy="${SHA}"`);
+  });
+});
+
+describe('upstreamCandidates', () => {
+  it('same-name first, HEAD skipped, current flagged', () => {
+    expect(upstreamCandidates('feat', ['origin/a', 'origin/HEAD', 'fork/feat', 'origin/feat'], 'origin/a')).toEqual([
+      { name: 'fork/feat', sameName: true, current: false },
+      { name: 'origin/feat', sameName: true, current: false },
+      { name: 'origin/a', sameName: false, current: true },
+    ]);
   });
 });

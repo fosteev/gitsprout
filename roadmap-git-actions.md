@@ -1,6 +1,6 @@
 # Git actions from GitKraken's context menus (batch 1)
 
-> Status: in progress · 2026-10-04 · stage 1 accepted (UI checks in the pending file), stage 2 next. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-git-actions.pending.md` (same format as `roadmap-vscode.pending.md`).
+> Status: in progress · 2026-10-04 · stages 1–2 accepted (UI checks in the pending file), stage 3 next. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-git-actions.pending.md` (same format as `roadmap-vscode.pending.md`).
 
 ## Goal
 
@@ -44,12 +44,12 @@ Row context carries the repo; mutations helpers become reusable from a new modul
 
 ### 2. Remote links and upstream
 
-- [ ] pure `src/git/remoteUrl.ts` (no `vscode`): `webBase(remoteUrl): { base: string; host: 'github' | 'gitlab' | 'bitbucket' } | undefined` for `https://host/g/r(.git)`, `http://`, `git@host:g/r(.git)`, `ssh://git@host(:port)/g/r(.git)` (port dropped, credentials in https URLs dropped); `commitLink(b, sha)`, `branchLink(b, branch)` (each path segment `encodeURIComponent`, `/` kept). Literal-fixture unit tests incl. GitLab subgroups (`g/sub/r`) and `.git` suffix
-- [ ] `Repo.remoteUrl(remote)` (`git remote get-url --end-of-options <r>`, READ), `Repo.isOnRemote(sha)` (`git branch -r --contains <sha>` non-empty, READ)
-- [ ] `copyCommitLink` on graph rows (group `2_copy@3`): remote = upstream remote of the current branch → `origin` → first; if `!isOnRemote` → still copy, status-bar message "link copied — abc1234 isn't on any remote branch yet"; unknown host format → information message
-- [ ] `copyBranchLink` on Branches local items that have an upstream (link to the upstream branch on its remote) and on Remotes items (`origin/x` → remote `origin`, branch `x`); group `3_copy`
-- [ ] `setUpstream` on Branches local items (group `1_modify@3`): quick pick of remote branches (same-name ones first; "Unset Upstream" entry when one is set) → `Repo.setUpstream(branch, remoteBranch | null)` (`git branch --set-upstream-to=<r/b> --end-of-options <b>` / `git branch --unset-upstream --end-of-options <b>`); op `upstream`
-- [ ] integration tests: set/unset upstream against a bare remote, `remoteUrl`, `isOnRemote` before/after push
+- [x] pure `src/git/remoteUrl.ts` (no `vscode`): `webBase(remoteUrl): { base: string; host: 'github' | 'gitlab' | 'bitbucket' } | undefined` for `https://host/g/r(.git)`, `http://`, `git@host:g/r(.git)`, `ssh://git@host(:port)/g/r(.git)` (port dropped, credentials in https URLs dropped); `commitLink(b, sha)`, `branchLink(b, branch)` (each path segment `encodeURIComponent`, `/` kept). Literal-fixture unit tests incl. GitLab subgroups (`g/sub/r`) and `.git` suffix
+- [x] `Repo.remoteUrl(remote)` (`git remote get-url --end-of-options <r>`, READ), `Repo.isOnRemote(sha)` (`git branch -r --contains <sha>` non-empty, READ)
+- [x] `copyCommitLink` on graph rows (group `2_copy@3`): remote = upstream remote of the current branch → `origin` → first; if `!isOnRemote` → still copy, status-bar message "link copied — abc1234 isn't on any remote branch yet"; unknown host format → information message
+- [x] `copyBranchLink` on Branches local items that have an upstream (link to the upstream branch on its remote) and on Remotes items (`origin/x` → remote `origin`, branch `x`); group `3_copy`
+- [x] `setUpstream` on Branches local items (group `1_modify@3`): quick pick of remote branches (same-name ones first; "Unset Upstream" entry when one is set) → `Repo.setUpstream(branch, remoteBranch | null)` (`git branch --set-upstream-to=<r/b> --end-of-options <b>` / `git branch --unset-upstream --end-of-options <b>`); op `upstream`
+- [x] integration tests: set/unset upstream against a bare remote, `remoteUrl`, `isOnRemote` before/after push
 
 **Done when:** checks green; links verified by unit tests for all URL forms listed above.
 

@@ -72,6 +72,16 @@ export function resolveStashIndex(stashes: readonly Pick<Stash, 'index' | 'sha'>
   return stashes.find((s) => s.sha === sha)?.index;
 }
 
+// ---- set upstream quick pick ----
+
+/** Remote branches for the Set Upstream pick: same-name ones first, then alphabetical; the current upstream is flagged. */
+export function upstreamCandidates(branch: string, remotes: readonly string[], current: string | null): { name: string; sameName: boolean; current: boolean }[] {
+  return remotes
+    .filter((r) => !r.endsWith('/HEAD'))
+    .map((name) => ({ name, sameName: name.slice(name.indexOf('/') + 1) === branch, current: name === current }))
+    .sort((a, b) => Number(b.sameName) - Number(a.sameName) || a.name.localeCompare(b.name));
+}
+
 // ---- checkout quick pick ----
 
 export type CheckoutEntry =

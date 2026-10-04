@@ -234,6 +234,21 @@
         "command": "gitsprout.pushTag",
         "title": "Push Tag",
         "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.copyCommitLink",
+        "title": "Copy Link to Commit",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.copyBranchLink",
+        "title": "Copy Link to Branch",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.setUpstream",
+        "title": "Set Upstream…",
+        "category": "Gitsprout"
       }
     ],
     "menus": {
@@ -394,6 +409,31 @@
           "command": "gitsprout.deleteTag",
           "when": "view == gitsprout.tags && viewItem == tag",
           "group": "1_modify"
+        },
+        {
+          "command": "gitsprout.setUpstream",
+          "when": "view == gitsprout.branches && viewItem == branch.local",
+          "group": "1_modify@3"
+        },
+        {
+          "command": "gitsprout.copyBranchLink",
+          "when": "view == gitsprout.branches && viewItem == branch.local",
+          "group": "3_copy"
+        },
+        {
+          "command": "gitsprout.setUpstream",
+          "when": "view == gitsprout.branches && viewItem == branch.local.head",
+          "group": "1_modify@3"
+        },
+        {
+          "command": "gitsprout.copyBranchLink",
+          "when": "view == gitsprout.branches && viewItem == branch.local.head",
+          "group": "3_copy"
+        },
+        {
+          "command": "gitsprout.copyBranchLink",
+          "when": "view == gitsprout.remotes && viewItem == branch.remote",
+          "group": "3_copy"
         }
       ],
       "webview/context": [
@@ -421,6 +461,11 @@
           "command": "gitsprout.createAnnotatedTag",
           "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
           "group": "1_create@3"
+        },
+        {
+          "command": "gitsprout.copyCommitLink",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
+          "group": "2_copy@3"
         }
       ],
       "commandPalette": [
@@ -498,6 +543,18 @@
         },
         {
           "command": "gitsprout.pushTag",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.copyCommitLink",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.copyBranchLink",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.setUpstream",
           "when": "false"
         }
       ]
