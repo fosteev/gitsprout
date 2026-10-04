@@ -28,7 +28,8 @@ export function createReporter(gitPath: () => string, log: (m: string) => void) 
 
   return async function fail(e: unknown, op: Op, root: string, branch?: string | null): Promise<void> {
     const err = e instanceof GitError ? e : new GitError('Other', text(e), '', []);
-    log(`${op} ${root}: [${err.kind}] ${err.message}${err.stderr ? `\n${err.stderr.trim()}` : ''}`);
+    // stdout too: `commit` says "nothing to commit" there, merges print CONFLICT lines there.
+    log(`${op} ${root}: [${err.kind}] ${err.message}${err.stderr ? `\n${err.stderr.trim()}` : ''}${err.stdout?.trim() ? `\n${err.stdout.trim()}` : ''}`);
     const plan = errorPlan(err, op, branch);
     if (!plan) return;
     const show = plan.level === 'error' ? vscode.window.showErrorMessage : plan.level === 'warn' ? vscode.window.showWarningMessage : vscode.window.showInformationMessage;
