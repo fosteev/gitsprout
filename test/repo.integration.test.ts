@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Repo } from '../src/git/repo';
 import { GitError } from '../src/git/types';
+import { deleteDetail, errorPlan, pullMessage, pushMessage, resolveStashIndex, terminalCommand } from '../src/commands/messages';
 
 // Everything happens in a temp dir under an isolated git environment: no global/system config, no hooks,
 // no signing, no editor. A bare "origin" on disk stands in for the remote; no network.
@@ -378,5 +379,129 @@ describe('stash', () => {
     // the index of a conflicted file has no stage 0: show(':') falls back to "ours"
     expect((await ra.status()).unstaged).toContainEqual({ path: 'README.md', origPath: null, status: 'U', untracked: false });
     expect(await ra.show(':', 'README.md')).toBe('committed\n');
+  });
+});
+
+// The command layer (src/commands/mutations.ts) glues Repo to VS Code; these run its flows without the UI:
+// the same Repo calls in the same order, with the pure message helpers the notifications are built from.
+describe('command flows', () => {
+  it('commit on a behind branch -> push rejected -> pull merges -> push passes', async () => {
+    const { a, b, ra, rb } = scenario();
+    commit(a, 'a.txt', 'a', 'A change');
+    await ra.push();
+    commit(b, 'b.txt', 'b', 'B change');
+    const before = await rb.summary();
+    const err = await rb.push().catch((e: unknown) => e as GitError);
+    expect(err).toBeInstanceOf(GitError);
+    expect(errorPlan(err as GitError, 'push', before.branch)).toMatchObject({ level: 'error', actions: ['pull'], text: expect.stringContaining("Try running 'Pull' first") });
+
+    const beforePull = await rb.summary();
+    await rb.pull();
+    expect(pullMessage(beforePull, await rb.summary())).toMatch(/^Branches had diverged\. Merged origin\/main into 'main'\.$/);
+    const beforePush = await rb.summary();
+    await rb.push();
+    expect(pushMessage(beforePush, await rb.summary())).toBe('Pushed 2 commits to origin/main.');
+    expect(pushMessage(await rb.summary(), await rb.summary())).toBe('Everything up-to-date.');
+  });
+
+  it('pull messages: up to date, fast-forward; first push publishes', async () => {
+    const { a, ra, rb } = scenario();
+    let before = await rb.summary();
+    await rb.pull();
+    expect(pullMessage(before, await rb.summary())).toBe('Already up to date.');
+    const sha = commit(a, 'a.txt', 'a', 'A change');
+    await ra.push();
+    before = await rb.summary();
+    await rb.pull();
+    expect(pullMessage(before, await rb.summary())).toBe(`Fast-forwarded 'main' to ${sha.slice(0, 7)}.`);
+
+    await rb.createBranch('feat', 'main', true);
+    const beforeFirst = await rb.summary();
+    await rb.push();
+    expect(pushMessage(beforeFirst, await rb.summary())).toBe("Published 'feat' to origin/feat.");
+  });
+
+  it('pull without upstream -> publish plan; conflict -> Open Source Control; Auth -> terminal line from the real args', async () => {
+    const { a, b, ra, rb } = scenario();
+    await ra.createBranch('solo', 'main', true);
+    const noUp = await ra.pull().catch((e: unknown) => e as GitError);
+    expect(errorPlan(noUp as GitError, 'pull', 'solo')).toMatchObject({ level: 'warn', actions: ['publish'], text: "The branch 'solo' has no remote branch. Would you like to publish it?" });
+
+    g(a, 'switch', '-q', 'main');
+    commit(a, 'README.md', 'from a\n', 'A edits README');
+    await ra.push();
+    commit(b, 'README.md', 'from b\n', 'B edits README');
+    const conflict = await rb.pull().catch((e: unknown) => e as GitError);
+    expect(errorPlan(conflict as GitError, 'pull')).toMatchObject({ actions: ['scm'] });
+    // the line for the terminal replays the failing call without the -C/-c prefix
+    expect(terminalCommand('git', (conflict as GitError).args)).toBe('git pull --no-rebase --no-edit');
+    expect(terminalCommand('/opt/my git/git', ['-C', '/r', '-c', 'core.quotePath=false', 'push', '-u', 'origin', 'it\'s'])).toBe("'/opt/my git/git' push -u origin 'it'\\''s'");
+  });
+
+  it('branches: create from a sha, rename, delete with the unpushed note, force delete', async () => {
+    const { a, ra } = scenario();
+    const first = g(a, 'rev-parse', 'HEAD').trim();
+    commit(a, 'x.txt', 'x', 'Second');
+    await ra.createBranch('from-sha', first, true);
+    expect((await ra.refs()).head.branch).toBe('from-sha');
+    await ra.renameBranch('from-sha', 'renamed');
+    await ra.checkout('main');
+    commit(a, 'y.txt', 'y', 'Only on renamed');
+    g(a, 'switch', '-q', 'renamed');
+    commit(a, 'z.txt', 'z', 'Unmerged work');
+    await ra.checkout('main');
+    const b = (await ra.refs()).locals.find((l) => l.name === 'renamed')!;
+    expect(deleteDetail(b)).toMatch(/never pushed/);
+    expect(await kind(ra.deleteBranch('renamed', false))).toBe('NotFullyMerged');
+    await ra.deleteBranch('renamed', true);
+    expect((await ra.refs()).locals.map((l) => l.name)).toEqual(['main']);
+    const main = (await ra.refs()).locals[0];
+    expect(deleteDetail({ ...main, ahead: 2 })).toBe('2 commits are not pushed to origin/main. They will only be reachable through the reflog.');
+    expect(deleteDetail({ ...main, ahead: 0 })).toBe('origin/main stays on the server.');
+  });
+
+  it('stash with an untracked file, found by sha after the list shifted, then pop', async () => {
+    const { a, ra } = scenario();
+    put(a, 'new.txt', 'untracked');
+    put(a, 'README.md', 'changed\n');
+    await ra.stashPush('first');
+    const [first] = await ra.stashes();
+    put(a, 'other.txt', 'o');
+    await ra.stashPush();
+    const list = await ra.stashes();
+    expect(list).toHaveLength(2);
+    expect(first.index).toBe(0);                       // stale index in an old tree node...
+    const idx = resolveStashIndex(list, first.sha);    // ...re-resolved from the sha
+    expect(idx).toBe(1);
+    await ra.stashPop(idx!);
+    expect(g(a, 'status', '--porcelain').split('\n').filter(Boolean).sort()).toEqual([' M README.md', '?? new.txt']);
+    expect(resolveStashIndex(await ra.stashes(), first.sha)).toBeUndefined();
+  });
+
+  it('refs that start with "-" (legal in a clone) never turn into git options', async () => {
+    const { a, ra } = scenario();
+    const base = g(a, 'rev-parse', 'HEAD').trim();
+    g(a, 'update-ref', 'refs/tags/--discard-changes', base);
+    g(a, 'update-ref', 'refs/heads/-d', base);
+    commit(a, 'next.txt', 'n', 'Next');
+    await ra.createBranch('from-tag', '--discard-changes', true);
+    expect(await ra.summary()).toMatchObject({ branch: 'from-tag', sha: base });
+    await ra.checkout('-d');
+    expect((await ra.refs()).head.branch).toBe('-d'); // `switch -d` would have detached HEAD
+    await ra.checkout('main');
+    await ra.renameBranch('-d', 'dash');
+    await ra.deleteBranch('dash', true);
+    expect((await ra.refs()).locals.map((l) => l.name).sort()).toEqual(['from-tag', 'main']);
+  });
+
+  it('checkout over local changes -> LocalChanges plan offers Stash Changes', async () => {
+    const { a, ra } = scenario();
+    await ra.createBranch('other', 'main', false);
+    g(a, 'switch', '-q', 'other');
+    commit(a, 'README.md', 'other\n', 'Other edits README');
+    g(a, 'switch', '-q', 'main');
+    put(a, 'README.md', 'dirty\n');
+    const e = await ra.checkout('other').catch((x: unknown) => x as GitError);
+    expect(errorPlan(e as GitError, 'checkout')).toMatchObject({ actions: ['stash', 'scm'] });
   });
 });

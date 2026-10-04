@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { run } from '../git/run';
 import { inside } from './model';
@@ -104,15 +105,21 @@ export async function discover(folders: readonly string[], depth: number, exclud
 }
 
 
+/** Same directory, comparing real paths when both exist (`/var` vs `/private/var`, symlinked home). */
+async function sameDir(a: string, b: string): Promise<boolean> {
+  if (resolve(a) === resolve(b)) return true;
+  try { return (await fs.realpath(a)) === (await fs.realpath(b)); } catch { return false; }
+}
+
 /**
  * `discover`, plus: a workspace folder that sits inside a repo (no repo found at or below it) is resolved upwards
  * with `git rev-parse --show-cdup` (cwd = the folder) and the enclosing repo is added (depth 0). `--show-cdup`
  * rather than `--show-toplevel`: the root keeps the folder's spelling (symlinks, `/var` vs `/private/var`, Windows
- * slashes), so it still contains the folder and matches editor paths. Folders in no repo, and submodule checkouts,
- * add nothing.
+ * slashes), so it still contains the folder and matches editor paths. Folders in no repo, submodule checkouts and
+ * a repo rooted at `home` (default: the user's home directory) add nothing.
  */
 export async function discoverWithParents(
-  folders: readonly string[], depth: number, exclude: readonly string[] = [], gitPath?: string,
+  folders: readonly string[], depth: number, exclude: readonly string[] = [], gitPath?: string, home: string = homedir(),
 ): Promise<DiscoveredRepo[]> {
   const found = await discover(folders, depth, exclude);
   const byRoot = new Map(found.map((r) => [r.root, r]));
@@ -126,6 +133,8 @@ export async function discoverWithParents(
     } catch { continue; }
     const top = resolve(folder, cdup);
     if (byRoot.has(top)) continue;
+    // Never climb into the home directory: a dotfiles repo there is not "the repo of this folder".
+    if (await sameDir(top, home)) continue;
     const marker = await readMarker(top);
     if (marker?.kind !== 'repo') continue;
     byRoot.set(top, { root: top, gitDir: marker.gitDir, commonDir: marker.commonDir, folder, depth: 0 });

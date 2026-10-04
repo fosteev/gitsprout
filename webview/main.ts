@@ -115,6 +115,8 @@ function renderDetails(): void {
 function renderToolbar(): void {
   if (!st || !model) return;
   $('repo').textContent = `${st.repo.name} ▾`;
+  // One repo in the window: nothing to switch to, so the chip is hidden (the tab title still names the repo).
+  $('repo').hidden = !st.multiRepo;
   const ci = $('ci');
   const label = st.settings.ciPattern === '^AutoBuild$' ? 'AutoBuild' : 'CI';
   ci.textContent = `Hide ${label} · ${st.settings.hideCi ? `${model.hiddenN} hidden` : model.ciTotal}`;
@@ -209,9 +211,10 @@ new ResizeObserver(() => renderRows()).observe(list);
 
 // Details card.
 details.addEventListener('click', (ev) => {
-  const t = (ev.target as HTMLElement).closest<HTMLElement>('[data-url],[data-select],[data-scm],[data-file]');
+  const t = (ev.target as HTMLElement).closest<HTMLElement>('[data-url],[data-select],[data-scm],[data-file],[data-copy]');
   if (!t || !st) return;
-  if (t.dataset.url) send({ type: 'openUrl', url: t.dataset.url });
+  if (t.dataset.copy) send({ type: 'copy', text: t.dataset.copy });
+  else if (t.dataset.url) send({ type: 'openUrl', url: t.dataset.url });
   else if (t.dataset.select) { if (model?.known.has(t.dataset.select)) select(t.dataset.select, { center: true }); }
   else if (t.dataset.scm) send({ type: 'openScm' });
   else if (t.dataset.file !== undefined) {

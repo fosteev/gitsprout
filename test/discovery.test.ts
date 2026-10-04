@@ -162,4 +162,17 @@ describe('discoverWithParents', () => {
     const found = await discoverWithParents([join(home, 'x', 'r'), join(home, 'x')], 3);
     expect(found.map((r) => r.root)).toEqual([join(home, 'x', 'r')]);
   });
+  it('never climbs to a repo rooted at the home directory (dotfiles)', async () => {
+    const home = join(tmp, 'fakehome');
+    mkdirSync(join(home, 'Projects', 'scratch'), { recursive: true });
+    execFileSync('git', ['init', '-q', home], { stdio: 'ignore' });
+    const folder = join(home, 'Projects', 'scratch');
+    expect(await discoverWithParents([folder], 3, [], undefined, home)).toEqual([]);
+    // a symlinked spelling of home is the same directory
+    const link = join(tmp, 'fakehome-link');
+    symlinkSync(home, link, 'dir');
+    expect(await discoverWithParents([folder], 3, [], undefined, link)).toEqual([]);
+    // any other enclosing repo is still added
+    expect((await discoverWithParents([folder], 3, [], undefined, join(tmp, 'elsewhere'))).map((r) => r.root)).toEqual([realpathSync(home)]);
+  });
 });

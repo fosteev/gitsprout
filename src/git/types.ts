@@ -1,5 +1,5 @@
 export type ErrorKind = 'NotARepo' | 'GitMissing' | 'PushRejected' | 'NoUpstream' | 'Conflict'
-  | 'LocalChanges' | 'NotFullyMerged' | 'Auth' | 'NothingToStash' | 'Other';
+  | 'LocalChanges' | 'NotFullyMerged' | 'Auth' | 'NothingToStash' | 'Cancelled' | 'Other';
 
 export class GitError extends Error {
   constructor(

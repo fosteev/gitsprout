@@ -386,6 +386,62 @@
         {
           "command": "gitsprout.openStashFile",
           "when": "false"
+        },
+        {
+          "command": "gitsprout.checkoutBranch",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.checkoutRemote",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.createBranchFrom",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.renameBranch",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.deleteBranch",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.stashApply",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.stashPop",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.stashDrop",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.copySha",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.copyMessage",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.copyBranchName",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.copyRepoPath",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.repoShowGraph",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.repoFetch",
+          "when": "false"
         }
       ]
     },

@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { GitError, type ErrorKind } from './types';
 
 export interface RunOptions {
@@ -9,6 +9,10 @@ export interface RunOptions {
   okCodes?: number[];
   /** Read-only call: sets GIT_OPTIONAL_LOCKS=0 so we never fight the user's git for index.lock. */
   read?: boolean;
+  /** Aborting kills git and everything it spawned (process group); the promise rejects with `GitError('Cancelled')`. */
+  signal?: AbortSignal;
+  /** Kill git (and its children) after this many ms in total; rejects with an `Other` error that says so. 0/undefined = no limit. */
+  timeout?: number;
 }
 export interface RunResult { stdout: string; stderr: string; code: number }
 
@@ -43,26 +47,70 @@ export function classify(stderr: string): ErrorKind {
 export function run(root: string, args: string[], opts: RunOptions = {}): Promise<RunResult> {
   const full = ['-C', root, '-c', 'core.quotePath=false', ...args];
   const ok = new Set([0, ...(opts.okCodes ?? [])]);
+  const bin = opts.gitPath || 'git';
   return new Promise((resolve, reject) => {
-    const child = execFile(
-      opts.gitPath || 'git', full,
-      { env: gitEnv(!!opts.read), maxBuffer: MAX_BUFFER, encoding: 'utf8' },
-      (err, stdout, stderr) => {
-        if (!err) return resolve({ stdout, stderr, code: 0 });
-        const e = err as NodeJS.ErrnoException & { code?: number | string };
-        if (e.code === 'ENOENT' || e.code === 'EACCES') {
-          return reject(new GitError('GitMissing', `git not found or not executable (${opts.gitPath || 'git'})`, String(e.message), full, stdout));
-        }
-        if (typeof e.code === 'number') {
-          if (ok.has(e.code)) return resolve({ stdout, stderr, code: e.code });
-          const msg = lastLine(stderr) || lastLine(stdout) || `git exited with code ${e.code}`;
-          return reject(new GitError(classify(stderr), msg, stderr, full, stdout));
-        }
-        reject(new GitError('Other', e.message, stderr ?? '', full, stdout ?? ''));
-      },
-    );
+    if (opts.signal?.aborted) return reject(new GitError('Cancelled', 'Cancelled', '', full));
+    // A killable call gets its own process group (POSIX): `fetch --all`, `pull` and ssh spawn children that would
+    // outlive a kill of `git` alone, keep fetching and hold ref locks. (execFile does not pass `detached` to spawn.)
+    const group = !!(opts.signal || opts.timeout) && process.platform !== 'win32';
+    const child = spawn(bin, full, { env: gitEnv(!!opts.read), detached: group, windowsHide: true });
+    let stdout = '';
+    let stderr = '';
+    let size = 0;
+    let stopped: 'abort' | 'timeout' | 'maxBuffer' | undefined;
+    let settled = false;
+
+    const kill = (why: 'abort' | 'timeout' | 'maxBuffer'): void => {
+      if (stopped || settled) return;
+      stopped = why;
+      try {
+        if (group && child.pid) process.kill(-child.pid, 'SIGTERM');
+        else child.kill('SIGTERM');
+      } catch { child.kill('SIGTERM'); }
+      // Settle even if something in the group ignores SIGTERM and keeps the pipes open.
+      child.stdout.destroy();
+      child.stderr.destroy();
+    };
+    const onAbort = (): void => kill('abort');
+    opts.signal?.addEventListener('abort', onAbort, { once: true });
+    const timer = opts.timeout ? setTimeout(() => kill('timeout'), opts.timeout) : undefined;
+    const done = (f: () => void): void => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      opts.signal?.removeEventListener('abort', onAbort);
+      f();
+    };
+
+    const collect = (which: 'out' | 'err') => (chunk: string): void => {
+      size += Buffer.byteLength(chunk);
+      if (size > MAX_BUFFER) { kill('maxBuffer'); return; }
+      if (which === 'out') stdout += chunk; else stderr += chunk;
+    };
+    child.stdout.setEncoding('utf8').on('data', collect('out'));
+    child.stderr.setEncoding('utf8').on('data', collect('err'));
+
+    child.on('error', (err: NodeJS.ErrnoException) => done(() => {
+      if (err.code === 'ENOENT' || err.code === 'EACCES') {
+        reject(new GitError('GitMissing', `git not found or not executable (${bin})`, String(err.message), full, stdout));
+      } else {
+        reject(new GitError('Other', err.message, stderr, full, stdout));
+      }
+    }));
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => done(() => {
+      if (stopped === 'abort') return reject(new GitError('Cancelled', 'Cancelled', stderr, full, stdout));
+      if (stopped === 'timeout') {
+        return reject(new GitError('Other', `git timed out after ${Math.round(opts.timeout! / 1000)} s`, stderr, full, stdout));
+      }
+      if (stopped === 'maxBuffer') return reject(new GitError('Other', 'git output is too large', stderr, full, stdout));
+      if (code === null) return reject(new GitError('Other', `git was killed (${signal ?? 'signal'})`, stderr, full, stdout));
+      if (ok.has(code)) return resolve({ stdout, stderr, code });
+      const msg = lastLine(stderr) || lastLine(stdout) || `git exited with code ${code}`;
+      reject(new GitError(classify(stderr), msg, stderr, full, stdout));
+    }));
+
     // A closed pipe (git exited before reading stdin) must not crash the process.
-    child.stdin?.on('error', () => {});
-    child.stdin?.end(opts.stdin ?? '');
+    child.stdin.on('error', () => {});
+    child.stdin.end(opts.stdin ?? '');
   });
 }

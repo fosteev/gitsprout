@@ -11,7 +11,7 @@ export interface GraphSettings {
 }
 
 export type ToWebview =
-  | { type: 'state'; repo: { root: string; name: string }; head: Head; commits: Commit[]; refs: Refs; wip: Status | null; settings: GraphSettings }
+  | { type: 'state'; repo: { root: string; name: string }; /** more than one repo in the window: the toolbar shows the repo chip */ multiRepo: boolean; head: Head; commits: Commit[]; refs: Refs; wip: Status | null; settings: GraphSettings }
   /** `error` set = the file list could not be read (`files` is empty then). */
   | { type: 'details'; sha: string; files: FileStat[]; error?: string }
   | { type: 'reveal'; sha: string }                      // select + scroll (from tree views)
@@ -26,7 +26,9 @@ export type FromWebview =
   | { type: 'openWipFile'; file: FileChange; area: 'staged' | 'unstaged' }
   | { type: 'openScm' } | { type: 'switchRepo' } | { type: 'refresh' }
   | { type: 'toggleCi'; hideCi: boolean }
-  | { type: 'openUrl'; url: string };
+  | { type: 'openUrl'; url: string }
+  /** Copy text to the clipboard (the details card's "Copy SHA" button). */
+  | { type: 'copy'; text: string };
 
 /** Context attached to a row (`data-vscode-context`); `webview/context` commands receive it. */
 export interface CommitContext { webviewSection: 'commit'; sha: string; preventDefaultContextMenuItems: true }

@@ -5,6 +5,7 @@ import { buildPickEntries } from '../views/repoModel';
 import type { RepositoriesView } from '../views/repositories';
 import { fetchRepos, summarizeFetch } from '../workspace/fetch';
 import type { Registry } from '../workspace/registry';
+import { createReporter } from './report';
 
 /** Ids implemented here; `registerStubCommands` skips them. */
 export const REPO_COMMAND_IDS = [
@@ -24,8 +25,10 @@ export function registerRepoCommands(
   const reg = (id: (typeof REPO_COMMAND_IDS)[number], fn: (...args: unknown[]) => unknown) =>
     context.subscriptions.push(vscode.commands.registerCommand(`gitsprout.${id}`, fn));
 
-  const fetchOne = async (r: RepoSummary) => {
-    await new Repo(r.root, registry.gitPath).fetch();
+  const fail = createReporter(() => registry.gitPath, log);
+
+  const fetchOne = async (r: RepoSummary, signal?: AbortSignal) => {
+    await new Repo(r.root, registry.gitPath).fetch({ signal });
     await registry.refreshRepo(r.root);
   };
 
@@ -37,8 +40,7 @@ export function registerRepoCommands(
       const after = registry.get(r.root);
       if (after?.behind) void vscode.window.showInformationMessage(`${r.name}: ${after.behind} incoming commit${after.behind === 1 ? '' : 's'}.`);
     } catch (e) {
-      log(`fetch ${r.root}: ${e instanceof Error ? e.message : String(e)}`);
-      void vscode.window.showErrorMessage(`Fetch failed in ${r.name}: ${e instanceof Error ? e.message : String(e)}`);
+      await fail(e, 'fetch', r.root, r.branch);
     }
   };
 
@@ -53,7 +55,11 @@ export function registerRepoCommands(
       { location: vscode.ProgressLocation.Notification, title: 'Fetching repositories', cancellable: true },
       (progress, token) => {
         progress.report({ message: `0/${repos.length}` });
+        // Cancel stops new fetches and kills the running `git fetch` processes (they report as cancelled, not as errors).
+        const ac = new AbortController();
+        token.onCancellationRequested(() => ac.abort());
         return fetchRepos(repos, concurrency, fetchOne, {
+          signal: ac.signal,
           shouldStop: () => token.isCancellationRequested,
           onDone: (o, done) => progress.report({ increment: 100 / repos.length, message: `${done}/${repos.length} · ${o.name}` }),
         });
