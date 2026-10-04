@@ -56,11 +56,13 @@ export function subjectHtml(subject: string, jira: Record<string, string>, link:
   return h + `<span class="t">${esc(p.rest)}</span>`;
 }
 
-export function commitContext(sha: string): CommitContext {
-  return { webviewSection: 'commit', sha, preventDefaultContextMenuItems: true };
+export function commitContext(sha: string, root: string): CommitContext {
+  return { webviewSection: 'commit', sha, root, preventDefaultContextMenuItems: true };
 }
 
 export interface RowEnv {
+  /** Root of the repo the graph shows; goes into every row's context. */
+  root: string;
   width: number;
   selected: string | null;
   headSha: string | null;
@@ -85,7 +87,7 @@ export function rowHtml(r: LaidRow, e: RowEnv): string {
   const c = r.commit as Commit;
   const cls = c.parents.length > 1 ? 'merge' : e.isCi(c) ? 'ci' : '';
   const ago = fmtAgo(minutesAgo(c.time, e.nowMs));
-  return `<div class="gr${e.selected === c.sha ? ' on' : ''}${rowMatches(c, e.query) ? '' : ' dim'}" data-sha="${c.sha}" data-vscode-context="${esc(JSON.stringify(commitContext(c.sha)))}">`
+  return `<div class="gr${e.selected === c.sha ? ' on' : ''}${rowMatches(c, e.query) ? '' : ' dim'}" data-sha="${c.sha}" data-vscode-context="${esc(JSON.stringify(commitContext(c.sha, e.root)))}">`
     + rowSvg(r, e.width, { head: c.sha === e.headSha, ci: e.isCi(c) })
     + `<div class="gdesc ${cls}">${pillsHtml(e.pills.get(c.sha), r.col)}${subjectHtml(c.subject, e.jira, false)}</div>`
     + `<div class="gwhen">${ago}</div><div class="gwho">${esc(c.author)}</div><div class="gsha">${c.sha.slice(0, 7)}</div></div>`;

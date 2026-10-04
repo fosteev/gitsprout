@@ -45,7 +45,7 @@ Run the extension: F5 in VS Code ("Run Extension" launch config) opens an Extens
 
 - Git is invoked only through `src/git/run.ts`: `execFile('git', ['-C', root, ...])`, env `LC_ALL=C`, `GIT_TERMINAL_PROMPT=0`, `GIT_OPTIONAL_LOCKS=0` for reads, `-c core.quotePath=false`. Never parse localized or colored output.
 - Parsers are pure functions over strings with literal-fixture unit tests.
-- The extension never stages or commits; that is the built-in Source Control's job.
+- The extension never stages or commits; that is the built-in Source Control's job. Cherry-pick/revert/reset may create or move commits; there is still no staging or commit UI.
 - Webview ↔ extension messages are typed in `src/graph/protocol.ts` and imported by both sides.
 - No runtime dependencies unless the roadmap names them; everything is bundled by esbuild.
 - Commit messages: imperative English summary (`Add stash tree view`), no AI attribution trailers.

@@ -214,6 +214,26 @@
         "command": "gitsprout.openStashFile",
         "title": "Open Changes",
         "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.createTag",
+        "title": "Create Tag Here…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.createAnnotatedTag",
+        "title": "Create Annotated Tag Here…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.deleteTag",
+        "title": "Delete Tag",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.pushTag",
+        "title": "Push Tag",
+        "category": "Gitsprout"
       }
     ],
     "menus": {
@@ -364,13 +384,23 @@
           "command": "gitsprout.openStashFile",
           "when": "view == gitsprout.stashes && viewItem == stashFile",
           "group": "navigation"
+        },
+        {
+          "command": "gitsprout.pushTag",
+          "when": "view == gitsprout.tags && viewItem == tag",
+          "group": "1_remote"
+        },
+        {
+          "command": "gitsprout.deleteTag",
+          "when": "view == gitsprout.tags && viewItem == tag",
+          "group": "1_modify"
         }
       ],
       "webview/context": [
         {
           "command": "gitsprout.createBranchFrom",
           "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
-          "group": "1_create"
+          "group": "1_create@1"
         },
         {
           "command": "gitsprout.copySha",
@@ -381,6 +411,16 @@
           "command": "gitsprout.copyMessage",
           "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
           "group": "2_copy@2"
+        },
+        {
+          "command": "gitsprout.createTag",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
+          "group": "1_create@2"
+        },
+        {
+          "command": "gitsprout.createAnnotatedTag",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
+          "group": "1_create@3"
         }
       ],
       "commandPalette": [
@@ -442,6 +482,22 @@
         },
         {
           "command": "gitsprout.repoFetch",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.createTag",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.createAnnotatedTag",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.deleteTag",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.pushTag",
           "when": "false"
         }
       ]

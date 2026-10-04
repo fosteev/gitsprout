@@ -31,4 +31,4 @@ export type FromWebview =
   | { type: 'copy'; text: string };
 
 /** Context attached to a row (`data-vscode-context`); `webview/context` commands receive it. */
-export interface CommitContext { webviewSection: 'commit'; sha: string; preventDefaultContextMenuItems: true }
+export interface CommitContext { webviewSection: 'commit'; sha: string; /** the repo the row belongs to */ root: string; preventDefaultContextMenuItems: true }

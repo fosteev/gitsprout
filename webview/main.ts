@@ -82,7 +82,7 @@ function build(s: State): Model {
 
 function rowEnv(s: State, m: Model): RowEnv {
   return {
-    width: m.width, selected, headSha: s.head.sha, jira: s.settings.jira, pills: m.pills, isCi: m.isCi,
+    root: s.repo.root, width: m.width, selected, headSha: s.head.sha, jira: s.settings.jira, pills: m.pills, isCi: m.isCi,
     query: query.trim().toLowerCase(), nowMs: Date.now(), wipCount: s.wip ? s.wip.staged.length + s.wip.unstaged.length : 0,
   };
 }

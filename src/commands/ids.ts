@@ -6,7 +6,7 @@ export const COMMAND_IDS = [
   'renameBranch', 'deleteBranch', 'stash', 'stashApply', 'stashPop', 'stashDrop',
   'copySha', 'copyMessage', 'copyBranchName', 'copyRepoPath',
   'toggleAutoBuild', 'toggleOnlyAttention', 'openSourceControl', 'repoShowGraph', 'repoFetch',
-  'openStashFile',
+  'openStashFile', 'createTag', 'createAnnotatedTag', 'deleteTag', 'pushTag',
 ] as const;
 
 export const VIEW_IDS = ['repositories', 'branches', 'remotes', 'stashes', 'tags'] as const;

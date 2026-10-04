@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ACTION_LABEL, branchNameError, buildCheckoutEntries, errorPlan, existingBranchNote, localBranchFromArg, localNameOf, refNameFromArg, remoteBranchFromArg,
-  resolveStashIndex, shQuote, stashShaFromArg, terminalCommand,
+  resolveStashIndex, rootFromArg, shQuote, stashShaFromArg, tagNameError, terminalCommand,
 } from '../src/commands/messages';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
@@ -29,6 +29,26 @@ describe('branch names', () => {
   });
   it('local name of a remote branch', () => {
     expect([localNameOf('origin/main'), localNameOf('origin/feature/x')]).toEqual(['main', 'feature/x']);
+  });
+});
+
+describe('tag names and row roots', () => {
+  it('validates tag names', () => {
+    expect(tagNameError('', [])).toBe('Please provide a tag name');
+    for (const bad of ['a b', 'a..b', 'a~1', 'x.lock', '-x', 'a@{b', '@']) expect(tagNameError(bad, []), bad).toMatch(/is not valid/);
+    expect(tagNameError('v1.0.0', ['v0.9'])).toBe('');
+    expect(tagNameError('v1', ['v1'])).toBe("A tag named 'v1' already exists");
+  });
+  it('rootFromArg reads the root of a row context only', () => {
+    expect(rootFromArg({ webviewSection: 'commit', sha: 'a'.repeat(40), root: '/r' })).toBe('/r');
+    expect(rootFromArg({ root: '' })).toBeUndefined();
+    expect(rootFromArg({ root: 5 })).toBeUndefined();
+    expect(rootFromArg('/r')).toBeUndefined();
+    expect(rootFromArg(undefined)).toBeUndefined();
+  });
+  it('errorPlan: cherry-pick/revert conflicts point to Source Control', () => {
+    expect(errorPlan({ kind: 'Conflict', message: 'x' }, 'cherryPick')).toMatchObject({ actions: ['scm'], text: expect.stringContaining('Cherry pick stopped') });
+    expect(errorPlan({ kind: 'Other', message: 'boom' }, 'tag')).toMatchObject({ text: 'Tag failed: boom' });
   });
 });
 

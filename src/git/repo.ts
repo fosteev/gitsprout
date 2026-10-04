@@ -195,6 +195,40 @@ export class Repo {
     await this.git(['branch', force ? '-D' : '-d', '--end-of-options', name], {}, [[/not fully merged/i, 'NotFullyMerged']]);
   }
 
+  // ---- tags ----
+
+  /** Lightweight tag, or annotated with `message`. `--end-of-options`: the name was validated, the sha comes from the graph. */
+  async createTag(name: string, sha: string, message?: string): Promise<void> {
+    await this.git(['check-ref-format', `refs/tags/${name}`], READ).catch((e) => {
+      if (e instanceof GitError && e.kind === 'Other') {
+        throw new GitError('Other', `'${name}' is not a valid tag name`, e.stderr, e.args, e.stdout);
+      }
+      throw e;
+    });
+    await this.git(['tag', ...(message === undefined ? [] : ['-a', '-m', message]), '--end-of-options', name, sha]);
+  }
+
+  async deleteTag(name: string): Promise<void> {
+    await this.git(['tag', '-d', '--end-of-options', name]);
+  }
+
+  /** Remote for a tag: remote.pushDefault, origin, first remote. */
+  private async tagRemote(): Promise<string | null> {
+    const { stdout } = await this.git(['remote'], READ);
+    const remotes = stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+    const dflt = await this.config('remote.pushDefault');
+    if (dflt && remotes.includes(dflt)) return dflt;
+    return remotes.includes('origin') ? 'origin' : remotes[0] ?? null;
+  }
+
+  /** Pushes `refs/tags/<name>`; resolves with the remote used. A rejected tag push is a plain failure (Pull would not help). */
+  async pushTag(name: string, opts: { signal?: AbortSignal } = {}): Promise<string> {
+    const remote = await this.tagRemote();
+    if (!remote) throw new GitError('Other', 'No remote configured', '', ['remote']);
+    await this.git(['push', remote, `refs/tags/${name}`], { signal: opts.signal });
+    return remote;
+  }
+
   // ---- network ----
 
   /** `signal` kills the running git (rejects with kind `Cancelled`); a stuck fetch is killed after `timeoutMs`. */

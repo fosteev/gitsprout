@@ -15,6 +15,14 @@ export function branchNameError(name: string, existing: readonly string[], excep
   return '';
 }
 
+/** Same for the tag-name input box; the final word is `git check-ref-format refs/tags/<name>`. */
+export function tagNameError(name: string, existing: readonly string[]): string {
+  if (!name) return 'Please provide a tag name';
+  if (/\s|\.\.|[~^:?*[\\]|@\{|^\/|\/$|\/\/|\.lock$|\.$|^-|^@$/.test(name)) return `Tag name '${name}' is not valid`;
+  if (existing.includes(name)) return `A tag named '${name}' already exists`;
+  return '';
+}
+
 /** `origin/feature/x` -> `feature/x`. */
 export const localNameOf = (remote: string): string => remote.slice(remote.indexOf('/') + 1);
 
@@ -31,6 +39,12 @@ export function refNameFromArg(arg: unknown): string | undefined {
   if (a.kind === 'remoteBranch') return a.ref?.name;
   if (a.kind === undefined && typeof a.name === 'string') return a.name; // a Tag
   return undefined;
+}
+
+/** Repo root of a graph row context (`{ sha, root, … }`); undefined for anything else (tree nodes, strings). */
+export function rootFromArg(arg: unknown): string | undefined {
+  const root = (arg as { root?: unknown } | null)?.root;
+  return typeof root === 'string' && root ? root : undefined;
 }
 
 /** Local branch name from a branches-tree leaf or a string. */
@@ -137,7 +151,8 @@ export function pushMessage(before: Sum, after: Pick<SummaryStatus, 'upstream'>)
 
 // ---- error -> notification ----
 
-export type Op = 'fetch' | 'pull' | 'push' | 'checkout' | 'create' | 'rename' | 'delete' | 'stash' | 'apply' | 'pop' | 'drop';
+export type Op = 'fetch' | 'pull' | 'push' | 'checkout' | 'create' | 'rename' | 'delete' | 'stash' | 'apply' | 'pop' | 'drop'
+  | 'tag' | 'reset' | 'cherryPick' | 'revert' | 'upstream';
 export type ActionId = 'pull' | 'publish' | 'terminal' | 'scm' | 'stash' | 'output';
 export interface ErrorPlan { text: string; level: 'error' | 'warn' | 'info'; actions: ActionId[] }
 
@@ -148,6 +163,7 @@ export const ACTION_LABEL: Record<ActionId, string> = {
 const OP_WORD: Record<Op, string> = {
   fetch: 'Fetch', pull: 'Pull', push: 'Push', checkout: 'Checkout', create: 'Create branch', rename: 'Rename branch',
   delete: 'Delete branch', stash: 'Stash', apply: 'Apply stash', pop: 'Pop stash', drop: 'Drop stash',
+  tag: 'Tag', reset: 'Reset', cherryPick: 'Cherry pick', revert: 'Revert', upstream: 'Set upstream',
 };
 const NETWORK: readonly Op[] = ['fetch', 'pull', 'push'];
 
@@ -177,7 +193,9 @@ function basePlan(e: { kind: ErrorKind; message: string }, op: Op, branch?: stri
       return {
         text: op === 'apply' || op === 'pop'
           ? 'The stash conflicts with your working tree. Resolve the conflicts in Source Control (a conflicting pop keeps the stash).'
-          : 'Merge conflicts. Resolve them in Source Control, then commit the merge.',
+          : op === 'cherryPick' || op === 'revert'
+            ? `${OP_WORD[op]} stopped on conflicts. Resolve them in Source Control, then commit there to continue.`
+            : 'Merge conflicts. Resolve them in Source Control, then commit the merge.',
         level: 'error', actions: ['scm'],
       };
     case 'LocalChanges':

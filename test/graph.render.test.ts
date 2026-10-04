@@ -57,10 +57,11 @@ describe('render', () => {
   it('rows carry the webview context and escape author/subject', () => {
     const c = commit();
     const lay = layout(visibleRows([c], { hideCi: false, isCi: () => false, keep: new Set(), headSha: SHA, dirty: false }).rows);
-    const env: RowEnv = { width: 20, selected: SHA, headSha: SHA, jira: JIRA, pills: refsBySha(refs, refs.head), isCi: () => false, query: 'zzz', nowMs: 2_000_000, wipCount: 0 };
+    const env: RowEnv = { root: '/work/repo', width: 20, selected: SHA, headSha: SHA, jira: JIRA, pills: refsBySha(refs, refs.head), isCi: () => false, query: 'zzz', nowMs: 2_000_000, wipCount: 0 };
     const h = rowHtml(lay.rows[0], env);
     expect(h).toContain(`data-sha="${SHA}"`);
     expect(h).toContain('data-vscode-context="{&quot;webviewSection&quot;:&quot;commit&quot;');
+    expect(h).toContain('root&quot;:&quot;/work/repo&quot;');
     expect(h).toContain('preventDefaultContextMenuItems&quot;:true');
     expect(h).toContain(' on');
     expect(h).toContain(' dim');

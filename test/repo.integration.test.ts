@@ -505,3 +505,44 @@ describe('command flows', () => {
     expect(errorPlan(e as GitError, 'checkout')).toMatchObject({ actions: ['stash', 'scm'] });
   });
 });
+
+describe('tags', () => {
+  it('lightweight and annotated tag on a sha, invalid name rejected, delete', async () => {
+    const { a, ra } = scenario();
+    const c1 = g(a, 'rev-parse', 'HEAD').trim();
+    const c2 = commit(a, 'f.txt', 'x', 'Second');
+    await ra.createTag('light', c1);
+    await ra.createTag('ann', c2, 'release notes');
+    expect(g(a, 'cat-file', '-t', 'light').trim()).toBe('commit');
+    expect(g(a, 'cat-file', '-t', 'ann').trim()).toBe('tag');
+    expect(g(a, 'tag', '-l', '--format=%(contents:subject)', 'ann').trim()).toBe('release notes');
+    expect((await ra.refs()).tags).toEqual(expect.arrayContaining([{ name: 'light', sha: c1 }, { name: 'ann', sha: c2 }]));
+    expect(await kind(ra.createTag('bad name', c1))).toBe('Other');
+    expect(await kind(ra.createTag('a..b', c1))).toBe('Other');
+    expect(await kind(ra.createTag('light', c2))).toBe('Other'); // exists
+    await ra.deleteTag('light');
+    expect((await ra.refs()).tags.map((t) => t.name)).toEqual(['ann']);
+    expect(await kind(ra.deleteTag('light'))).toBe('Other');
+  });
+
+  it('pushTag goes to origin (pushDefault wins when set); no remote -> error', async () => {
+    const { origin, a, ra } = scenario();
+    await ra.createTag('v1', g(a, 'rev-parse', 'HEAD').trim());
+    expect(await ra.pushTag('v1')).toBe('origin');
+    expect(g(origin, 'tag', '-l').trim()).toBe('v1');
+
+    const other = fresh('other');
+    g(other, 'init', '-q', '--bare', '-b', 'main');
+    g(a, 'remote', 'add', 'second', other);
+    g(a, 'config', 'remote.pushDefault', 'second');
+    await ra.createTag('v2', g(a, 'rev-parse', 'HEAD').trim());
+    expect(await ra.pushTag('v2')).toBe('second');
+    expect(g(other, 'tag', '-l').trim()).toBe('v2');
+
+    const lone = init('lone');
+    commit(lone, 'a.txt', 'a', 'c');
+    const rl = new Repo(lone);
+    await rl.createTag('t', g(lone, 'rev-parse', 'HEAD').trim());
+    expect(errorPlan(await rl.pushTag('t').catch((x: unknown) => x as GitError) as GitError, 'push')).toMatchObject({ text: expect.stringContaining('No remote') });
+  });
+});

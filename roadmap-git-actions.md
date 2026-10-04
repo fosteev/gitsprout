@@ -1,6 +1,6 @@
 # Git actions from GitKraken's context menus (batch 1)
 
-> Status: draft · 2026-10-04. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-git-actions.pending.md` (same format as `roadmap-vscode.pending.md`).
+> Status: in progress · 2026-10-04 · stage 1 accepted (UI checks in the pending file), stage 2 next. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-git-actions.pending.md` (same format as `roadmap-vscode.pending.md`).
 
 ## Goal
 
@@ -29,14 +29,14 @@ The graph's commit context menu and the ref trees offer the cheap GitKraken acti
 
 Row context carries the repo; mutations helpers become reusable from a new module; tag commands.
 
-- [ ] `webview/render.ts` `commitContext(sha, root)` → `{ webviewSection: 'commit', sha, root, preventDefaultContextMenuItems: true }` (update `CommitContext` type and `RowEnv`/callers, the root comes from the last `state.repo.root`); unit test in `test/graph.render.test.ts`
-- [ ] `src/commands/messages.ts`: `rootFromArg(arg): string | undefined` (string field `root` of an object); `registerMutations` → `target(rootFromArg(arg))` for the graph-row commands (`createBranchFrom` with a sha) so they act on the row's repo; existing notification-button `root` strings keep working
-- [ ] `registerMutations` returns `{ target, mutate, fail }` (type `Mutator`, exported); new commands live in `src/commands/commits.ts` → `registerCommitCommands(context, registry, log, mutator)` with `COMMIT_COMMAND_IDS`, wired in `src/extension.ts` and passed to `registerStubCommands`
-- [ ] `Op` += `'tag' | 'reset' | 'cherryPick' | 'revert' | 'upstream'`; `errorPlan` gives them sensible texts (`Conflict` → "Open Source Control"; `pushTag` errors go through the `push` op so Auth/Run in Terminal/Show Command Output work)
-- [ ] `Repo.createTag(name, sha, message?)` (`check-ref-format refs/tags/<name>` first, then `git tag [-a -m <message>] --end-of-options <name> <sha>`), `Repo.deleteTag(name)` (`git tag -d --end-of-options`), `Repo.pushTag(name, {signal})` (`git push <remote> refs/tags/<name>`, remote per Decisions)
-- [ ] commands `createTag` ("Create Tag Here…"), `createAnnotatedTag` ("Create Annotated Tag Here…") on graph rows (`webview/context`, group `1_create`) — input box validated like branch names against existing tags (`branchNameError` with a tag wording: add `tagNameError` next to it), annotated → second input box for the message (empty = cancel)
-- [ ] commands `deleteTag` (modal "Delete tag 'x'? It stays on remotes it was pushed to.") and `pushTag` (progress notification with Cancel, like Push) in the Tags tree item context; success texts "Created tag 'x' at abc1234." / "Pushed tag 'x' to origin."
-- [ ] integration tests on a temp repo (style of `test/repo.integration.test.ts`): lightweight + annotated tag on a sha, invalid name rejected, delete, push to a bare remote
+- [x] `webview/render.ts` `commitContext(sha, root)` → `{ webviewSection: 'commit', sha, root, preventDefaultContextMenuItems: true }` (update `CommitContext` type and `RowEnv`/callers, the root comes from the last `state.repo.root`); unit test in `test/graph.render.test.ts`
+- [x] `src/commands/messages.ts`: `rootFromArg(arg): string | undefined` (string field `root` of an object); `registerMutations` → `target(rootFromArg(arg))` for the graph-row commands (`createBranchFrom` with a sha) so they act on the row's repo; existing notification-button `root` strings keep working
+- [x] `registerMutations` returns `{ target, mutate, fail }` (type `Mutator`, exported); new commands live in `src/commands/commits.ts` → `registerCommitCommands(context, registry, log, mutator)` with `COMMIT_COMMAND_IDS`, wired in `src/extension.ts` and passed to `registerStubCommands`
+- [x] `Op` += `'tag' | 'reset' | 'cherryPick' | 'revert' | 'upstream'`; `errorPlan` gives them sensible texts (`Conflict` → "Open Source Control"; `pushTag` errors go through the `push` op so Auth/Run in Terminal/Show Command Output work)
+- [x] `Repo.createTag(name, sha, message?)` (`check-ref-format refs/tags/<name>` first, then `git tag [-a -m <message>] --end-of-options <name> <sha>`), `Repo.deleteTag(name)` (`git tag -d --end-of-options`), `Repo.pushTag(name, {signal})` (`git push <remote> refs/tags/<name>`, remote per Decisions)
+- [x] commands `createTag` ("Create Tag Here…"), `createAnnotatedTag` ("Create Annotated Tag Here…") on graph rows (`webview/context`, group `1_create`) — input box validated like branch names against existing tags (`branchNameError` with a tag wording: add `tagNameError` next to it), annotated → second input box for the message (empty = cancel)
+- [x] commands `deleteTag` (modal "Delete tag 'x'? It stays on remotes it was pushed to.") and `pushTag` (progress notification with Cancel, like Push) in the Tags tree item context; success texts "Created tag 'x' at abc1234." / "Pushed tag 'x' to origin."
+- [x] integration tests on a temp repo (style of `test/repo.integration.test.ts`): lightweight + annotated tag on a sha, invalid name rejected, delete, push to a bare remote
 
 **Done when:** `pnpm typecheck && pnpm test` green; `pnpm build` ok; right-click a graph row → both tag items; Tags tree → Delete/Push. Manifest test green.
 
@@ -118,7 +118,7 @@ Session 2 — Gitsprout git actions: remote links and upstream · Model: sonnet,
 
 Work in /Users/fost/Projects/gitsprout. Task: stage 2 of roadmap-git-actions.md.
 
-Read: roadmap-git-actions.md (Decisions, stage 2); CLAUDE.md. Entry points: src/commands/commits.ts (from stage 1, add commands there); src/git/repo.ts:222 publishRemote (remote choice), READ opts; src/commands/messages.ts localBranchFromArg/remoteBranchFromArg; src/git/parse.ts + test/parse.test.ts (style for pure fixtures); package.json view/item/context for branch.local(.head) and branch.remote.
+Read: roadmap-git-actions.md (Decisions, stage 2); CLAUDE.md. Entry points: src/commands/commits.ts (from stage 1: registerCommitCommands, Mutator from mutations.ts — add commands there, graph-row commands use target(rootFromArg(arg))); src/git/repo.ts:222 publishRemote (remote choice), READ opts; src/commands/messages.ts localBranchFromArg/remoteBranchFromArg; src/git/parse.ts + test/parse.test.ts (style for pure fixtures); package.json view/item/context for branch.local(.head) and branch.remote.
 
 Order: stage 2 checkboxes top to bottom; tick after checks.
 DoD: pnpm typecheck && pnpm test green, pnpm build ok.

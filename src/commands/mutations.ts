@@ -5,7 +5,7 @@ import { shaFromArg } from '../graph/validate';
 import type { Registry } from '../workspace/registry';
 import {
   branchNameError, buildCheckoutEntries, deleteDetail, existingBranchNote, localBranchFromArg, localNameOf, pullMessage, pushMessage,
-  refNameFromArg, remoteBranchFromArg, resolveStashIndex, shortSha, stashShaFromArg, TAG_CHECKOUT_MESSAGE, type Op,
+  refNameFromArg, remoteBranchFromArg, resolveStashIndex, rootFromArg, shortSha, stashShaFromArg, TAG_CHECKOUT_MESSAGE, type Op,
 } from './messages';
 import { createReporter } from './report';
 
@@ -17,13 +17,20 @@ export const MUTATION_COMMAND_IDS = [
 
 const flash = (m: string): void => { vscode.window.setStatusBarMessage(`Gitsprout: ${m}`, 3000); };
 
-interface Target { root: string; name: string; repo: Repo }
+export interface Target { root: string; name: string; repo: Repo }
+
+/** What `registerMutations` hands to other command modules: the same repo targeting, serialised mutation and failure report. */
+export interface Mutator {
+  target: (root?: unknown) => Target | undefined;
+  mutate: (t: Target, op: Op, work: (signal?: AbortSignal) => Promise<string | void>, progress?: string) => Promise<boolean>;
+  fail: (e: unknown, op: Op, root: string, branch?: string | null) => Promise<void>;
+}
 
 /**
  * Repo-changing commands. They act on the active repo (the trees and the graph show it). Every mutation refreshes
  * the repo through the registry afterwards, which reloads the trees and the graph; failures go through `errorPlan`.
  */
-export function registerMutations(context: vscode.ExtensionContext, registry: Registry, log: (m: string) => void): void {
+export function registerMutations(context: vscode.ExtensionContext, registry: Registry, log: (m: string) => void): Mutator {
   const fail = createReporter(() => registry.gitPath, log);
   const busy = new Set<string>();
 
@@ -151,8 +158,8 @@ export function registerMutations(context: vscode.ExtensionContext, registry: Re
 
   // ---- branches ----
 
-  const createFrom = async (start: string, startLabel: string): Promise<void> => {
-    const t = target();
+  const createFrom = async (start: string, startLabel: string, root?: string): Promise<void> => {
+    const t = target(root);
     if (!t) return;
     let existing: string[];
     try { existing = (await t.repo.refs()).locals.map((b) => b.name); } catch (e) { await fail(e, 'create', t.root); return; }
@@ -173,7 +180,7 @@ export function registerMutations(context: vscode.ExtensionContext, registry: Re
     const ref = refNameFromArg(arg);
     if (ref) return createFrom(ref, ref);
     const sha = shaFromArg(arg);
-    if (sha) return createFrom(sha, shortSha(sha));
+    if (sha) return createFrom(sha, shortSha(sha), rootFromArg(arg)); // a graph row: its own repo, not the active one
     return createFrom('HEAD', registry.active?.branch ?? 'HEAD');
   });
 
@@ -295,4 +302,6 @@ export function registerMutations(context: vscode.ExtensionContext, registry: Re
   });
 
   reg('openSourceControl', () => vscode.commands.executeCommand('workbench.view.scm'));
+
+  return { target, mutate, fail };
 }
