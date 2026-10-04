@@ -1,4 +1,7 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { sideUri } from '../diff/provider';
+import { patchFileName, worktreeChanges } from '../diff/uri';
 import { shaFromArg } from '../graph/validate';
 import { branchLink, commitLink, splitRemoteRef, webBase } from '../git/remoteUrl';
 import type { Refs } from '../git/types';
@@ -10,7 +13,7 @@ import {
 import type { Mutator } from './mutations';
 
 /** Ids implemented here; `registerStubCommands` skips them. */
-export const COMMIT_COMMAND_IDS = ['createTag', 'createAnnotatedTag', 'deleteTag', 'pushTag', 'copyCommitLink', 'copyBranchLink', 'setUpstream', 'resetSoft', 'resetMixed', 'resetHard', 'cherryPick', 'revert'] as const;
+export const COMMIT_COMMAND_IDS = ['createTag', 'createAnnotatedTag', 'deleteTag', 'pushTag', 'copyCommitLink', 'copyBranchLink', 'setUpstream', 'resetSoft', 'resetMixed', 'resetHard', 'cherryPick', 'revert', 'compareWithWorktree', 'savePatch'] as const;
 
 /** Commands on commits (graph rows) and tags (Tags tree). Graph rows carry their repo root; trees act on the active repo. */
 export function registerCommitCommands(context: vscode.ExtensionContext, _registry: Registry, _log: (m: string) => void, m: Mutator): void {
@@ -171,5 +174,39 @@ export function registerCommitCommands(context: vscode.ExtensionContext, _regist
       const branch = (await t.repo.currentBranch()) ?? 'HEAD';
       return (await t.repo.revert(sha)) ? revertDone(branch, sha) : revertEmpty(branch, sha);
     });
+  });
+
+  // ---- compare with working tree, save as patch (graph rows) ----
+
+  reg('compareWithWorktree', async (arg?: unknown) => {
+    const sha = shaFromArg(arg);
+    const t = target(rootFromArg(arg));
+    if (!t) return;
+    if (!sha) { void vscode.window.showInformationMessage('Gitsprout: right-click a commit in the graph.'); return; }
+    try {
+      const changes = worktreeChanges(sha, await t.repo.diffWithWorktree(sha));
+      if (!changes.length) { void vscode.window.showInformationMessage(`No differences between ${shortSha(sha)} and the working tree.`); return; }
+      const resources = changes.map((c) => [vscode.Uri.file(path.join(t.root, c.path)), sideUri(t.root, c.left), sideUri(t.root, c.right)]);
+      await vscode.commands.executeCommand('vscode.changes', `Changes since ${shortSha(sha)}`, resources);
+    } catch (e) { await fail(e, 'compare', t.root); }
+  });
+
+  reg('savePatch', async (arg?: unknown) => {
+    const sha = shaFromArg(arg);
+    const t = target(rootFromArg(arg));
+    if (!t) return;
+    if (!sha) { void vscode.window.showInformationMessage('Gitsprout: right-click a commit in the graph.'); return; }
+    try {
+      const patch = await t.repo.formatPatch(sha);
+      if (!patch) { void vscode.window.showInformationMessage("Merge commits can't be saved as a patch."); return; }
+      const uri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file(path.join(t.root, patchFileName(sha, await t.repo.commitSubject(sha)))),
+        filters: { Patch: ['patch', 'diff'] },
+        saveLabel: 'Save Patch',
+      });
+      if (!uri) return;
+      await vscode.workspace.fs.writeFile(uri, Buffer.from(patch, 'utf8'));
+      void vscode.window.showInformationMessage(`Saved patch for ${shortSha(sha)} to ${uri.fsPath}.`);
+    } catch (e) { await fail(e, 'compare', t.root); }
   });
 }

@@ -43,7 +43,7 @@ export function gitUri(t: DiffTarget): vscode.Uri {
   return vscode.Uri.from({ scheme: p.scheme, path: p.path, query: p.query });
 }
 
-function sideUri(root: string, s: Side): vscode.Uri {
+export function sideUri(root: string, s: Side): vscode.Uri {
   if (s.kind === 'file') return vscode.Uri.file(path.join(root, s.path));
   return gitUri({ root, ref: s.ref, path: s.path });
 }

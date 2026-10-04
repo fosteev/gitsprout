@@ -1,5 +1,6 @@
 // Pure helpers for `gitsprout:` URIs and diff plans (no `vscode` import, unit-tested).
 import type { FileChange, FileStat, StashFile } from '../git/types';
+import type { NameStatus } from '../git/parse';
 
 export const SCHEME = 'gitsprout';
 
@@ -86,4 +87,21 @@ export function stashFilePlan(stash: { index: number; sha: string }, file: Pick<
   const left = file.untracked || file.status === 'A' ? emptyAt(file.origPath ?? file.path) : git(`${ref}^1`, file.origPath ?? file.path);
   const right = file.status === 'D' ? emptyAt(file.path) : git(file.untracked ? `${ref}^3` : ref, file.path);
   return { kind: 'diff', left, right, title: diffTitle(file.path, `stash@{${stash.index}}`) };
+}
+
+/** One file of "Compare with Working Tree": `sha` vs the file on disk (empty side for added/deleted). */
+export interface WorktreeChange { path: string; left: Side; right: Side }
+
+export function worktreeChanges(sha: string, files: readonly NameStatus[]): WorktreeChange[] {
+  return files.map((f) => ({
+    path: f.path,
+    left: f.status === 'A' ? emptyAt(f.origPath ?? f.path) : git(sha, f.origPath ?? f.path),
+    right: f.status === 'D' ? emptyAt(f.path) : { kind: 'file', path: f.path },
+  }));
+}
+
+/** `<short>-<subject-slug>.patch`: lower-case ascii words, at most 50 chars of slug. */
+export function patchFileName(sha: string, subject: string): string {
+  const slug = subject.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50).replace(/-+$/, '');
+  return `${short(sha)}${slug ? '-' + slug : ''}.patch`;
 }

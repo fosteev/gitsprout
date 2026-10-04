@@ -9,6 +9,7 @@ export const COMMAND_IDS = [
   'openStashFile', 'createTag', 'createAnnotatedTag', 'deleteTag', 'pushTag',
   'copyCommitLink', 'copyBranchLink', 'setUpstream',
   'resetSoft', 'resetMixed', 'resetHard', 'cherryPick', 'revert',
+  'compareWithWorktree', 'savePatch',
 ] as const;
 
 export const VIEW_IDS = ['repositories', 'branches', 'remotes', 'stashes', 'tags'] as const;

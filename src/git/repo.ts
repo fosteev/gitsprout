@@ -2,6 +2,7 @@ import { classify, run, type RunOptions, type RunResult } from './run';
 import {
   mergeFileStats, parseLog, parseNameStatusZ, parseNumstatZ, parseRefs, parseStashList, parseStatus, parseStatusSummary,
 } from './parse';
+import type { NameStatus } from './parse';
 import {
   GitError, type Commit, type ErrorKind, type FileStat, type Refs, type Stash, type StashFile, type Status, type SummaryStatus,
 } from './types';
@@ -246,6 +247,27 @@ export class Repo {
   async parentCount(sha: string): Promise<number> {
     const { stdout } = await this.git(['rev-list', '--parents', '-n', '1', sha, '--'], READ);
     return Math.max(0, stdout.trim().split(/\s+/).filter(Boolean).length - 1);
+  }
+
+  /** Tracked files that differ between `sha` and the working tree (untracked files are not listed). */
+  async diffWithWorktree(sha: string): Promise<NameStatus[]> {
+    const { stdout } = await this.git(['diff', '--name-status', '-z', '-M', sha, '--'], READ);
+    return parseNameStatusZ(stdout);
+  }
+
+  /**
+   * `git format-patch -1 --stdout`; empty for a merge commit. Checked up front: format-patch skips merges and would
+   * silently emit the next non-merge commit down the history instead.
+   */
+  async formatPatch(sha: string): Promise<string> {
+    if ((await this.parentCount(sha)) > 1) return '';
+    const { stdout } = await this.git(['format-patch', '-1', '--stdout', sha, '--'], READ);
+    return stdout;
+  }
+
+  async commitSubject(sha: string): Promise<string> {
+    const { stdout } = await this.git(['log', '-1', '--format=%s', sha, '--'], READ);
+    return stdout.trim();
   }
 
   /** Is the commit reachable from HEAD? */

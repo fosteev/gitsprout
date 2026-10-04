@@ -241,6 +241,16 @@
         "category": "Gitsprout"
       },
       {
+        "command": "gitsprout.compareWithWorktree",
+        "title": "Compare with Working Tree",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.savePatch",
+        "title": "Save as Patch…",
+        "category": "Gitsprout"
+      },
+      {
         "command": "gitsprout.createTag",
         "title": "Create Tag Here…",
         "category": "Gitsprout"
@@ -512,6 +522,16 @@
           "command": "gitsprout.revert",
           "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
           "group": "3_modify@3"
+        },
+        {
+          "command": "gitsprout.compareWithWorktree",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
+          "group": "4_compare@1"
+        },
+        {
+          "command": "gitsprout.savePatch",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
+          "group": "4_compare@2"
         }
       ],
       "gitsprout.resetSubmenu": [
@@ -626,6 +646,14 @@
         },
         {
           "command": "gitsprout.revert",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.compareWithWorktree",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.savePatch",
           "when": "false"
         }
       ]

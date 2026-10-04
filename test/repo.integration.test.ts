@@ -724,3 +724,42 @@ describe('reset, cherry-pick, revert', () => {
     expect(g(a, 'rev-parse', '-q', '--verify', 'REVERT_HEAD').trim()).toBe(c);
   });
 });
+
+describe('compare with working tree and patch', () => {
+  it('diffWithWorktree: modified, added, deleted, renamed; untracked ignored', async () => {
+    const dir = init('wt');
+    commit(dir, 'mod.txt', 'one\n', 'init');
+    commit(dir, 'del.txt', 'gone\n', 'del');
+    const base = commit(dir, 'ren.txt', 'rename me please\nsome more lines\nand more\n', 'ren');
+    put(dir, 'mod.txt', 'two\n');
+    g(dir, 'rm', '-q', 'del.txt');
+    g(dir, 'mv', 'ren.txt', 'renamed.txt');
+    put(dir, 'added.txt', 'new\n');
+    g(dir, 'add', 'added.txt');
+    put(dir, 'untracked.txt', 'u\n');
+    const r = await new Repo(dir).diffWithWorktree(base);
+    const by = Object.fromEntries(r.map((x) => [x.path, x]));
+    expect(by['mod.txt'].status).toBe('M');
+    expect(by['del.txt'].status).toBe('D');
+    expect(by['added.txt'].status).toBe('A');
+    expect(by['renamed.txt']).toMatchObject({ status: 'R', origPath: 'ren.txt' });
+    expect(by['untracked.txt']).toBeUndefined();
+    expect(await new Repo(dir).diffWithWorktree('HEAD')).not.toHaveLength(0);
+  });
+
+  it('formatPatch: normal commit gives a patch, merge commit gives nothing', async () => {
+    const dir = init('patch');
+    commit(dir, 'a.txt', 'a\n', 'init');
+    g(dir, 'checkout', '-q', '-b', 'side');
+    const side = commit(dir, 'b.txt', 'b\n', 'Side: work');
+    g(dir, 'checkout', '-q', 'main');
+    commit(dir, 'c.txt', 'c\n', 'main work');
+    g(dir, 'merge', '--no-ff', '-q', '-m', 'merge side', 'side');
+    const repo = new Repo(dir);
+    const patch = await repo.formatPatch(side);
+    expect(patch).toContain('Subject: [PATCH] Side: work');
+    expect(patch).toContain('+++ b/b.txt');
+    expect(await repo.commitSubject(side)).toBe('Side: work');
+    expect(await repo.formatPatch('HEAD')).toBe('');
+  });
+});

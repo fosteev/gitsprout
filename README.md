@@ -35,6 +35,7 @@ Requires VS Code (or Cursor on a matching VS Code base) 1.90+ and git 2.24+ on t
 - Graph tab: `Gitsprout: Show Graph` (`⌥⌘G` on macOS, `Ctrl+Alt+G` elsewhere). One tab per repository: clicking a repo in Repositories opens its graph the first time and brings the open tab back after that; focusing a graph tab makes its repo active. Tabs are restored after a window reload.
 - `Gitsprout: Switch Repository…`: `⌥⌘R` / `Ctrl+Alt+R`.
 - Commands (Command Palette, view toolbars and context menus): Checkout…, Create Branch…, Rename/Delete Branch, Stash… (push, apply, pop, drop), Fetch, Pull, Push, Fetch All.
+- Graph row context menu (right-click a commit): Create Branch/Tag Here, Copy SHA/Message/Link, Reset Current Branch to Here (soft/mixed/hard), Cherry Pick, Revert, Compare with Working Tree, Save as Patch. Branch and tag trees add Set Upstream, Copy Link to Branch, Delete/Push Tag. Compare with Working Tree lists tracked files only (untracked files are not shown); Save as Patch is unavailable for merge commits.
 - Pull is `git pull --no-rebase --no-edit` (fast-forward when possible, a merge when diverged). Push of a branch without upstream is offered as "Publish Branch".
 - A fetch is killed after 300 s in total. Pull and Push show a cancellable progress notification.
 - Failed git calls show a notification. Fetch/pull/push errors offer "Show Command Output" (the `Gitsprout` output channel has the full stderr); authentication failures offer "Run in Terminal", which types the same git command into a terminal without pressing Enter.

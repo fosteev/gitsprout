@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  baseName, commitFilePlan, decodeQuery, isVolatileRef, diffTitle, encodeQuery, stagedPlan, stashFilePlan, unstagedPlan, uriParts,
+  baseName, commitFilePlan, decodeQuery, isVolatileRef, diffTitle, encodeQuery, stagedPlan, stashFilePlan, unstagedPlan, uriParts, patchFileName, worktreeChanges,
 } from '../src/diff/uri';
 
 describe('diff uri', () => {
@@ -86,5 +86,28 @@ describe('diff plans', () => {
     for (const ref of [sha, `${sha}^`, `${sha}^1`, `${sha}^3`, 'b'.repeat(64)]) expect(isVolatileRef(ref)).toBe(false);
     for (const ref of [':', 'HEAD', 'main', 'stash@{0}', 'stash@{0}^1', 'abc1234', 'HEAD^']) expect(isVolatileRef(ref)).toBe(true);
     expect(isVolatileRef('')).toBe(false);
+  });
+});
+
+describe('worktree compare', () => {
+  const sha = 'a'.repeat(40);
+  it('builds sides per status', () => {
+    const r = worktreeChanges(sha, [
+      { path: 'm.ts', origPath: null, status: 'M' },
+      { path: 'a.ts', origPath: null, status: 'A' },
+      { path: 'd.ts', origPath: null, status: 'D' },
+      { path: 'new.ts', origPath: 'old.ts', status: 'R' },
+    ]);
+    expect(r[0]).toEqual({ path: 'm.ts', left: { kind: 'git', ref: sha, path: 'm.ts' }, right: { kind: 'file', path: 'm.ts' } });
+    expect(r[1].left).toEqual({ kind: 'git', ref: '', path: 'a.ts' });
+    expect(r[1].right).toEqual({ kind: 'file', path: 'a.ts' });
+    expect(r[2].left).toEqual({ kind: 'git', ref: sha, path: 'd.ts' });
+    expect(r[2].right).toEqual({ kind: 'git', ref: '', path: 'd.ts' });
+    expect(r[3].left).toEqual({ kind: 'git', ref: sha, path: 'old.ts' });
+    expect(r[3].right).toEqual({ kind: 'file', path: 'new.ts' });
+  });
+  it('names patch files', () => {
+    expect(patchFileName(sha, 'Fix: the "Bug" (#12)!')).toBe('aaaaaaa-fix-the-bug-12.patch');
+    expect(patchFileName(sha, '日本語')).toBe('aaaaaaa.patch');
   });
 });

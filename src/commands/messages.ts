@@ -174,7 +174,7 @@ export function pushMessage(before: Sum, after: Pick<SummaryStatus, 'upstream'>)
 // ---- error -> notification ----
 
 export type Op = 'fetch' | 'pull' | 'push' | 'checkout' | 'create' | 'rename' | 'delete' | 'stash' | 'apply' | 'pop' | 'drop'
-  | 'tag' | 'reset' | 'cherryPick' | 'revert' | 'upstream';
+  | 'tag' | 'reset' | 'cherryPick' | 'revert' | 'upstream' | 'compare';
 export type ActionId = 'pull' | 'publish' | 'terminal' | 'scm' | 'stash' | 'output';
 export interface ErrorPlan { text: string; level: 'error' | 'warn' | 'info'; actions: ActionId[] }
 
@@ -185,7 +185,7 @@ export const ACTION_LABEL: Record<ActionId, string> = {
 const OP_WORD: Record<Op, string> = {
   fetch: 'Fetch', pull: 'Pull', push: 'Push', checkout: 'Checkout', create: 'Create branch', rename: 'Rename branch',
   delete: 'Delete branch', stash: 'Stash', apply: 'Apply stash', pop: 'Pop stash', drop: 'Drop stash',
-  tag: 'Tag', reset: 'Reset', cherryPick: 'Cherry pick', revert: 'Revert', upstream: 'Set upstream',
+  tag: 'Tag', reset: 'Reset', cherryPick: 'Cherry pick', revert: 'Revert', upstream: 'Set upstream', compare: 'Compare',
 };
 const NETWORK: readonly Op[] = ['fetch', 'pull', 'push'];
 

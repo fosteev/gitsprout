@@ -1,6 +1,6 @@
 # Git actions from GitKraken's context menus (batch 1)
 
-> Status: in progress · 2026-10-04 · stages 1–3 accepted (UI checks in the pending file), stage 4 next. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-git-actions.pending.md` (same format as `roadmap-vscode.pending.md`).
+> Status: in progress · 2026-10-04 · stages 1–4 accepted (UI checks in the pending file); stage 5 (detached HEAD) waits for the user. Executors tick checkboxes as they verify them; scope decisions and user checks go to `roadmap-git-actions.pending.md` (same format as `roadmap-vscode.pending.md`).
 
 ## Goal
 
@@ -70,10 +70,10 @@ Row context carries the repo; mutations helpers become reusable from a new modul
 
 ### 4. Compare with Working Tree, Save as Patch
 
-- [ ] `Repo.diffWithWorktree(sha)`: `git diff --name-status -z -M <sha> --` → `parseNameStatusZ` (tracked files only; untracked are not listed — note it in the README)
-- [ ] export `sideUri` from `src/diff/provider.ts` (or add `openChanges(root, title, plans)`); command `compareWithWorktree` on commit rows (group `4_compare`): `vscode.changes` with title "Changes since abc1234", resources `[fileUri, left = git(sha, origPath ?? path) | empty for 'A', right = file | empty for 'D']`; nothing differs → info "No differences between abc1234 and the working tree."
-- [ ] `savePatch` on commit rows (group `4_compare@2`, "Save as Patch…"): `git format-patch -1 --stdout <sha>`; empty output (merge) → info "Merge commits can't be saved as a patch."; `showSaveDialog` default `<root>/<short>-<subject-slug>.patch`, write with `vscode.workspace.fs.writeFile`
-- [ ] unit test for the resources builder (pure, in `src/diff/uri.ts`), integration test for `diffWithWorktree` (modified, added, deleted, renamed)
+- [x] `Repo.diffWithWorktree(sha)`: `git diff --name-status -z -M <sha> --` → `parseNameStatusZ` (tracked files only; untracked are not listed — note it in the README)
+- [x] export `sideUri` from `src/diff/provider.ts` (or add `openChanges(root, title, plans)`); command `compareWithWorktree` on commit rows (group `4_compare`): `vscode.changes` with title "Changes since abc1234", resources `[fileUri, left = git(sha, origPath ?? path) | empty for 'A', right = file | empty for 'D']`; nothing differs → info "No differences between abc1234 and the working tree."
+- [x] `savePatch` on commit rows (group `4_compare@2`, "Save as Patch…"): `git format-patch -1 --stdout <sha>`; empty output (merge) → info "Merge commits can't be saved as a patch."; `showSaveDialog` default `<root>/<short>-<subject-slug>.patch`, write with `vscode.workspace.fs.writeFile`
+- [x] unit test for the resources builder (pure, in `src/diff/uri.ts`), integration test for `diffWithWorktree` (modified, added, deleted, renamed)
 
 **Done when:** checks green; `pnpm package` builds the `.vsix`.
 
