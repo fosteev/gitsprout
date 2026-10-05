@@ -4,14 +4,31 @@
   "description": "Multi-repo git overview, commit graph and native diffs for VS Code and Cursor.",
   "version": "0.1.0",
   "publisher": "fosteev",
-  "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fosteev/gitsprout.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fosteev/gitsprout/issues"
+  },
+  "homepage": "https://github.com/fosteev/gitsprout#readme",
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
     "SCM Providers",
     "Other"
+  ],
+  "keywords": [
+    "git",
+    "graph",
+    "multi-repo",
+    "branches",
+    "stash",
+    "commit graph",
+    "monorepo",
+    "workspace"
   ],
   "icon": "media/icon.png",
   "main": "./dist/extension.js",
@@ -661,18 +678,9 @@
           "command": "gitsprout.setUpstream",
           "when": "false"
         },
-        {
-          "command": "gitsprout.resetSoft",
-          "when": "false"
-        },
-        {
-          "command": "gitsprout.resetMixed",
-          "when": "false"
-        },
-        {
-          "command": "gitsprout.resetHard",
-          "when": "false"
-        },
+        { "command": "gitsprout.resetSoft", "when": "false" },
+        { "command": "gitsprout.resetMixed", "when": "false" },
+        { "command": "gitsprout.resetHard", "when": "false" },
         {
           "command": "gitsprout.cherryPick",
           "when": "false"
@@ -755,19 +763,8 @@
           "additionalProperties": {
             "type": "string"
           },
-          "default": {
-            "P7": "https://jira.pilot-gps.com/browse/",
-            "GARM": "https://jira.pilot-gps.com/browse/",
-            "PILOTADM": "https://jira.pilot-gps.com/browse/",
-            "RNTBST": "https://jira.pilot-gps.com/browse/",
-            "NEWMFC": "https://jira.sccloud.ru/browse/",
-            "RPGU": "https://jira.sccloud.ru/browse/",
-            "SITCENTER": "https://jira.sccloud.ru/browse/",
-            "VBV": "https://atlassian.tatikoma.ru/jira/browse/",
-            "MFCDEV": "https://atlassian.tatikoma.ru/jira/browse/",
-            "SDU": "https://atlassian.tatikoma.ru/jira/browse/"
-          },
-          "description": "Jira project key to browse URL prefix; keys in commit messages become links."
+          "default": {},
+          "description": "Jira project key to browse URL prefix, e.g. {\"PROJ\": \"https://jira.example.com/browse/\"}; keys in commit messages become links."
         }
       }
     },
