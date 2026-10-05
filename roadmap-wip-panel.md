@@ -70,11 +70,11 @@ Selecting the WIP row in a graph tab opens a staging and commit panel in the det
 - **Re-render rule.** Every `state` re-renders the file lists. The commit box (inputs) is built once per WIP selection and only patched: button label/disabled, counter, amend note. Focus, caret and typed text survive a `state` message.
 - **Working-tree watcher.** One `FileSystemWatcher(new RelativePattern(root, '**'))` per **open** graph panel, ignoring paths under the git dir. Any event → the registry's debounced `refreshRepo(root)`. Disposed with the panel. VS Code's `files.watcherExclude` (node_modules etc.) applies.
 - **Tree view.** Folders with a single child folder and no files are compacted (`pulse/widgets`), like VS Code's compact folders. The default view is Tree. "Collapse All"/"Expand All" act on that list's folders.
+- **Row context menus** (added after stage 3). File and folder rows carry a `WipContext` (`data-vscode-context`); `webview/context` menus offer Stage (unstaged list), Unstage (staged list) and Discard Changes (an unstaged file row with a Discard button). A folder acts on every file under it in that list. The commands (`gitsprout.wipStage`/`wipUnstage`/`wipDiscard`) are hidden from the palette.
 - **No new palette commands.** Everything is driven from the webview. The "Open Source Control" button disappears; the `gitsprout.openSourceControl` command stays.
 - **Not in this roadmap:**
   - hunk/line staging;
   - multi-select of rows;
-  - right-click menus on file rows;
   - stash from the panel (the Stashes tree has it);
   - a merge-message prefill (`MERGE_MSG`);
   - AI compose;

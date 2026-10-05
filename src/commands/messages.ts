@@ -178,10 +178,16 @@ export const NO_COMMIT_SUMMARY = 'Enter a commit summary.';
 export const NESTED_REPO_DISCARD = "Can't discard a nested repository from here.";
 
 /** The files of `list` that `requested` names (same path and origPath), as the extension's own entries: stale or invented ones drop out. */
-export function matchFiles(requested: readonly FileChange[], list: readonly FileChange[]): FileChange[] {
-  const key = (f: FileChange): string => `${f.path}\0${f.origPath ?? ''}`;
+export function matchFiles(requested: readonly Pick<FileChange, 'path' | 'origPath'>[], list: readonly FileChange[]): FileChange[] {
+  const key = (f: Pick<FileChange, 'path' | 'origPath'>): string => `${f.path}\0${f.origPath ?? ''}`;
   const want = new Set(requested.map(key));
   return list.filter((f) => want.has(key(f)));
+}
+
+/** The entries of `list` at `path` or under it (a folder row's context menu): `src` takes `src/a.ts`, not `src2/a.ts`. */
+export function filesUnder(path: string, list: readonly FileChange[]): FileChange[] {
+  const dir = path.endsWith('/') ? path : `${path}/`;
+  return list.filter((f) => f.path === path || f.path.startsWith(dir));
 }
 
 /** Distinct paths with staged or unstaged changes (a partly staged file counts once). */

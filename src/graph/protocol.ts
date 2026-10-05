@@ -59,3 +59,11 @@ export type FromWebview =
 
 /** Context attached to a row (`data-vscode-context`); `webview/context` commands receive it. */
 export interface CommitContext { webviewSection: 'commit'; sha: string; /** the repo the row belongs to */ root: string; preventDefaultContextMenuItems: true }
+/**
+ * Context of a WIP file or folder row. `path` is the file's path, or a folder's path (the command acts on every file under
+ * it in that list). The `wip*` keys feed the menus' `when` clauses.
+ */
+export interface WipContext {
+  webviewSection: 'wip'; root: string; wipArea: 'staged' | 'unstaged'; path: string; origPath: string | null;
+  wipDir: boolean; /** an unstaged file row that has a Discard button */ wipCanDiscard: boolean; preventDefaultContextMenuItems: true;
+}

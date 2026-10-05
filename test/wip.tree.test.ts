@@ -64,6 +64,18 @@ describe('wip lists', () => {
     }
   });
 
+  it('rows carry a WIP context: file rows their path, folder rows the folder path', () => {
+    const ctx = (h: string): Record<string, unknown>[] => [...h.matchAll(/data-vscode-context="([^"]*)"/g)]
+      .map((m) => JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&amp;/g, '&')));
+    const w: Status = { staged: [f('src/a.ts', { origPath: 'src/old.ts', status: 'R' })], unstaged: [f('src/b.ts'), f('c.ts', { status: 'U' })] };
+    const all = ctx(wipListsHtml(w, 'tree', new Set(), '/repo'));
+    expect(all).toContainEqual(expect.objectContaining({ webviewSection: 'wip', root: '/repo', wipArea: 'unstaged', path: 'src', wipDir: true, wipCanDiscard: false }));
+    expect(all).toContainEqual(expect.objectContaining({ wipArea: 'unstaged', path: 'src/b.ts', wipDir: false, wipCanDiscard: true }));
+    expect(all).toContainEqual(expect.objectContaining({ wipArea: 'unstaged', path: 'c.ts', wipCanDiscard: false })); // conflicted: no Discard
+    expect(all).toContainEqual(expect.objectContaining({ wipArea: 'staged', path: 'src/a.ts', origPath: 'src/old.ts', wipCanDiscard: false }));
+    expect(all.every((c) => c.preventDefaultContextMenuItems === true)).toBe(true);
+  });
+
   it('row actions: stage on unstaged, unstage on staged, no discard on U or nested repos', () => {
     const h = wipListsHtml(wip, 'path', new Set());
     const unstaged = h.slice(h.indexOf('Unstaged Files'), h.indexOf('Staged Files'));

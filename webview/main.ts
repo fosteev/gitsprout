@@ -225,7 +225,7 @@ function renderWipLists(s: State, wip: NonNullable<State['wip']>): void {
   // each list scrolls on its own and is rebuilt here: keep where the user was
   const lists = $('wip-lists');
   const scroll = new Map([...lists.querySelectorAll<HTMLElement>('.wps')].map((el) => [el.dataset.area, el.querySelector('.wpb')?.scrollTop ?? 0]));
-  lists.innerHTML = wipListsHtml(wip, wipView, collapsed);
+  lists.innerHTML = wipListsHtml(wip, wipView, collapsed, s.repo.root);
   for (const el of lists.querySelectorAll<HTMLElement>('.wps')) {
     const b = el.querySelector<HTMLElement>('.wpb');
     if (b) b.scrollTop = scroll.get(el.dataset.area) ?? 0;

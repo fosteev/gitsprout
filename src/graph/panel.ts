@@ -9,11 +9,11 @@ import type { Commit, FilePatch, Head, Status } from '../git/types';
 import { onReveal } from '../views/refsStore';
 import type { Registry } from '../workspace/registry';
 import type { FromWebview, GraphSettings, ToolbarAction, ToWebview } from './protocol';
-import { graphHtml, inGitDir, isAllowedUrl, parseFromWebview, shaFromArg, stateMessage } from './validate';
+import { graphHtml, inGitDir, isAllowedUrl, parseFromWebview, shaFromArg, stateMessage, wipContextFromArg } from './validate';
 
 export const VIEW_TYPE = 'gitsprout.graph';
 /** Ids implemented here; `registerStubCommands` skips them. */
-export const GRAPH_COMMAND_IDS = ['showGraph', 'toggleAutoBuild', 'copySha', 'copyMessage'] as const;
+export const GRAPH_COMMAND_IDS = ['showGraph', 'toggleAutoBuild', 'copySha', 'copyMessage', 'wipStage', 'wipUnstage', 'wipDiscard'] as const;
 
 const errText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -291,7 +291,7 @@ class GraphPanel implements vscode.Disposable {
   private wipRunning = 0;
 
   /** Runs one WIP op with `wipBusy` on around it (a counter: the webview already disables its buttons, this is the backstop for racing messages). */
-  private async withWipBusy<T>(op: () => Promise<T>): Promise<T> {
+  async withWipBusy<T>(op: () => Promise<T>): Promise<T> {
     if (this.wipRunning++ === 0) this.post({ type: 'wipBusy', on: true });
     try {
       return await op();
@@ -383,6 +383,16 @@ export function registerGraph(context: vscode.ExtensionContext, registry: Regist
       await vscode.env.clipboard.writeText(c.body.trim() ? `${c.subject}\n\n${c.body.trim()}` : c.subject);
       vscode.window.setStatusBarMessage('Gitsprout: commit message copied', 2000);
     }),
+    // WIP row context menus: through the row's tab so its buttons are disabled while the op runs.
+    ...(['wipStage', 'wipUnstage', 'wipDiscard'] as const).map((id) => vscode.commands.registerCommand(`gitsprout.${id}`, async (arg?: unknown) => {
+      const c = wipContextFromArg(arg);
+      if (!c) return;
+      const op = id === 'wipStage' ? () => wip.stagePath(c.root, c.path)
+        : id === 'wipUnstage' ? () => wip.unstagePath(c.root, c.path)
+        : () => wip.discard(c.root, { path: c.path, origPath: c.origPath });
+      const p = panels.get(c.root);
+      await (p ? p.withWipBusy(op) : op());
+    })),
     // The ref trees show the active repo, so a tree click goes to that repo's tab (if open).
     onReveal((s) => { const root = registry.active?.root; if (root) panels.get(root)?.revealCommit(s); }),
   );

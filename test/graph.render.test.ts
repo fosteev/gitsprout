@@ -3,7 +3,7 @@ import type { Commit, FilePatch, Refs } from '../src/git/types';
 import { ciMatcher, esc, fmtAgo, fmtAgoLong, jiraUrl, parseSubject, splitPath } from '../webview/format';
 import { layout, visibleRows } from '../webview/layout';
 import { commitDetailsHtml, diffBarHtml, diffBodyHtml, keepSet, pillsHtml, refsBySha, rowHtml, subjectHtml, type RowEnv } from '../webview/render';
-import { asFileChange, asFileStat, graphHtml, isAllowedUrl, isSafeRelPath, parseFromWebview, shaFromArg } from '../src/graph/validate';
+import { asFileChange, asFileStat, graphHtml, isAllowedUrl, isSafeRelPath, parseFromWebview, shaFromArg, wipContextFromArg } from '../src/graph/validate';
 
 const SHA = 'a'.repeat(40);
 const commit = (o: Partial<Commit> = {}): Commit => ({ sha: SHA, parents: [], author: 'Ann <b>', email: 'a@x', time: 1000, subject: 'P7-4040 [ FIX ] <img src=x onerror=alert(1)>', body: 'line "1"', ...o });
@@ -123,6 +123,18 @@ describe('webview message validation', () => {
     expect(isAllowedUrl('https://u:p@jira.pilot-gps.com/browse/P7-1', JIRA)).toBe(false);
     expect(isAllowedUrl('https://jira.pilot-gps.com/other/P7-1', JIRA)).toBe(false);
   });
+  it('wipContextFromArg takes a WIP row context only, with safe paths', () => {
+    const c = { webviewSection: 'wip', root: '/r', wipArea: 'staged', path: 'src', origPath: null, wipDir: true, wipCanDiscard: false };
+    expect(wipContextFromArg(c)).toEqual({ root: '/r', area: 'staged', path: 'src', origPath: null });
+    expect(wipContextFromArg({ ...c, origPath: 'old.ts' })?.origPath).toBe('old.ts');
+    expect(wipContextFromArg({ ...c, webviewSection: 'commit' })).toBeUndefined();
+    expect(wipContextFromArg({ ...c, wipArea: 'both' })).toBeUndefined();
+    expect(wipContextFromArg({ ...c, path: '../x' })).toBeUndefined();
+    expect(wipContextFromArg({ ...c, origPath: '/etc/passwd' })).toBeUndefined();
+    expect(wipContextFromArg({ ...c, root: '' })).toBeUndefined();
+    expect(wipContextFromArg(undefined)).toBeUndefined();
+  });
+
   it('shaFromArg takes the row context or a string', () => {
     expect(shaFromArg({ sha: SHA, webviewSection: 'commit' })).toBe(SHA);
     expect(shaFromArg(SHA)).toBe(SHA);

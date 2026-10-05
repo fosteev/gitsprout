@@ -1,5 +1,5 @@
 // Pure HTML builders for the graph UI. Every piece of repository data (subjects, names, paths) goes through esc().
-import type { CommitContext } from '../src/graph/protocol';
+import type { CommitContext, WipContext } from '../src/graph/protocol';
 import type { Commit, FileChange, FilePatch, FileStat, Head, Hunk, Refs, Status } from '../src/git/types';
 import { esc, fmtAgo, fmtAgoLong, jiraUrl, minutesAgo, parseSubject, splitPath } from './format';
 import { LANE_COLORS, rowSvg, WIP_SHA, type LaidRow } from './layout';
@@ -211,30 +211,39 @@ export function wipDirKeys(wip: Status): string[] {
   return (['unstaged', 'staged'] as const).flatMap((area) => dirPaths(buildTree(wip[area])).map((p) => dirKey(area, p)));
 }
 
-function wipFileRow(f: FileChange, i: number, area: 'staged' | 'unstaged', depth: number, label: string, desc: string, spacer: boolean): string {
+export function wipContext(root: string, area: 'staged' | 'unstaged', path: string, dir: boolean, f?: FileChange): WipContext {
+  return {
+    webviewSection: 'wip', root, wipArea: area, path, origPath: f?.origPath ?? null, wipDir: dir,
+    wipCanDiscard: !!f && area === 'unstaged' && canDiscard(f), preventDefaultContextMenuItems: true,
+  };
+}
+
+const ctxAttr = (c: WipContext): string => ` data-vscode-context="${esc(JSON.stringify(c))}"`;
+
+function wipFileRow(root: string, f: FileChange, i: number, area: 'staged' | 'unstaged', depth: number, label: string, desc: string, spacer: boolean): string {
   const acts = area === 'staged'
     ? ib('unstage', 'Unstage File', ` data-area="staged" data-file="${i}"`)
     : (canDiscard(f) ? ib('discard', 'Discard Changes', ` data-area="unstaged" data-file="${i}"`) : '') + ib('stage', 'Stage File', ` data-area="unstaged" data-file="${i}"`);
   const extra = f.origPath ? ` · from ${esc(f.origPath)}` : f.untracked ? ' · untracked' : '';
   const title = f.untracked ? 'Untracked' : LETTER_TITLE[f.status] ?? '';
-  return `<div class="tr w" data-file="${i}" data-area="${area}" data-d="${depth}" title="${esc(f.path)}">${spacer ? '<span class="tw"></span>' : ''}`
+  return `<div class="tr w" data-file="${i}" data-area="${area}" data-d="${depth}" title="${esc(f.path)}"${ctxAttr(wipContext(root, area, f.path, false, f))}>${spacer ? '<span class="tw"></span>' : ''}`
     + `<span class="ti">${WI.file}</span><span class="tl">${esc(label)}</span><span class="td">${esc(desc)}${extra}</span><span class="ta">${acts}</span>`
     + `<span class="st ${esc(f.status)}" title="${esc(title)}">${esc(f.status)}</span></div>`;
 }
 
-function wipTreeRows(nodes: TreeNode[], area: 'staged' | 'unstaged', depth: number, collapsed: ReadonlySet<string>): string {
+function wipTreeRows(root: string, nodes: TreeNode[], area: 'staged' | 'unstaged', depth: number, collapsed: ReadonlySet<string>): string {
   return nodes.map((n) => {
-    if (n.kind === 'file') return wipFileRow(n.file, n.index, area, depth, n.name, '', true);
+    if (n.kind === 'file') return wipFileRow(root, n.file, n.index, area, depth, n.name, '', true);
     const key = dirKey(area, n.path);
     const open = !collapsed.has(key);
-    return `<div class="tr w dir" data-act="dir" data-key="${esc(key)}" data-d="${depth}" role="button" aria-expanded="${open}" title="${esc(n.path)}">`
+    return `<div class="tr w dir" data-act="dir" data-key="${esc(key)}" data-d="${depth}" role="button" aria-expanded="${open}" title="${esc(n.path)}"${ctxAttr(wipContext(root, area, n.path, true))}>`
       + `<span class="tw">${open ? WI.chevD : WI.chevR}</span><span class="ti">${WI.folder}</span><span class="tl">${esc(n.label)}</span></div>`
-      + (open ? wipTreeRows(n.children, area, depth + 1, collapsed) : '');
+      + (open ? wipTreeRows(root, n.children, area, depth + 1, collapsed) : '');
   }).join('');
 }
 
-/** The Unstaged and Staged sections. Re-rendered on every `state`; `collapsed` holds section and folder keys. */
-export function wipListsHtml(wip: Status, view: WipView, collapsed: ReadonlySet<string>): string {
+/** The Unstaged and Staged sections. Re-rendered on every `state`; `collapsed` holds section and folder keys; `root` goes into the rows' context. */
+export function wipListsHtml(wip: Status, view: WipView, collapsed: ReadonlySet<string>, root = ''): string {
   const section = (area: 'staged' | 'unstaged', title: string, btn: string, empty: string): string => {
     const files = wip[area];
     const key = sectionKey(area);
@@ -243,8 +252,8 @@ export function wipListsHtml(wip: Status, view: WipView, collapsed: ReadonlySet<
     if (open) {
       if (!files.length) body = `<div class="empty">${esc(empty)}</div>`;
       else if (view === 'path') {
-        body = files.map((f, i) => { const [dir, base] = splitPath(f.path); return wipFileRow(f, i, area, 0, base || f.path, dir, false); }).join('');
-      } else body = wipTreeRows(buildTree(files).children, area, 0, collapsed);
+        body = files.map((f, i) => { const [dir, base] = splitPath(f.path); return wipFileRow(root, f, i, area, 0, base || f.path, dir, false); }).join('');
+      } else body = wipTreeRows(root, buildTree(files).children, area, 0, collapsed);
     }
     return `<div class="wps${open ? '' : ' closed'}" data-area="${area}"><div class="wpsh" data-act="sec" data-key="${key}" role="button" aria-expanded="${open}">${open ? WI.chevD : WI.chevR}`
       + `<span>${title}</span><span class="n">(${files.length})</span>${files.length ? btn : ''}</div>${open ? `<div class="wpb">${body}</div>` : ''}</div>`;

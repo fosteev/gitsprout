@@ -10,6 +10,7 @@ export const COMMAND_IDS = [
   'copyCommitLink', 'copyBranchLink', 'setUpstream',
   'resetSoft', 'resetMixed', 'resetHard', 'cherryPick', 'revert',
   'compareWithWorktree', 'savePatch',
+  'wipStage', 'wipUnstage', 'wipDiscard',
 ] as const;
 
 export const VIEW_IDS = ['repositories', 'branches', 'remotes', 'stashes', 'tags'] as const;

@@ -251,6 +251,21 @@
         "category": "Gitsprout"
       },
       {
+        "command": "gitsprout.wipStage",
+        "title": "Stage",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.wipUnstage",
+        "title": "Unstage",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.wipDiscard",
+        "title": "Discard Changes",
+        "category": "Gitsprout"
+      },
+      {
         "command": "gitsprout.createTag",
         "title": "Create Tag Here…",
         "category": "Gitsprout"
@@ -532,6 +547,21 @@
           "command": "gitsprout.savePatch",
           "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
           "group": "4_compare@2"
+        },
+        {
+          "command": "gitsprout.wipStage",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'wip' && wipArea == 'unstaged'",
+          "group": "1_stage@1"
+        },
+        {
+          "command": "gitsprout.wipUnstage",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'wip' && wipArea == 'staged'",
+          "group": "1_stage@1"
+        },
+        {
+          "command": "gitsprout.wipDiscard",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'wip' && wipCanDiscard",
+          "group": "2_discard@1"
         }
       ],
       "gitsprout.resetSubmenu": [
@@ -540,6 +570,9 @@
         { "command": "gitsprout.resetHard", "group": "reset@3" }
       ],
       "commandPalette": [
+        { "command": "gitsprout.wipStage", "when": "false" },
+        { "command": "gitsprout.wipUnstage", "when": "false" },
+        { "command": "gitsprout.wipDiscard", "when": "false" },
         {
           "command": "gitsprout.openStashFile",
           "when": "false"

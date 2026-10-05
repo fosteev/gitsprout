@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  ACTION_LABEL, changedFileCount, committedFlash, discardAllConfirm, discardFileConfirm, matchFiles, branchNameError, buildCheckoutEntries, errorPlan, existingBranchNote, localBranchFromArg, localNameOf, refNameFromArg, remoteBranchFromArg,
+  ACTION_LABEL, changedFileCount, committedFlash, discardAllConfirm, discardFileConfirm, filesUnder, matchFiles, branchNameError, buildCheckoutEntries, errorPlan, existingBranchNote, localBranchFromArg, localNameOf, refNameFromArg, remoteBranchFromArg,
   resolveStashIndex, rootFromArg, shQuote, stashShaFromArg, tagNameError, terminalCommand, upstreamCandidates,
 } from '../src/commands/messages';
 import { execFileSync } from 'node:child_process';
@@ -227,6 +227,15 @@ describe('WIP panel helpers', () => {
     expect(matchFiles([f('c')], list)).toEqual([]); // origPath differs
     expect(matchFiles([f('c', { origPath: 'old', status: 'R' })], list)).toEqual([list[2]]);
     expect(matchFiles([], list)).toEqual([]);
+  });
+
+  it('filesUnder takes the file itself or the files in a folder, not a sibling with the same prefix', () => {
+    const list = [f('src/a.ts'), f('src/sub/b.ts'), f('src2/c.ts'), f('src'), f('lib/'), f('lib2/')];
+    expect(filesUnder('src', list)).toEqual([list[0], list[1], list[3]]);
+    expect(filesUnder('src/sub', list)).toEqual([list[1]]);
+    expect(filesUnder('src/a.ts', list)).toEqual([list[0]]);
+    expect(filesUnder('lib/', list)).toEqual([list[4]]); // a nested repo row
+    expect(filesUnder('gone', list)).toEqual([]);
   });
 
   it('changedFileCount counts a partly staged file once', () => {

@@ -119,6 +119,16 @@ export function shaFromArg(arg: unknown): string | undefined {
   return isSha(sha) ? sha : undefined;
 }
 
+/** A WIP row's context (`WipContext`) a `webview/context` command was invoked for; undefined for anything else. */
+export function wipContextFromArg(arg: unknown): { root: string; area: 'staged' | 'unstaged'; path: string; origPath: string | null } | undefined {
+  const o = arg as { webviewSection?: unknown; root?: unknown; wipArea?: unknown; path?: unknown; origPath?: unknown } | null;
+  if (!o || o.webviewSection !== 'wip' || typeof o.root !== 'string' || !o.root) return undefined;
+  if ((o.wipArea !== 'staged' && o.wipArea !== 'unstaged') || !isSafeRelPath(o.path)) return undefined;
+  const origPath = o.origPath ?? null;
+  if (origPath !== null && !isSafeRelPath(origPath)) return undefined;
+  return { root: o.root, area: o.wipArea, path: o.path, origPath };
+}
+
 export interface HtmlParts { cspSource: string; nonce: string; scriptUri: string; styleUri: string }
 
 /** The webview document: strict CSP (no inline script/style), one script, one stylesheet. */

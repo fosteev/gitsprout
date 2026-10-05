@@ -4,7 +4,7 @@ import { commitMessage } from '../git/message';
 import type { ToWebview } from '../graph/protocol';
 import type { Registry } from '../workspace/registry';
 import {
-  changedFileCount, committedFlash, discardAllConfirm, discardDeletes, discardFileConfirm, matchFiles, NESTED_REPO_DISCARD, NO_COMMIT_SUMMARY,
+  changedFileCount, committedFlash, discardAllConfirm, discardDeletes, discardFileConfirm, filesUnder, matchFiles, NESTED_REPO_DISCARD, NO_COMMIT_SUMMARY,
   NOTHING_TO_DISCARD_TO,
 } from './messages';
 import type { Mutator, Target } from './mutations';
@@ -22,7 +22,10 @@ export interface WipActions {
   stageAll(root: string): Promise<boolean>;
   unstage(root: string, files: FileChange[]): Promise<boolean>;
   unstageAll(root: string): Promise<boolean>;
-  discard(root: string, file: FileChange): Promise<boolean>;
+  /** Stage / unstage the file at `path` or every file under that folder (a row's context menu). */
+  stagePath(root: string, path: string): Promise<boolean>;
+  unstagePath(root: string, path: string): Promise<boolean>;
+  discard(root: string, file: Pick<FileChange, 'path' | 'origPath'>): Promise<boolean>;
   discardAll(root: string): Promise<boolean>;
   /** The new HEAD sha, or undefined when nothing was committed (refused, cancelled, failed; a push is started, not awaited). */
   commit(root: string, req: CommitRequest): Promise<string | undefined>;
@@ -48,10 +51,10 @@ export function createWipActions(registry: Registry, log: (m: string) => void, m
     }
   };
 
-  const stageOrUnstage = (op: 'stage' | 'unstage') => async (root: string, files: FileChange[]): Promise<boolean> => {
+  const stageOrUnstage = (op: 'stage' | 'unstage', pick: (own: FileChange[]) => FileChange[]) => async (root: string): Promise<boolean> => {
     const f = await fresh(root, op);
     if (!f) return false;
-    const list = matchFiles(files, op === 'stage' ? f.status.unstaged : f.status.staged);
+    const list = pick(op === 'stage' ? f.status.unstaged : f.status.staged);
     if (list.length === 0) { await registry.refreshRepo(f.t.root); return false; } // the lists were stale: the refresh fixes the panel
     return mutate(f.t, op, () => (op === 'stage' ? f.t.repo.stage(list) : f.t.repo.unstage(list)));
   };
@@ -63,8 +66,10 @@ export function createWipActions(registry: Registry, log: (m: string) => void, m
   };
 
   return {
-    stage: stageOrUnstage('stage'),
-    unstage: stageOrUnstage('unstage'),
+    stage: (root, files) => stageOrUnstage('stage', (own) => matchFiles(files, own))(root),
+    unstage: (root, files) => stageOrUnstage('unstage', (own) => matchFiles(files, own))(root),
+    stagePath: (root, path) => stageOrUnstage('stage', (own) => filesUnder(path, own))(root),
+    unstagePath: (root, path) => stageOrUnstage('unstage', (own) => filesUnder(path, own))(root),
     stageAll: all('stage'),
     unstageAll: all('unstage'),
 
