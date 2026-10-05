@@ -9,7 +9,7 @@ const f = (path: string, o: Partial<FileChange> = {}): FileChange => ({ path, or
 
 type StateMsg = Extract<ToWebview, { type: 'state' }>;
 const stateMsg = (o: { staged?: FileChange[]; unstaged?: FileChange[]; sha?: string | null } = {}): StateMsg => ({
-  type: 'state', repo: { root: '/r', name: 'r' }, multiRepo: false,
+  type: 'state', repo: { root: '/r', name: 'r' }, multiRepo: false, stashes: 0,
   head: { branch: 'main', sha: o.sha === undefined ? SHA : o.sha },
   commits: [{ sha: SHA, parents: [], author: 'A', email: 'a@x', time: 1, subject: 'init', body: '' }],
   refs: { head: { branch: 'main', sha: SHA }, locals: [], remotes: [], tags: [] },

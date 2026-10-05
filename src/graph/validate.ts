@@ -1,7 +1,7 @@
 // Pure checks for messages coming from the webview: the panel never trusts their shape.
 import type { FileChange, FileStat, FileStatus } from '../git/types';
 import type { Commit, Refs, Status } from '../git/types';
-import type { FromWebview, GraphSettings, ToWebview } from './protocol';
+import { TOOLBAR_ACTIONS, type FromWebview, type GraphSettings, type ToolbarAction, type ToWebview } from './protocol';
 
 const STATUSES: readonly string[] = ['M', 'A', 'D', 'R', 'U'];
 
@@ -55,7 +55,7 @@ const isReq = (v: unknown): v is number => typeof v === 'number' && Number.isSaf
 
 /** Narrows an untrusted message to a well-formed `FromWebview`, or undefined. */
 export function parseFromWebview(m: unknown): FromWebview | undefined {
-  const o = m as { type?: unknown; req?: unknown; sha?: unknown; file?: unknown; area?: unknown; files?: unknown; summary?: unknown; description?: unknown; amend?: unknown; push?: unknown; hideCi?: unknown; url?: unknown; text?: unknown } | null;
+  const o = m as { type?: unknown; req?: unknown; sha?: unknown; file?: unknown; area?: unknown; files?: unknown; summary?: unknown; description?: unknown; amend?: unknown; push?: unknown; hideCi?: unknown; url?: unknown; text?: unknown; action?: unknown } | null;
   if (!o || typeof o !== 'object') return undefined;
   switch (o.type) {
     case 'ready': case 'openScm': case 'switchRepo': case 'refresh':
@@ -89,6 +89,7 @@ export function parseFromWebview(m: unknown): FromWebview | undefined {
       const file = asFileChange(o.file);
       return isReq(o.req) && file && (o.area === 'staged' || o.area === 'unstaged') ? { type: 'diffWipFile', req: o.req, file, area: o.area } : undefined;
     }
+    case 'action': return (TOOLBAR_ACTIONS as readonly unknown[]).includes(o.action) ? { type: 'action', action: o.action as ToolbarAction } : undefined;
     case 'toggleCi': return typeof o.hideCi === 'boolean' ? { type: 'toggleCi', hideCi: o.hideCi } : undefined;
     case 'openUrl': return typeof o.url === 'string' ? { type: 'openUrl', url: o.url } : undefined;
     case 'copy': return typeof o.text === 'string' && o.text.length > 0 && o.text.length <= MAX_COPY ? { type: 'copy', text: o.text } : undefined;
@@ -141,7 +142,7 @@ export function graphHtml(p: HtmlParts): string {
 
 /** The `state` message; `multiRepo` (more than one repo in the window) decides whether the toolbar shows the repo chip. */
 export function stateMessage(
-  repo: { root: string; name: string }, repoCount: number, refs: Refs, commits: Commit[], wip: Status | null, settings: GraphSettings,
+  repo: { root: string; name: string }, repoCount: number, refs: Refs, commits: Commit[], wip: Status | null, settings: GraphSettings, stashes = 0,
 ): Extract<ToWebview, { type: 'state' }> {
-  return { type: 'state', repo, multiRepo: repoCount > 1, head: refs.head, commits, refs, wip, settings };
+  return { type: 'state', repo, multiRepo: repoCount > 1, head: refs.head, commits, refs, wip, stashes, settings };
 }

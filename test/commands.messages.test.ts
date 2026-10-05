@@ -181,6 +181,15 @@ describe('graph: copy message and multiRepo flag', () => {
     const settings = { ciPattern: '', hideCi: false, jira: {}, logLimit: 10 };
     const st = (n: number) => stateMessage({ root: '/r', name: 'r' }, n, refs, [], null, settings);
     expect([st(0).multiRepo, st(1).multiRepo, st(2).multiRepo]).toEqual([false, false, true]);
+    expect(st(1).stashes).toBe(0);
+    expect(stateMessage({ root: '/r', name: 'r' }, 1, refs, [], null, settings, 3).stashes).toBe(3);
+  });
+  it('validates the toolbar action message', () => {
+    for (const action of ['fetch', 'pull', 'push', 'branch', 'stash', 'pop', 'terminal']) {
+      expect(parseFromWebview({ type: 'action', action })).toEqual({ type: 'action', action });
+    }
+    expect(parseFromWebview({ type: 'action', action: 'reset' })).toBeUndefined();
+    expect(parseFromWebview({ type: 'action' })).toBeUndefined();
   });
 });
 

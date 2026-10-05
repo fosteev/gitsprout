@@ -8,7 +8,7 @@ import { Repo } from '../git/repo';
 import type { Commit, FilePatch, Head, Status } from '../git/types';
 import { onReveal } from '../views/refsStore';
 import type { Registry } from '../workspace/registry';
-import type { FromWebview, GraphSettings, ToWebview } from './protocol';
+import type { FromWebview, GraphSettings, ToolbarAction, ToWebview } from './protocol';
 import { graphHtml, inGitDir, isAllowedUrl, parseFromWebview, shaFromArg, stateMessage } from './validate';
 
 export const VIEW_TYPE = 'gitsprout.graph';
@@ -137,7 +137,7 @@ class GraphPanel implements vscode.Disposable {
     const t0 = performance.now();
     try {
       const repo = new Repo(active.root, this.registry.gitPath);
-      const [commits, refs, status] = await Promise.all([repo.log(settings.logLimit), repo.refs(), repo.status()]);
+      const [commits, refs, status, stashes] = await Promise.all([repo.log(settings.logLimit), repo.refs(), repo.status(), repo.stashes()]);
       if (mine !== this.seq) return;
       const wip = status.staged.length + status.unstaged.length > 0 ? status : null;
       this.root = active.root;
@@ -145,7 +145,7 @@ class GraphPanel implements vscode.Disposable {
       this.head = refs.head;
       this.wip = wip;
       this.panel.title = `Graph · ${active.name}`;
-      const msg = stateMessage({ root: active.root, name: active.name }, this.registry.repos.length, refs, commits, wip, settings);
+      const msg = stateMessage({ root: active.root, name: active.name }, this.registry.repos.length, refs, commits, wip, settings, stashes.length);
       const sig = JSON.stringify(msg);
       if (sig !== this.lastState) { this.lastState = sig; this.post(msg); }
       this.log(`graph state ${active.name}: ${Math.round(performance.now() - t0)} ms (${commits.length} commits)`);
@@ -247,12 +247,29 @@ class GraphPanel implements vscode.Disposable {
         return;
       case 'refresh': await this.registry.refreshRepo(this.repoRoot); return;
       case 'toggleCi': await setSetting('hideCi', m.hideCi); return;
+      case 'action': await this.runAction(m.action); return;
       case 'copy':
         await vscode.env.clipboard.writeText(m.text);
         vscode.window.setStatusBarMessage('Gitsprout: copied', 2000);
         return;
       case 'openUrl':
         if (isAllowedUrl(m.url, readSettings().jira)) await vscode.env.openExternal(vscode.Uri.parse(m.url));
+        return;
+    }
+  }
+
+  /** A toolbar button: the same commands as the palette, pinned to this tab's repo (not whichever repo is active). */
+  private async runAction(action: ToolbarAction): Promise<void> {
+    const root = this.repoRoot;
+    switch (action) {
+      case 'fetch': await vscode.commands.executeCommand('gitsprout.repoFetch', { root }); return;
+      case 'pull': await vscode.commands.executeCommand('gitsprout.pull', root); return;
+      case 'push': await vscode.commands.executeCommand('gitsprout.push', root); return;
+      case 'branch': await vscode.commands.executeCommand('gitsprout.createBranch', root); return;
+      case 'stash': await vscode.commands.executeCommand('gitsprout.stash', root); return;
+      case 'pop': await vscode.commands.executeCommand('gitsprout.stashPop', root); return;
+      case 'terminal':
+        vscode.window.createTerminal({ name: this.registry.get(root)?.name ?? basename(root), cwd: root }).show();
         return;
     }
   }

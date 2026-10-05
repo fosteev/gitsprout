@@ -18,7 +18,7 @@ const PATCH: FilePatch = {
 
 type StateMsg = Extract<ToWebview, { type: 'state' }>;
 const stateMsg = (o: { staged?: FileChange[]; unstaged?: FileChange[]; root?: string; wip?: boolean } = {}): StateMsg => ({
-  type: 'state', repo: { root: o.root ?? '/r', name: 'r' }, multiRepo: false,
+  type: 'state', repo: { root: o.root ?? '/r', name: 'r' }, multiRepo: false, stashes: 0,
   head: { branch: 'main', sha: SHA },
   commits: [
     { sha: SHA, parents: [PARENT], author: 'A', email: 'a@x', time: 1, subject: 'second', body: '' },

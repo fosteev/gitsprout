@@ -173,7 +173,11 @@ export function registerMutations(context: vscode.ExtensionContext, registry: Re
     if (await mutate(t, 'create', () => t.repo.createBranch(name, start, true))) flash(`created and switched to ${name}`);
   };
 
-  reg('createBranch', () => createFrom('HEAD', registry.active?.branch ?? 'HEAD'));
+  // `root` comes from the graph toolbar (the tab's repo); the palette acts on the active repo.
+  reg('createBranch', (root?: unknown) => {
+    const r = typeof root === 'string' ? root : undefined;
+    return createFrom('HEAD', (r ? registry.get(r) : registry.active)?.branch ?? 'HEAD', r);
+  });
 
   reg('createBranchFrom', (arg?: unknown) => {
     // Tree nodes first (a Tag also has a `sha`); the graph passes its row context `{ sha, … }`.
@@ -272,11 +276,17 @@ export function registerMutations(context: vscode.ExtensionContext, registry: Re
     return index;
   };
 
+  /** A tree node acts on its stash; a repo root (the graph toolbar's Pop) acts on that repo's latest stash. */
   const stashAction = (op: 'apply' | 'pop') => async (arg?: unknown) => {
-    const t = target();
+    const t = target(arg);
     if (!t) return;
     let s;
-    try { s = await findStash(t, arg); } catch (e) { await fail(e, op, t.root); return; }
+    try {
+      if (typeof arg === 'string') {
+        s = (await t.repo.stashes())[0];
+        if (!s) { void vscode.window.showInformationMessage('There are no stashes.'); return; }
+      } else s = await findStash(t, arg);
+    } catch (e) { await fail(e, op, t.root); return; }
     if (!s) return;
     const sha = s.sha;
     const ok = await mutate(t, op, async () => {

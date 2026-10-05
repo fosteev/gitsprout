@@ -10,8 +10,12 @@ export interface GraphSettings {
   logLimit: number;
 }
 
+/** Buttons of the graph toolbar's action group; each runs the matching `gitsprout.*` command on the tab's repo. */
+export const TOOLBAR_ACTIONS = ['fetch', 'pull', 'push', 'branch', 'stash', 'pop', 'terminal'] as const;
+export type ToolbarAction = typeof TOOLBAR_ACTIONS[number];
+
 export type ToWebview =
-  | { type: 'state'; repo: { root: string; name: string }; /** more than one repo in the window: the toolbar shows the repo chip */ multiRepo: boolean; head: Head; commits: Commit[]; refs: Refs; wip: Status | null; settings: GraphSettings }
+  | { type: 'state'; repo: { root: string; name: string }; /** more than one repo in the window: the toolbar shows the repo chip */ multiRepo: boolean; head: Head; commits: Commit[]; refs: Refs; wip: Status | null; /** stash count: Pop is disabled at 0 */ stashes: number; settings: GraphSettings }
   /** `error` set = the file list could not be read (`files` is empty then). */
   | { type: 'details'; sha: string; files: FileStat[]; error?: string }
   | { type: 'reveal'; sha: string }                      // select + scroll (from tree views)
@@ -47,6 +51,8 @@ export type FromWebview =
   | { type: 'amendInfo' }
   | { type: 'openScm' } | { type: 'switchRepo' } | { type: 'refresh' }
   | { type: 'toggleCi'; hideCi: boolean }
+  /** A toolbar action button (Fetch, Pull, Push, Branch, Stash, Pop, Terminal). */
+  | { type: 'action'; action: ToolbarAction }
   | { type: 'openUrl'; url: string }
   /** Copy text to the clipboard (the details card's "Copy SHA" button). */
   | { type: 'copy'; text: string };

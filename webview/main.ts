@@ -1,6 +1,6 @@
 // Graph UI entry point: DOM glue around the pure model (layout.ts, render.ts, format.ts).
 import type { FileChange, FileStat } from '../src/git/types';
-import type { FromWebview, ToWebview } from '../src/graph/protocol';
+import type { FromWebview, ToolbarAction, ToWebview } from '../src/graph/protocol';
 import './styles.css';
 import { ciMatcher } from './format';
 import { graphWidth, layout, RH, visibleRows, WIP_SHA, type LaidRow } from './layout';
@@ -111,6 +111,17 @@ function persist(): void {
   api.setState({ root: stateRoot, draft, view: wipView, collapsed: [...collapsed], paneWidth, listSplit, diffMode });
 }
 
+/** Toolbar action buttons (GitKraken-style row); 16×16 stroke icons, `group` puts a separator between groups. */
+const ACTIONS: { id: ToolbarAction; label: string; title: string; group: number; icon: string }[] = [
+  { id: 'fetch', label: 'Fetch', title: 'Fetch', group: 0, icon: 'M4.5 10A3 3 0 0 1 4.6 4a3.6 3.6 0 0 1 6.9.7A2.6 2.6 0 0 1 11.5 10M8 7v7M5.8 11.8 8 14l2.2-2.2' },
+  { id: 'pull', label: 'Pull', title: 'Pull', group: 0, icon: 'M8 2v9M4.5 7.5 8 11l3.5-3.5M3 14h10' },
+  { id: 'push', label: 'Push', title: 'Push', group: 0, icon: 'M8 12V3M4.5 6.5 8 3l3.5 3.5M3 14h10' },
+  { id: 'branch', label: 'Branch', title: 'Create Branch…', group: 1, icon: 'M5 4.5v7M11 6.5c0 3-6 1.8-6 5M6.5 3a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M12.5 5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M6.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0' },
+  { id: 'stash', label: 'Stash', title: 'Stash Changes…', group: 1, icon: 'M2 9v4.5h12V9M2 9h3l1 1.5h4L11 9h3M8 1.5v5.5M5.8 4.8 8 7l2.2-2.2' },
+  { id: 'pop', label: 'Pop', title: 'Pop Latest Stash', group: 1, icon: 'M2 9v4.5h12V9M2 9h3l1 1.5h4L11 9h3M8 7V1.5M5.8 3.7 8 1.5l2.2 2.2' },
+  { id: 'terminal', label: 'Terminal', title: 'Open Terminal in Repository', group: 2, icon: 'M3 4l4 4-4 4M8.5 12.5H13' },
+];
+
 const app = document.getElementById('app') as HTMLElement;
 app.innerHTML = `
   <div class="wvbar">
@@ -119,6 +130,8 @@ app.innerHTML = `
     <button class="vchip" id="ci" aria-pressed="false"></button>
     <span class="busy" id="busy" hidden>Loading…</span>
     <span class="cnt" id="cnt"></span>
+    <div class="acts" role="toolbar" aria-label="Repository actions">${ACTIONS.map((a, i) =>
+      `${i && ACTIONS[i - 1].group !== a.group ? '<span class="acts-sep"></span>' : ''}<button class="act" id="act-${a.id}" data-action="${a.id}" title="${a.title}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="${a.icon}"/></svg><span class="lbl">${a.label}</span><span class="badge" hidden></span></button>`).join('')}</div>
     <button class="vchip" id="refresh" title="Refresh">Refresh</button>
   </div>
   <div class="msg" id="msg" hidden></div>
@@ -457,6 +470,18 @@ function renderToolbar(): void {
   ci.setAttribute('aria-pressed', String(st.settings.hideCi));
   const n = st.commits.length - (st.settings.hideCi ? model.hiddenN : 0);
   $('cnt').textContent = `${n}${st.commits.length >= st.settings.logLimit ? '+' : ''} commits`;
+  const head = st.head.branch ? st.refs.locals.find((b) => b.name === st!.head.branch) : undefined;
+  setBadge('pull', head?.behind ?? 0, 'behind');
+  setBadge('push', head?.ahead ?? 0, 'ahead');
+  ($('act-pop') as HTMLButtonElement).disabled = st.stashes === 0;
+  $('act-pop').title = st.stashes ? `Pop Latest Stash (${st.stashes} stash${st.stashes === 1 ? '' : 'es'})` : 'No stashes';
+}
+
+function setBadge(id: ToolbarAction, n: number, what: string): void {
+  const b = $(`act-${id}`).querySelector('.badge') as HTMLElement;
+  b.hidden = n === 0;
+  b.textContent = String(n);
+  b.title = `${n} commit${n === 1 ? '' : 's'} ${what}`;
 }
 
 function scrollToRow(sha: string, center: boolean): void {
@@ -789,6 +814,7 @@ document.addEventListener('click', (ev) => {
 // Toolbar.
 $('repo').addEventListener('click', () => send({ type: 'switchRepo' }));
 $('refresh').addEventListener('click', () => send({ type: 'refresh' }));
+for (const a of ACTIONS) $(`act-${a.id}`).addEventListener('click', () => send({ type: 'action', action: a.id }));
 $('ci').addEventListener('click', () => {
   if (!st) return;
   st.settings.hideCi = !st.settings.hideCi;

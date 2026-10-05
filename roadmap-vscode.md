@@ -119,8 +119,10 @@ export type FromWebview =
   | { type: 'amendInfo' }                                // extension answers with 'amendInfo'
   | { type: 'openScm' } | { type: 'switchRepo' } | { type: 'refresh' }
   | { type: 'toggleCi'; hideCi: boolean }
+  | { type: 'action'; action: 'fetch' | 'pull' | 'push' | 'branch' | 'stash' | 'pop' | 'terminal' } // toolbar buttons → gitsprout.* on the tab's repo
   | { type: 'openUrl'; url: string };
 ```
+Graph toolbar action group (2026-10-05, from the user): Fetch, Pull (badge = behind), Push (badge = ahead), Branch, Stash, Pop (latest stash; disabled when `state.stashes` is 0), Terminal (integrated terminal at the repo root). No Undo/Redo: git has no safe generic undo.
 Rows carry `data-vscode-context='{"webviewSection":"commit","sha":"…","preventDefaultContextMenuItems":true}'`.
 
 ### Manifest contributions (`package.json`)
