@@ -31,6 +31,10 @@
     "workspace"
   ],
   "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1f1f1f",
+    "theme": "dark"
+  },
   "main": "./dist/extension.js",
   "activationEvents": [
     "onStartupFinished",
@@ -834,9 +838,10 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p webview/tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p webview/tsconfig.json && tsc --noEmit -p scripts/screenshots/tsconfig.json",
     "test": "vitest run",
-    "package": "vsce package --no-dependencies"
+    "package": "vsce package --no-dependencies",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "devDependencies": {
     "@types/node": "20",
@@ -844,6 +849,7 @@
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "happy-dom": "^20.14.5",
+    "playwright-core": "^1.63.0",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   }

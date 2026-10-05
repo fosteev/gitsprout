@@ -1,19 +1,32 @@
-# Gitsprout
+# Gitsprout 🌱
 
 A VS Code (and Cursor) extension for the everyday 90% of Git work across one or many repositories: switch branches, see what changed, browse the commit graph, fetch/pull/push, stash. No subscription, no accounts, no cloud. Every action runs your own `git`, so your config, hooks and SSH keys just work.
 
 Gitsprout adds what the built-in Source Control lacks: a commit graph with a GitKraken-style staging and commit panel, a branch/remote/stash/tag tree, and an overview of every repository in a big workspace folder.
 
+![Commit graph with a multi-repo workspace in the sidebar](docs/screenshots/graph.png)
+
 ## Features
 
-- Workspaces with one repo or many (e.g. `~/Projects` with ~40 repos in nested folders): repository discovery, a Repositories view grouped by folder, "needs attention" filter (uncommitted / ahead / behind), Fetch All, quick repo switching, active repo follows the active editor
-- Branches, Remotes, Stashes, Tags tree views for the active repo: checkout (a remote checkout creates a tracking branch), create, rename, delete, ahead/behind
-- Commit graph with search, hide CI commits, commit details and Jira keys (`PROJ-123`) as links
-- Inline diffs in the graph: clicking a commit or uncommitted file shows its diff in place of the graph (inline or split, next/previous file, "Open in Editor" for VS Code's native diff editor). Tree views open the native diff editor
-- WIP panel in the graph: stage, unstage and discard files or everything, commit summary + description, amend, commit and push
-- Graph actions: create branch/tag, reset, cherry-pick, revert, compare with working tree, save as patch
-- Fetch, pull (fast-forward, merge when diverged), push with a clear message and a Pull button when rejected
-- Stash: push, apply, pop, drop
+**Many repositories, one sidebar.** Open a folder like `~/work` with dozens of repos in nested folders: Gitsprout finds them, groups them by folder and marks the ones that need attention (uncommitted changes, ahead, behind). Fetch All, quick repo switching, and the active repo follows the editor you are in.
+
+**Commit graph.** One tab per repository: lanes, branch and tag pills, search by message, SHA or author, hide CI commits, commit details, Jira keys (`PROJ-123`) as links. A toolbar for Fetch, Pull, Push (with ahead/behind counts), Create Branch, Stash, Pop and a terminal in the repo.
+
+**Inline diffs.** Click a file of a commit or of your working tree and its diff replaces the graph: inline or split, `j`/`k` to the next file, "Open in Editor" for VS Code's native diff editor.
+
+![Inline diff of a commit file](docs/screenshots/diff.png)
+
+**Stage and commit from the graph.** Select the Uncommitted Changes row: Unstaged and Staged lists (path or tree), stage, unstage and discard files, folders or everything, a commit summary with a 72-character counter, a description, amend, commit, or commit and push.
+
+![WIP panel: staged and unstaged files and the commit box](docs/screenshots/wip.png)
+
+**Graph actions.** Right-click a commit: create a branch or tag, copy SHA, message or link, reset the current branch to it, cherry-pick, revert, compare with the working tree, save as a patch.
+
+![Commit context menu in the graph](docs/screenshots/actions.png)
+
+**Branches, remotes, stashes, tags.** Tree views for the active repo: checkout (a remote checkout creates a tracking branch), create, rename, delete, set upstream, stash push/apply/pop/drop, push and delete tags.
+
+**Fetch, pull, push with clear errors.** Pull fast-forwards or merges, a rejected push offers Pull, a branch without upstream offers Publish, an authentication failure offers the same command in a terminal.
 
 Not planned: hunk/line staging, interactive rebase, conflict editor, PR/issue integrations, AI features.
 
@@ -69,9 +82,12 @@ pnpm build            # esbuild: dist/extension.js + dist/webview.js
 pnpm typecheck
 pnpm test             # vitest: parsers, graph layout, discovery, git integration on temp repos
 pnpm package          # -> gitsprout-<version>.vsix
+pnpm screenshots      # regenerate docs/screenshots (needs Chrome; CHROME_PATH to override)
 ```
 
 F5 in VS Code ("Run Extension") opens an Extension Development Host.
+
+The screenshots are rendered from the real webview bundle over a fictional demo workspace that `scripts/screenshots/demo.ts` builds with git.
 
 Stack: VS Code extension API, TypeScript, esbuild; the graph webview is plain TypeScript themed with `--vscode-*` variables; git runs through the system CLI (`git status --porcelain=v2`, `git log --format=…`, `git for-each-ref`), no libgit2.
 
