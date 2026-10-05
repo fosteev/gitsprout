@@ -17,7 +17,7 @@ function repo(relPath: string, over: Partial<RepoSummary> = {}): RepoSummary {
 describe('locate / summary', () => {
   const one = [{ name: 'Projects', path: '/p' }];
   it('single folder: relPath is relative, group = first segment', () => {
-    expect(locate('/p/at/mfc', one)).toEqual({ relPath: 'at/mfc', group: 'at', depth: 2 });
+    expect(locate('/p/at/crm', one)).toEqual({ relPath: 'at/crm', group: 'at', depth: 2 });
     expect(locate('/p/at/a/b', one)).toEqual({ relPath: 'at/a/b', group: 'at', depth: 3 });
     expect(locate('/p/top', one)).toEqual({ relPath: 'top', group: '', depth: 1 });
     expect(locate('/p', one)).toEqual({ relPath: 'p', group: '', depth: 0 });
@@ -36,21 +36,21 @@ describe('locate / summary', () => {
     expect(subOf('at/a/b/c')).toBe('a/b');
     expect(subOf('at/a')).toBe('');
     expect(subOf('top')).toBe('');
-    const s = makeRepoSummary('/p/at/mfc', one, base);
-    expect(s).toMatchObject({ root: '/p/at/mfc', name: 'mfc', relPath: 'at/mfc', group: 'at', branch: 'main' });
+    const s = makeRepoSummary('/p/at/crm', one, base);
+    expect(s).toMatchObject({ root: '/p/at/crm', name: 'crm', relPath: 'at/crm', group: 'at', branch: 'main' });
     expect(sameSummary(s, { ...base })).toBe(true);
     expect(sameSummary(s, { ...base, changes: 1 })).toBe(false);
   });
 });
 
 describe('repoForPath', () => {
-  const roots = ['/p/at/mfc', '/p/at/mfc-extra', '/p/at'];
+  const roots = ['/p/at/crm', '/p/at/crm-extra', '/p/at'];
   it('picks the longest root on a path boundary', () => {
-    expect(repoForPath(roots, '/p/at/mfc/src/a.ts')).toBe('/p/at/mfc');
-    expect(repoForPath(roots, '/p/at/mfc-extra/a.ts')).toBe('/p/at/mfc-extra');
+    expect(repoForPath(roots, '/p/at/crm/src/a.ts')).toBe('/p/at/crm');
+    expect(repoForPath(roots, '/p/at/crm-extra/a.ts')).toBe('/p/at/crm-extra');
     expect(repoForPath(roots, '/p/at/other/a.ts')).toBe('/p/at');
     expect(repoForPath(roots, '/p/atx/a.ts')).toBeUndefined();
-    expect(repoForPath(roots, '/p/at/mfc')).toBe('/p/at/mfc');
+    expect(repoForPath(roots, '/p/at/crm')).toBe('/p/at/crm');
   });
 });
 
@@ -88,15 +88,15 @@ describe('descriptions and filter', () => {
 
 describe('buildRepoTree', () => {
   const rs = [
-    repo('pilot/gamma'), repo('at/mfc', { changes: 1 }), repo('at/legacy/old'), repo('at/legacy/older', { behind: 2 }),
+    repo('labs/gamma'), repo('at/crm', { changes: 1 }), repo('at/legacy/old'), repo('at/legacy/older', { behind: 2 }),
     repo('at/alpha'), repo('top'), repo('topdirty', { ahead: 1 }),
   ];
   const labels = (ns: RepoTreeNode[]): unknown[] => ns.map((n) => n.kind === 'repo' ? n.repo.name : { [n.label]: labels(n.children) });
 
   it('groups, sub-folders and top-level repos, sorted', () => {
     expect(labels(buildRepoTree(rs, { onlyAttention: false }))).toEqual([
-      { at: ['alpha', 'mfc', { legacy: ['old', 'older'] }] },
-      { pilot: ['gamma'] },
+      { at: ['alpha', 'crm', { legacy: ['old', 'older'] }] },
+      { labs: ['gamma'] },
       'top', 'topdirty',
     ]);
   });
@@ -106,10 +106,10 @@ describe('buildRepoTree', () => {
   });
   it('only-attention hides clean repos and empty groups, keeps the active repo', () => {
     expect(labels(buildRepoTree(rs, { onlyAttention: true }))).toEqual([
-      { at: ['mfc', { legacy: ['older'] }] }, 'topdirty',
+      { at: ['crm', { legacy: ['older'] }] }, 'topdirty',
     ]);
-    expect(labels(buildRepoTree(rs, { onlyAttention: true, activeRoot: '/p/pilot/gamma' }))).toEqual([
-      { at: ['mfc', { legacy: ['older'] }] }, { pilot: ['gamma'] }, 'topdirty',
+    expect(labels(buildRepoTree(rs, { onlyAttention: true, activeRoot: '/p/labs/gamma' }))).toEqual([
+      { at: ['crm', { legacy: ['older'] }] }, { labs: ['gamma'] }, 'topdirty',
     ]);
   });
   it('keys are unique and stable', () => {

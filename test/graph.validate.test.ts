@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_COMMIT_TEXT, MAX_FILES, parseFromWebview } from '../src/graph/validate';
 
-const F = { path: 'pulse/widgets/a.php', origPath: null, status: 'M', untracked: false };
+const F = { path: 'app/widgets/a.php', origPath: null, status: 'M', untracked: false };
 const R = { path: 'new.txt', origPath: 'old.txt', status: 'R', untracked: false };
 const commit = { type: 'commit', summary: 'Fix it', description: '', amend: false, push: false };
 

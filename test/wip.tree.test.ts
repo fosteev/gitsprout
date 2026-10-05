@@ -12,11 +12,11 @@ const shape = (nodes: TreeNode[]): unknown[] => nodes.map((n) => (n.kind === 'di
 
 describe('buildTree', () => {
   it('nests folders, sorts folders before files, keeps the list index', () => {
-    const t = buildTree([f('z.txt'), f('pulse/widgets/b.php'), f('.DS_Store'), f('pulse/widgets/a.php'), f('pulse/lib/x.php'), f('a.txt')]);
+    const t = buildTree([f('z.txt'), f('app/widgets/b.php'), f('.DS_Store'), f('app/widgets/a.php'), f('app/lib/x.php'), f('a.txt')]);
     expect(shape(t.children)).toEqual([
-      { dir: 'pulse', path: 'pulse', children: [
-        { dir: 'lib', path: 'pulse/lib', children: ['x.php'] },
-        { dir: 'widgets', path: 'pulse/widgets', children: ['a.php', 'b.php'] },
+      { dir: 'app', path: 'app', children: [
+        { dir: 'lib', path: 'app/lib', children: ['x.php'] },
+        { dir: 'widgets', path: 'app/widgets', children: ['a.php', 'b.php'] },
       ] },
       '.DS_Store', 'a.txt', 'z.txt',
     ]);
@@ -25,8 +25,8 @@ describe('buildTree', () => {
   });
 
   it('compacts a chain of single-child folders, also at the root', () => {
-    const t = buildTree([f('pulse/widgets/deep/a.php')]);
-    expect(shape(t.children)).toEqual([{ dir: 'pulse/widgets/deep', path: 'pulse/widgets/deep', children: ['a.php'] }]);
+    const t = buildTree([f('app/widgets/deep/a.php')]);
+    expect(shape(t.children)).toEqual([{ dir: 'app/widgets/deep', path: 'app/widgets/deep', children: ['a.php'] }]);
   });
 
   it('does not compact a folder that also holds a file or has two folders', () => {

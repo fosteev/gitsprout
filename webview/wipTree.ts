@@ -12,9 +12,9 @@ export interface TreeFile {
 
 export interface TreeDir {
   kind: 'dir';
-  /** Full path of the deepest folder of a compacted chain (`pulse/widgets`); '' for the root. */
+  /** Full path of the deepest folder of a compacted chain (`app/widgets`); '' for the root. */
   path: string;
-  /** What the row shows (`pulse/widgets`). */
+  /** What the row shows (`app/widgets`). */
   label: string;
   children: TreeNode[];
 }

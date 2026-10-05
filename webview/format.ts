@@ -29,7 +29,7 @@ export function minutesAgo(unixSeconds: number, nowMs: number): number {
 }
 
 export interface ParsedSubject {
-  /** `P7-4040` (project key + id) or ''. */
+  /** `X7-4040` (project key + id) or ''. */
   key: string;
   /** Project part of the key. */
   project: string;

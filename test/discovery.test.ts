@@ -15,7 +15,7 @@ beforeAll(() => {
   gitDir('ws', 'at', 'alpha');
   gitDir('ws', 'at', 'group', 'beta');            // depth 3
   gitDir('ws', 'at', 'alpha', 'inner');           // nested in a repo: ignored
-  gitDir('ws', 'pilot', 'gamma');
+  gitDir('ws', 'labs', 'gamma');
   gitDir('ws', 'top');                             // top-level repo
   gitDir('ws', 'at', 'x', 'y', 'z', 'deep');       // depth 5: too deep
   gitDir('ws', 'node_modules', 'pkg');
@@ -23,12 +23,12 @@ beforeAll(() => {
   gitDir('ws', '.hidden', 'repo');
   mk('ws', 'plain', 'empty');
   // submodule: .git file pointing into /modules/
-  mk('ws', 'pilot', 'sub');
-  writeFileSync(join(tmp, 'ws', 'pilot', 'sub', '.git'), 'gitdir: ../../.git/modules/sub\n');
+  mk('ws', 'labs', 'sub');
+  writeFileSync(join(tmp, 'ws', 'labs', 'sub', '.git'), 'gitdir: ../../.git/modules/sub\n');
   // linked worktree: .git file pointing into /worktrees/ is a repo
-  mk('ws', 'pilot', 'wt');
+  mk('ws', 'labs', 'wt');
   mk('main', '.git', 'worktrees', 'wt');
-  writeFileSync(join(tmp, 'ws', 'pilot', 'wt', '.git'), `gitdir: ${join(tmp, 'main', '.git', 'worktrees', 'wt')}\n`);
+  writeFileSync(join(tmp, 'ws', 'labs', 'wt', '.git'), `gitdir: ${join(tmp, 'main', '.git', 'worktrees', 'wt')}\n`);
   writeFileSync(join(tmp, 'main', '.git', 'worktrees', 'wt', 'commondir'), '../..\n');
   // symlink to a repo elsewhere: skipped
   gitDir('elsewhere');
@@ -44,14 +44,14 @@ describe('discover', () => {
   it('finds repos to the depth, ignores nested/excluded/hidden/submodule/symlink', async () => {
     const found = await discover([join(tmp, 'ws')], 3, ['**/node_modules', '**/vendor']);
     expect(rel(found).map((r) => r.slice(3))).toEqual([
-      'at/alpha', 'at/group/beta', 'pilot/gamma', 'pilot/wt', 'top',
+      'at/alpha', 'at/group/beta', 'labs/gamma', 'labs/wt', 'top',
     ]);
     expect(found.map((f) => f.depth)).toEqual([2, 3, 2, 2, 1]);
   });
 
   it('respects a smaller depth', async () => {
     const found = await discover([join(tmp, 'ws')], 2, ['**/node_modules', '**/vendor']);
-    expect(rel(found).map((r) => r.slice(3))).toEqual(['at/alpha', 'pilot/gamma', 'pilot/wt', 'top']);
+    expect(rel(found).map((r) => r.slice(3))).toEqual(['at/alpha', 'labs/gamma', 'labs/wt', 'top']);
   });
 
   it('descends into node_modules and vendor when not excluded', async () => {
@@ -60,12 +60,12 @@ describe('discover', () => {
   });
 
   it('resolves the git dir of a linked worktree', async () => {
-    const found = await discover([join(tmp, 'ws', 'pilot')], 1, []);
+    const found = await discover([join(tmp, 'ws', 'labs')], 1, []);
     const wt = found.find((f) => f.root.endsWith('wt'))!;
     expect(wt.gitDir).toBe(join(tmp, 'main', '.git', 'worktrees', 'wt'));
     expect(wt.commonDir).toBe(join(tmp, 'main', '.git'));
-    expect(found.find((f) => f.root.endsWith('gamma'))!.commonDir).toBe(join(tmp, 'ws', 'pilot', 'gamma', '.git'));
-    expect(found.find((f) => f.root.endsWith('gamma'))!.gitDir).toBe(join(tmp, 'ws', 'pilot', 'gamma', '.git'));
+    expect(found.find((f) => f.root.endsWith('gamma'))!.commonDir).toBe(join(tmp, 'ws', 'labs', 'gamma', '.git'));
+    expect(found.find((f) => f.root.endsWith('gamma'))!.gitDir).toBe(join(tmp, 'ws', 'labs', 'gamma', '.git'));
   });
 
   it('treats a workspace folder that is a repo as depth 0 and stops there', async () => {
@@ -98,7 +98,7 @@ describe('discover', () => {
   });
 
   it('dedupes overlapping folders and tolerates missing ones', async () => {
-    const found = await discover([join(tmp, 'ws'), join(tmp, 'ws', 'pilot'), join(tmp, 'nope')], 3, ['**/node_modules', '**/vendor']);
+    const found = await discover([join(tmp, 'ws'), join(tmp, 'ws', 'labs'), join(tmp, 'nope')], 3, ['**/node_modules', '**/vendor']);
     expect(found.filter((f) => f.root.endsWith('gamma'))).toHaveLength(1);
   });
 });

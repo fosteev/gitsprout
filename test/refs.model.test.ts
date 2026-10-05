@@ -55,8 +55,8 @@ describe('remotes, tags, stashes', () => {
     expect(stashFileRow({ path: 'b.ts', origPath: 'a.ts', status: 'R', untracked: false }).tooltip).toBe('Renamed: a.ts → b.ts');
   });
   it('view description only in multi-repo', () => {
-    expect(repoViewDescription('pilot7', true)).toBe('pilot7');
-    expect(repoViewDescription('pilot7', false)).toBeUndefined();
+    expect(repoViewDescription('web-app', true)).toBe('web-app');
+    expect(repoViewDescription('web-app', false)).toBeUndefined();
     expect(repoViewDescription(undefined, true)).toBeUndefined();
   });
 });

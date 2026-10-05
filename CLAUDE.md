@@ -9,8 +9,10 @@ VS Code / Cursor extension (TypeScript). Every git action shells out to the syst
 
 ## Sources of truth
 
-- `roadmap-vscode.md` — stages, checkboxes, git contract, webview protocol, manifest contributions. Executors tick checkboxes as they verify them.
-- `prototype/vscode-multi.html` and `prototype/vscode.html` — reference for behaviour, copy, and the graph look (lane geometry, rows, details card). The real extension uses native VS Code UI wherever the prototype emulates it (tree views, quick picks, notifications, diff editor, context menus). Exception: the graph's file diff is rendered inline in the webview (`roadmap-inline-diff.md`); tree views still open the native diff editor.
+Roadmaps, their `*.pending.md` files, prototypes and archived plans live in `.internal/` (git-ignored, local only: they name work instances and stay out of the public repo). New roadmaps go there too.
+
+- `.internal/roadmap-vscode.md` — stages, checkboxes, git contract, webview protocol, manifest contributions. Executors tick checkboxes as they verify them.
+- `.internal/prototype/vscode-multi.html` and `.internal/prototype/vscode.html` — reference for behaviour, copy, and the graph look (lane geometry, rows, details card). The real extension uses native VS Code UI wherever the prototype emulates it (tree views, quick picks, notifications, diff editor, context menus). Exception: the graph's file diff is rendered inline in the webview (`.internal/roadmap-inline-diff.md`); tree views still open the native diff editor.
 - `README.md` — product scope. Anything outside it is out of scope for MVP.
 
 ## Layout (target)
@@ -45,7 +47,7 @@ Run the extension: F5 in VS Code ("Run Extension" launch config) opens an Extens
 
 - Git is invoked only through `src/git/run.ts`: `execFile('git', ['-C', root, ...])`, env `LC_ALL=C`, `GIT_TERMINAL_PROMPT=0`, `GIT_OPTIONAL_LOCKS=0` for reads, `-c core.quotePath=false`. Never parse localized or colored output.
 - Parsers are pure functions over strings with literal-fixture unit tests.
-- Staging and committing happen only in the graph's WIP panel (`roadmap-wip-panel.md`): whole files, no hunk staging, no conflict resolution (that stays in the built-in Source Control). Cherry-pick/revert/reset may create or move commits.
+- Staging and committing happen only in the graph's WIP panel (`.internal/roadmap-wip-panel.md`): whole files, no hunk staging, no conflict resolution (that stays in the built-in Source Control). Cherry-pick/revert/reset may create or move commits.
 - Webview ↔ extension messages are typed in `src/graph/protocol.ts` and imported by both sides.
 - No runtime dependencies unless the roadmap names them; everything is bundled by esbuild.
 - Commit messages: imperative English summary (`Add stash tree view`), no AI attribution trailers.

@@ -6,8 +6,8 @@ import { commitDetailsHtml, diffBarHtml, diffBodyHtml, keepSet, pillsHtml, refsB
 import { asFileChange, asFileStat, graphHtml, isAllowedUrl, isSafeRelPath, parseFromWebview, shaFromArg, wipContextFromArg } from '../src/graph/validate';
 
 const SHA = 'a'.repeat(40);
-const commit = (o: Partial<Commit> = {}): Commit => ({ sha: SHA, parents: [], author: 'Ann <b>', email: 'a@x', time: 1000, subject: 'P7-4040 [ FIX ] <img src=x onerror=alert(1)>', body: 'line "1"', ...o });
-const JIRA = { P7: 'https://jira.pilot-gps.com/browse/' };
+const commit = (o: Partial<Commit> = {}): Commit => ({ sha: SHA, parents: [], author: 'Ann <b>', email: 'a@x', time: 1000, subject: 'X7-4040 [ FIX ] <img src=x onerror=alert(1)>', body: 'line "1"', ...o });
+const JIRA = { X7: 'https://jira.example.com/browse/' };
 
 describe('format', () => {
   it('escapes HTML', () => expect(esc(`<a href="x">&'`)).toBe('&lt;a href=&quot;x&quot;&gt;&amp;&#39;'));
@@ -16,14 +16,14 @@ describe('format', () => {
     expect([0, 1, 5, 90, 1500].map(fmtAgoLong)).toEqual(['just now', '1 minute ago', '5 minutes ago', '2 hours ago', '1 day ago']);
   });
   it('parses key and kind like the prototype', () => {
-    expect(parseSubject('P7-4040 [ FIX ] crash')).toMatchObject({ key: 'P7-4040', project: 'P7', numeric: true, kind: 'FIX', rest: 'crash' });
+    expect(parseSubject('X7-4040 [ FIX ] crash')).toMatchObject({ key: 'X7-4040', project: 'X7', numeric: true, kind: 'FIX', rest: 'crash' });
     expect(parseSubject('fix things')).toMatchObject({ key: '', kind: '', rest: 'fix things' });
-    expect(parseSubject('GARM-abc text')).toMatchObject({ key: 'GARM-abc', numeric: false });
+    expect(parseSubject('OPS-abc text')).toMatchObject({ key: 'OPS-abc', numeric: false });
   });
   it('links only numeric ids of configured projects', () => {
-    expect(jiraUrl(parseSubject('P7-4040 x'), JIRA)).toBe('https://jira.pilot-gps.com/browse/P7-4040');
+    expect(jiraUrl(parseSubject('X7-4040 x'), JIRA)).toBe('https://jira.example.com/browse/X7-4040');
     expect(jiraUrl(parseSubject('ZZ-1 x'), JIRA)).toBeUndefined();
-    expect(jiraUrl(parseSubject('P7-abc x'), JIRA)).toBeUndefined();
+    expect(jiraUrl(parseSubject('X7-abc x'), JIRA)).toBeUndefined();
   });
   it('ciMatcher tolerates bad patterns', () => {
     expect(ciMatcher('^AutoBuild$')('AutoBuild')).toBe(true);
@@ -51,7 +51,7 @@ describe('render', () => {
     const plain = subjectHtml(commit().subject, JIRA, false);
     expect(plain).not.toContain('<img');
     expect(plain).not.toContain('data-url');
-    expect(subjectHtml(commit().subject, JIRA, true)).toContain('data-url="https://jira.pilot-gps.com/browse/P7-4040"');
+    expect(subjectHtml(commit().subject, JIRA, true)).toContain('data-url="https://jira.example.com/browse/X7-4040"');
   });
 
   it('rows carry the webview context and escape author/subject', () => {
@@ -111,8 +111,8 @@ describe('webview message validation', () => {
     expect(keepSet(new Map(), { branch: null, sha: null }).size).toBe(0);
   });
   it('urls must sit under a configured Jira base', () => {
-    expect(isAllowedUrl('https://jira.pilot-gps.com/browse/P7-1', JIRA)).toBe(true);
-    expect(isAllowedUrl('https://evil.example/browse/P7-1', JIRA)).toBe(false);
+    expect(isAllowedUrl('https://jira.example.com/browse/X7-1', JIRA)).toBe(true);
+    expect(isAllowedUrl('https://evil.example/browse/X7-1', JIRA)).toBe(false);
     expect(isAllowedUrl('javascript:alert(1)', JIRA)).toBe(false);
     expect(isAllowedUrl('file:///etc/passwd', { X: 'file:///' })).toBe(false);
     // a base without the trailing slash must not admit userinfo or a host suffix
@@ -120,8 +120,8 @@ describe('webview message validation', () => {
     expect(isAllowedUrl('https://jira.x.com/browse/X-1', bare)).toBe(true);
     expect(isAllowedUrl('https://jira.x.com@evil.io/browse/X-1', bare)).toBe(false);
     expect(isAllowedUrl('https://jira.x.com.evil.io/browse/X-1', bare)).toBe(false);
-    expect(isAllowedUrl('https://u:p@jira.pilot-gps.com/browse/P7-1', JIRA)).toBe(false);
-    expect(isAllowedUrl('https://jira.pilot-gps.com/other/P7-1', JIRA)).toBe(false);
+    expect(isAllowedUrl('https://u:p@jira.example.com/browse/X7-1', JIRA)).toBe(false);
+    expect(isAllowedUrl('https://jira.example.com/other/X7-1', JIRA)).toBe(false);
   });
   it('wipContextFromArg takes a WIP row context only, with safe paths', () => {
     const c = { webviewSection: 'wip', root: '/r', wipArea: 'staged', path: 'src', origPath: null, wipDir: true, wipCanDiscard: false };
