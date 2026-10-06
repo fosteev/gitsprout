@@ -100,6 +100,13 @@ describe('checkout quick pick', () => {
     ]);
     expect(e.find((x) => x.label === 'main' && x.kind === 'local')).toMatchObject({ description: 'aaaaaaa · current' });
   });
+  it('marks branches checked out in another worktree', () => {
+    const r = { ...refs, locals: [...refs.locals.map((b) => (b.name === 'dev' ? { ...b, worktree: '/r/x.worktrees/dev' } : { ...b, worktree: b.name === 'main' ? '/r/x' : null }))] };
+    const d = (name: string) => (buildCheckoutEntries(r, '/r/x').find((x) => x.kind === 'local' && x.name === name) as { description: string }).description;
+    expect(d('dev')).toBe('bbbbbbb · in dev');
+    expect(d('main')).toBe('aaaaaaa · current');
+    expect(buildCheckoutEntries(r).find((x) => x.label === 'dev')).toMatchObject({ description: 'bbbbbbb' });
+  });
   it('leaves empty groups out', () => {
     expect(buildCheckoutEntries({ ...refs, remotes: [], tags: [] }).map((x) => x.label)).toEqual(['Create new branch…', 'branches', 'dev', 'main']);
   });
@@ -130,7 +137,7 @@ describe('errorPlan', () => {
     const neu = "fatal: 'feat' is already used by worktree at '/r/wt'";
     for (const message of [old, neu]) {
       expect(errorPlan({ kind: 'CheckedOutElsewhere', message }, 'checkout', 'feat'))
-        .toEqual({ text: "Branch 'feat' is checked out in another worktree (/r/wt).", level: 'warn', actions: [] });
+        .toEqual({ text: 'Branch feat is checked out in worktree wt.', level: 'warn', actions: [] });
     }
     expect(errorPlan({ kind: 'CheckedOutElsewhere', message: 'x' }, 'delete')?.text).toBe('Branch is checked out in another worktree.');
     expect(errorPlan({ kind: 'WorktreeLocked', message: "fatal: cannot remove a locked working tree, lock reason: x" }, 'worktreeRemove'))

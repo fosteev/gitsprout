@@ -96,10 +96,10 @@ export function pruneDetail(paths: readonly string[]): string {
   return `git worktree prune drops the records of:\n${paths.map((p) => `• ${p}`).join('\n')}\nBranches and commits are not touched.`;
 }
 
-/** A tree node, a graph context (`{ path }`) or a bare path. */
+/** A tree node, a Branches leaf (`branch.worktree` = where it is checked out), a graph context (`{ path }`) or a bare path. */
 export function worktreePathFromArg(arg: unknown): string | undefined {
   if (typeof arg === 'string') return arg || undefined;
-  const a = arg as { worktree?: { path?: unknown }; path?: unknown } | null;
-  const p = a?.worktree?.path ?? a?.path;
+  const a = arg as { worktree?: { path?: unknown }; branch?: { worktree?: unknown }; path?: unknown } | null;
+  const p = a?.worktree?.path ?? a?.branch?.worktree ?? a?.path;
   return typeof p === 'string' && p ? p : undefined;
 }

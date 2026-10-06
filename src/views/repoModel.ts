@@ -1,5 +1,5 @@
 import type { RepoSummary, SummaryStatus } from '../git/types';
-import { subOf } from '../workspace/model';
+import { repoDisplayName, subOf } from '../workspace/model';
 
 /** Dirty working tree or out of sync with upstream. */
 export function needsAttention(s: SummaryStatus): boolean {
@@ -23,7 +23,7 @@ export function viewDescription(repos: readonly SummaryStatus[], onlyAttention: 
 
 export type RepoTreeNode =
   | { kind: 'group' | 'sub'; key: string; label: string; description: string; children: RepoTreeNode[] }
-  | { kind: 'repo'; key: string; repo: RepoSummary };
+  | { kind: 'repo'; key: string; repo: RepoSummary; /** linked worktrees nested under their main repo */ children: RepoTreeNode[] };
 
 const byName = (a: RepoSummary, b: RepoSummary) => a.name.localeCompare(b.name) || a.root.localeCompare(b.root);
 
@@ -34,20 +34,37 @@ function attDescription(total: number, att: number): string {
 /**
  * Group → sub-folders → repos (prototype `reposPane()`). Top-level repos (group '') come after the groups.
  * With `onlyAttention`, repos that don't need attention are hidden except the active one; empty groups disappear.
+ * A linked worktree whose main repo is also in the list nests under it (wherever its own folder is); the main repo stays
+ * when any of its worktrees needs attention.
  */
 export function buildRepoTree(repos: readonly RepoSummary[], opts: { onlyAttention: boolean; activeRoot?: string }): RepoTreeNode[] {
   const visible = (r: RepoSummary) => !opts.onlyAttention || needsAttention(r) || r.root === opts.activeRoot;
-  const groups = new Map<string, RepoSummary[]>();
+  const present = new Set(repos.map((r) => r.root));
+  const nested = (r: RepoSummary) => !!r.worktreeOf && r.worktreeOf !== r.root && present.has(r.worktreeOf);
+  const kids = new Map<string, RepoSummary[]>();
   for (const r of repos) {
+    if (!nested(r)) continue;
+    const list = kids.get(r.worktreeOf!);
+    if (list) list.push(r); else kids.set(r.worktreeOf!, [r]);
+  }
+  const shownKids = (r: RepoSummary) => (kids.get(r.root) ?? []).filter(visible).sort(byName);
+  const visibleTop = (r: RepoSummary) => visible(r) || shownKids(r).length > 0;
+  /** The repos a node list stands for, nested worktrees included (group counts). */
+  const withKids = (list: readonly RepoSummary[]) => list.flatMap((r) => [r, ...(kids.get(r.root) ?? [])]);
+  const groups = new Map<string, RepoSummary[]>();
+  for (const r of repos.filter((x) => !nested(x))) {
     const list = groups.get(r.group);
     if (list) list.push(r); else groups.set(r.group, [r]);
   }
-  const repoNode = (r: RepoSummary): RepoTreeNode => ({ kind: 'repo', key: `repo:${r.root}`, repo: r });
+  const repoNode = (r: RepoSummary): RepoTreeNode => ({
+    kind: 'repo', key: `repo:${r.root}`, repo: r,
+    children: shownKids(r).map((k): RepoTreeNode => ({ kind: 'repo', key: `repo:${k.root}`, repo: k, children: [] })),
+  });
   const out: RepoTreeNode[] = [];
   const names = [...groups.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b));
   for (const g of names) {
     const all = groups.get(g)!;
-    const shown = all.filter(visible).sort(byName);
+    const shown = all.filter(visibleTop).sort(byName);
     if (!shown.length) continue;
     const bySub = new Map<string, RepoSummary[]>();
     for (const r of shown) {
@@ -59,9 +76,9 @@ export function buildRepoTree(repos: readonly RepoSummary[], opts: { onlyAttenti
     for (const s of [...bySub.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b))) {
       children.push({ kind: 'sub', key: `sub:${g}/${s}`, label: s, description: '', children: bySub.get(s)!.map(repoNode) });
     }
-    out.push({ kind: 'group', key: `grp:${g}`, label: g, description: attDescription(all.length, attentionCount(all)), children });
+    out.push({ kind: 'group', key: `grp:${g}`, label: g, description: attDescription(withKids(all).length, attentionCount(withKids(all))), children });
   }
-  out.push(...(groups.get('') ?? []).filter(visible).sort(byName).map(repoNode));
+  out.push(...(groups.get('') ?? []).filter(visibleTop).sort(byName).map(repoNode));
   return out;
 }
 
@@ -96,9 +113,9 @@ export interface StatusBarModel { text: string; tooltip: string; command: string
 export function statusBarModel(repos: readonly RepoSummary[], active: RepoSummary | undefined): StatusBarModel | null {
   if (repos.length === 0) return null;
   if (repos.length === 1) {
-    return { text: '$(repo) Gitsprout', tooltip: `Gitsprout: Show Graph (${repos[0].name})`, command: 'gitsprout.showGraph' };
+    return { text: '$(repo) Gitsprout', tooltip: `Gitsprout: Show Graph (${repoDisplayName(repos[0].name, repos[0].worktreeOf)})`, command: 'gitsprout.showGraph' };
   }
-  const name = active?.name ?? 'Gitsprout';
+  const name = active ? repoDisplayName(active.name, active.worktreeOf) : 'Gitsprout';
   return { text: `$(repo) ${name}`, tooltip: 'Gitsprout: Switch Repository…', command: 'gitsprout.switchRepository' };
 }
 

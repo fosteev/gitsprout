@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import * as vscode from 'vscode';
 import { Repo } from '../git/repo';
 import { GitError, type Refs } from '../git/types';
@@ -8,6 +9,8 @@ import {
   refNameFromArg, remoteBranchFromArg, resolveStashIndex, rootFromArg, shortSha, stashShaFromArg, TAG_CHECKOUT_MESSAGE, type Op,
 } from './messages';
 import { createReporter } from './report';
+import { checkedOutInMessage } from './worktreeHelpers';
+import { checkedOutElsewhere } from '../views/refsModel';
 
 /** Ids implemented here; `registerStubCommands` skips them. */
 export const MUTATION_COMMAND_IDS = [
@@ -103,9 +106,17 @@ export function registerMutations(context: vscode.ExtensionContext, registry: Re
   // ---- checkout ----
 
   const checkoutLocal = async (t: Target, name: string): Promise<void> => {
-    let head: string | null;
-    try { head = (await t.repo.refs()).head.branch; } catch (e) { await fail(e, 'checkout', t.root); return; }
-    if (head === name) return;
+    let refs: Refs;
+    try { refs = await t.repo.refs(); } catch (e) { await fail(e, 'checkout', t.root); return; }
+    if (refs.head.branch === name) return;
+    // Checked out in another worktree: git would refuse, so don't call it.
+    const there = refs.locals.find((b) => b.name === name);
+    if (there?.worktree && checkedOutElsewhere(there, t.root)) {
+      const pick = await vscode.window.showWarningMessage(checkedOutInMessage(name, basename(there.worktree)), 'Open Worktree Graph', 'Open in New Window');
+      if (pick === 'Open Worktree Graph') await vscode.commands.executeCommand('gitsprout.worktreeOpenGraph', there.worktree);
+      else if (pick === 'Open in New Window') await vscode.commands.executeCommand('gitsprout.worktreeOpenWindow', there.worktree);
+      return;
+    }
     if (await mutate(t, 'checkout', () => t.repo.checkout(name))) flash(`switched to ${name}`);
   };
 
@@ -144,7 +155,7 @@ export function registerMutations(context: vscode.ExtensionContext, registry: Re
     try { refs = await t.repo.refs(); } catch (e) { await fail(e, 'checkout', t.root); return; }
     type Item = vscode.QuickPickItem & { entry?: ReturnType<typeof buildCheckoutEntries>[number] };
     const icon = { create: '$(add)', local: '$(git-branch)', remote: '$(cloud)', tag: '$(tag)' } as const;
-    const items: Item[] = buildCheckoutEntries(refs).map((e): Item => e.kind === 'separator'
+    const items: Item[] = buildCheckoutEntries(refs, t.root).map((e): Item => e.kind === 'separator'
       ? { label: e.label, kind: vscode.QuickPickItemKind.Separator }
       : { label: `${icon[e.kind]} ${e.label}`, description: e.kind === 'create' ? undefined : e.description, entry: e });
     const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Select a ref to checkout', matchOnDescription: true });

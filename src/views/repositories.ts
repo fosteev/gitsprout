@@ -59,7 +59,7 @@ export class RepositoriesView implements vscode.TreeDataProvider<RepoTreeNode>, 
       for (const n of nodes) {
         this.parents.set(n.key, parent);
         this.byKey.set(n.key, n);
-        if (n.kind !== 'repo') index(n.children, n);
+        index(n.children, n);
       }
     };
     index(this.roots);
@@ -79,7 +79,7 @@ export class RepositoriesView implements vscode.TreeDataProvider<RepoTreeNode>, 
 
   getChildren(el?: RepoTreeNode): RepoTreeNode[] {
     if (!el) return this.roots;
-    return el.kind === 'repo' ? [] : el.children;
+    return el.children;
   }
 
   getParent(el: RepoTreeNode): RepoTreeNode | undefined { return this.parents.get(el.key); }
@@ -94,7 +94,7 @@ export class RepositoriesView implements vscode.TreeDataProvider<RepoTreeNode>, 
     }
     const r = el.repo;
     const active = r.root === this.registry.active?.root;
-    const item = new vscode.TreeItem(r.name, vscode.TreeItemCollapsibleState.None);
+    const item = new vscode.TreeItem(r.name, el.children.length ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
     item.id = el.key;
     item.description = repoDescription(r);
     item.tooltip = repoTooltip(r);

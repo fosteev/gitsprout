@@ -91,7 +91,7 @@ describe('buildRepoTree', () => {
     repo('labs/gamma'), repo('at/crm', { changes: 1 }), repo('at/legacy/old'), repo('at/legacy/older', { behind: 2 }),
     repo('at/alpha'), repo('top'), repo('topdirty', { ahead: 1 }),
   ];
-  const labels = (ns: RepoTreeNode[]): unknown[] => ns.map((n) => n.kind === 'repo' ? n.repo.name : { [n.label]: labels(n.children) });
+  const labels = (ns: RepoTreeNode[]): unknown[] => ns.map((n) => n.kind === 'repo' ? (n.children.length ? { [n.repo.name]: labels(n.children) } : n.repo.name) : { [n.label]: labels(n.children) });
 
   it('groups, sub-folders and top-level repos, sorted', () => {
     expect(labels(buildRepoTree(rs, { onlyAttention: false }))).toEqual([
@@ -114,11 +114,37 @@ describe('buildRepoTree', () => {
   });
   it('keys are unique and stable', () => {
     const keys: string[] = [];
-    const walk = (ns: RepoTreeNode[]) => ns.forEach((n) => { keys.push(n.key); if (n.kind !== 'repo') walk(n.children); });
+    const walk = (ns: RepoTreeNode[]) => ns.forEach((n) => { keys.push(n.key); walk(n.children); });
     walk(buildRepoTree(rs, { onlyAttention: false }));
     expect(new Set(keys).size).toBe(keys.length);
   });
   it('empty input', () => { expect(buildRepoTree([], { onlyAttention: true })).toEqual([]); });
+
+  describe('worktree nesting', () => {
+    const wt = (relPath: string, of: string, over: Partial<RepoSummary> = {}) => repo(relPath, { worktreeOf: `/p/${of}`, ...over });
+    const all = [repo('at/crm'), wt('at/crm.worktrees/fix', 'at/crm'), wt('labs/crm-feat', 'at/crm'), repo('top'), wt('orphan', 'gone/main')];
+
+    it('nests linked worktrees under their main repo wherever they live; orphans stay put', () => {
+      expect(labels(buildRepoTree(all, { onlyAttention: false }))).toEqual([
+        { at: [{ crm: ['crm-feat', 'fix'] }] }, 'orphan', 'top',
+      ]);
+    });
+    it('children use repo nodes with unique keys; group counts include them', () => {
+      const tree = buildRepoTree(all, { onlyAttention: false });
+      const crm = (tree[0] as { children: RepoTreeNode[] }).children[0];
+      expect(crm.kind === 'repo' && crm.children.map((c) => c.kind)).toEqual(['repo', 'repo']);
+      expect(tree[0].kind !== 'repo' && tree[0].description).toBe('3 repos');
+    });
+    it('only-attention keeps a clean main repo for a dirty worktree and hides clean worktrees', () => {
+      const rs = [repo('at/crm'), wt('at/crm.worktrees/fix', 'at/crm', { changes: 1 }), wt('at/crm.worktrees/ok', 'at/crm')];
+      expect(labels(buildRepoTree(rs, { onlyAttention: true }))).toEqual([{ at: [{ crm: ['fix'] }] }]);
+      expect(labels(buildRepoTree([repo('a'), wt('a.worktrees/b', 'a')], { onlyAttention: true }))).toEqual([]);
+    });
+    it('the active worktree stays visible under the filter', () => {
+      const rs = [repo('a'), wt('a.worktrees/b', 'a')];
+      expect(labels(buildRepoTree(rs, { onlyAttention: true, activeRoot: '/p/a.worktrees/b' }))).toEqual([{ a: ['b'] }]);
+    });
+  });
 });
 
 describe('buildPickEntries', () => {
@@ -142,6 +168,8 @@ describe('statusBarModel', () => {
     const two = [repo('a/x'), repo('a/y')];
     expect(statusBarModel(two, two[1])).toMatchObject({ text: '$(repo) y', command: 'gitsprout.switchRepository' });
     expect(statusBarModel(two, undefined)?.text).toBe('$(repo) Gitsprout');
+    const linked = [repo('a/x'), repo('a/x.worktrees/fix', { worktreeOf: '/p/a/x' })];
+    expect(statusBarModel(linked, linked[1])?.text).toBe('$(repo) x ⌥ fix');
   });
 });
 

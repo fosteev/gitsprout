@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { branchContext, branchDescription, buildBranchTree, short, type BranchLeaf, type BranchNode } from './refsModel';
+import { branchContext, checkedOutElsewhere, branchDescription, buildBranchTree, short, type BranchLeaf, type BranchNode } from './refsModel';
 import { createRefTree, REVEAL_CMD, type RefsStore } from './refsStore';
 import type { Registry } from '../workspace/registry';
 
@@ -27,8 +27,8 @@ export class BranchesView implements vscode.TreeDataProvider<BranchNode> {
     const item = new vscode.TreeItem(n.label, vscode.TreeItemCollapsibleState.None);
     item.id = `${root}|${n.key}`;
     item.iconPath = new vscode.ThemeIcon(n.isHead ? 'check' : 'git-branch');
-    item.description = branchDescription(n.branch);
-    item.contextValue = branchContext(n.isHead);
+    item.description = branchDescription(n.branch, root, n.isHead);
+    item.contextValue = branchContext(n.isHead, checkedOutElsewhere(n.branch, root, n.isHead));
     item.tooltip = `${n.branch.name} · ${short(n.branch.sha)}${n.branch.upstream ? ` → ${n.branch.upstream}` : ''}`;
     item.command = { command: REVEAL_CMD, title: 'Reveal in Graph', arguments: [n.branch.sha] };
     return item;

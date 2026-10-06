@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LocalBranch } from '../src/git/types';
 import {
-  branchContext, branchDescription, buildBranchTree, buildRemoteTree, fileBase, fileDir, repoViewDescription, sortTags, stashFileRow, stashLabel,
+  branchContext, branchDescription, checkedOutElsewhere, buildBranchTree, buildRemoteTree, fileBase, fileDir, repoViewDescription, sortTags, stashFileRow, stashLabel,
 } from '../src/views/refsModel';
 
 const lb = (name: string, o: Partial<LocalBranch> = {}): LocalBranch =>
@@ -19,6 +19,20 @@ describe('branch rows', () => {
   it('context values', () => {
     expect(branchContext(true)).toBe('branch.local.head');
     expect(branchContext(false)).toBe('branch.local');
+    expect(branchContext(false, true)).toBe('branch.local.worktree');
+    expect(branchContext(true, true)).toBe('branch.local.head');
+  });
+  it('a branch checked out in another worktree says where', () => {
+    const wt = lb('x', { worktree: '/r/x.worktrees/fix', behind: 1 });
+    expect(branchDescription(wt, '/r/x')).toBe('1↓ · in fix');
+    expect(branchDescription(lb('x', { worktree: '/r/x.worktrees/fix', upstream: null }), '/r/x')).toBe('local only · in fix');
+    expect(branchDescription(wt)).toBe('1↓');
+    expect(branchDescription(lb('x', { worktree: '/r/x' }), '/r/x')).toBe('');
+    expect(branchDescription(lb('x', { worktree: '/real/r/x' }), '/r/x', true)).toBe('');
+    expect(checkedOutElsewhere(wt, '/r/x')).toBe(true);
+    expect(checkedOutElsewhere(wt, '/r/x.worktrees/fix')).toBe(false);
+    expect(checkedOutElsewhere(lb('x'), '/r/x')).toBe(false);
+    expect(checkedOutElsewhere(lb('x', { worktree: '/real/r/x' }), '/r/x', true)).toBe(false);
   });
   it('groups by the first slash only; folders first; marks HEAD', () => {
     const tree = buildBranchTree([lb('main'), lb('feature/a/b'), lb('feature/z'), lb('develop'), lb('bugfix/q'), lb('/odd'), lb('trail/')], 'feature/z');

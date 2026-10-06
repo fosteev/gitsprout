@@ -487,12 +487,32 @@
         },
         {
           "command": "gitsprout.createBranchFrom",
-          "when": "view == gitsprout.branches && viewItem == branch.local",
+          "when": "view == gitsprout.branches && viewItem =~ /^branch\\.local(\\.worktree)?$/",
           "group": "2_create"
         },
         {
-          "command": "gitsprout.copyBranchName",
+          "command": "gitsprout.worktreeCreateFrom",
           "when": "view == gitsprout.branches && viewItem == branch.local",
+          "group": "2_create@2"
+        },
+        {
+          "command": "gitsprout.worktreeOpenGraph",
+          "when": "view == gitsprout.branches && viewItem == branch.local.worktree",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitsprout.worktreeOpenGraph",
+          "when": "view == gitsprout.branches && viewItem == branch.local.worktree",
+          "group": "1_worktree@1"
+        },
+        {
+          "command": "gitsprout.worktreeOpenWindow",
+          "when": "view == gitsprout.branches && viewItem == branch.local.worktree",
+          "group": "1_worktree@2"
+        },
+        {
+          "command": "gitsprout.copyBranchName",
+          "when": "view == gitsprout.branches && viewItem =~ /^branch\\.local(\\.worktree)?$/",
           "group": "3_copy"
         },
         {
@@ -577,12 +597,12 @@
         },
         {
           "command": "gitsprout.setUpstream",
-          "when": "view == gitsprout.branches && viewItem == branch.local",
+          "when": "view == gitsprout.branches && viewItem =~ /^branch\\.local(\\.worktree)?$/",
           "group": "1_modify@3"
         },
         {
           "command": "gitsprout.copyBranchLink",
-          "when": "view == gitsprout.branches && viewItem == branch.local",
+          "when": "view == gitsprout.branches && viewItem =~ /^branch\\.local(\\.worktree)?$/",
           "group": "3_copy"
         },
         {
@@ -666,6 +686,11 @@
           "command": "gitsprout.createBranchFrom",
           "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
           "group": "1_create@1"
+        },
+        {
+          "command": "gitsprout.worktreeCreateFrom",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
+          "group": "1_create@2"
         },
         {
           "command": "gitsprout.copySha",

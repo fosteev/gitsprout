@@ -1,5 +1,6 @@
 // Pure helpers behind the mutation commands (no `vscode` import, unit-tested): wording ported from the prototype
 // (`doPull`, `doPush`, `branchNameError`, delete/stash dialogs), error -> notification mapping, quick pick contents.
+import { basename } from 'node:path';
 import type { ErrorKind, FileChange, LocalBranch, Refs, Stash, SummaryStatus } from '../git/types';
 
 const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
@@ -104,7 +105,7 @@ export type CheckoutEntry =
   | { kind: 'tag'; label: string; description: string; name: string };
 
 /** Prototype `qp-checkout`: create new, branches (current marked), remote branches, tags. Empty groups are left out. */
-export function buildCheckoutEntries(refs: Pick<Refs, 'head' | 'locals' | 'remotes' | 'tags'>): CheckoutEntry[] {
+export function buildCheckoutEntries(refs: Pick<Refs, 'head' | 'locals' | 'remotes' | 'tags'>, root?: string): CheckoutEntry[] {
   const locals = [...refs.locals].sort((a, b) => a.name.localeCompare(b.name));
   const remotes = [...refs.remotes].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   const tags = [...refs.tags].sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
@@ -112,7 +113,11 @@ export function buildCheckoutEntries(refs: Pick<Refs, 'head' | 'locals' | 'remot
   if (locals.length) {
     out.push({ kind: 'separator', label: 'branches' });
     for (const b of locals) {
-      out.push({ kind: 'local', label: b.name, name: b.name, description: `${shortSha(b.sha)}${b.name === refs.head.branch ? ' · current' : ''}` });
+      const elsewhere = root !== undefined && b.worktree !== null && b.name !== refs.head.branch && b.worktree !== root;
+      out.push({
+        kind: 'local', label: b.name, name: b.name,
+        description: `${shortSha(b.sha)}${b.name === refs.head.branch ? ' · current' : ''}${elsewhere ? ` · in ${basename(b.worktree!)}` : ''}`,
+      });
     }
   }
   if (remotes.length) {
@@ -269,7 +274,7 @@ function basePlan(e: { kind: ErrorKind; message: string }, op: Op, branch?: stri
     case 'CheckedOutElsewhere': {
       // git: "fatal: 'x' is already checked out at '/p'" / "... is already used by worktree at '/p'"
       const at = /(?:checked out|used by worktree) at '([^']+)'/i.exec(e.message)?.[1];
-      return { text: `Branch ${branch ? `'${branch}' ` : ''}is checked out in another worktree${at ? ` (${at})` : ''}.`, level: 'warn', actions: [] };
+      return { text: at ? `Branch ${branch ? `${branch} ` : ''}is checked out in worktree ${basename(at)}.` : `Branch ${branch ? `${branch} ` : ''}is checked out in another worktree.`, level: 'warn', actions: [] };
     }
     case 'WorktreeLocked':
       return { text: 'The worktree is locked. Unlock it first, then try again.', level: 'warn', actions: [] };

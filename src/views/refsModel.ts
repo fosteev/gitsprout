@@ -1,17 +1,26 @@
 // Pure models of the Branches / Remotes / Stashes / Tags trees (no `vscode` import, unit-tested).
+import { basename } from 'node:path';
 import type { FileStatus, LocalBranch, RemoteBranch, Stash, StashFile, Tag } from '../git/types';
 
 export const short = (sha: string): string => sha.slice(0, 7);
 
-/** `2↓ 1↑`, `gone` (upstream deleted), `local only` (no upstream), '' (in sync). */
-export function branchDescription(b: Pick<LocalBranch, 'upstream' | 'upstreamGone' | 'ahead' | 'behind'>): string {
-  if (b.upstreamGone) return 'gone';
-  if (!b.upstream) return 'local only';
-  return [b.behind ? `${b.behind}↓` : '', b.ahead ? `${b.ahead}↑` : ''].filter(Boolean).join(' ');
+/** The branch is checked out in a worktree other than `root` (never true for the branch HEAD is on here). */
+export function checkedOutElsewhere(b: Pick<LocalBranch, 'worktree'>, root: string, isHead = false): boolean {
+  return b.worktree !== null && !isHead && b.worktree !== root;
 }
 
-export type BranchContext = 'branch.local' | 'branch.local.head';
-export const branchContext = (isHead: boolean): BranchContext => (isHead ? 'branch.local.head' : 'branch.local');
+/** `2↓ 1↑`, `gone` (upstream deleted), `local only` (no upstream), '' (in sync); ` · in <worktree>` when checked out elsewhere. */
+export function branchDescription(b: Pick<LocalBranch, 'upstream' | 'upstreamGone' | 'ahead' | 'behind' | 'worktree'>, root?: string, isHead = false): string {
+  const sync = b.upstreamGone ? 'gone'
+    : !b.upstream ? 'local only'
+      : [b.behind ? `${b.behind}↓` : '', b.ahead ? `${b.ahead}↑` : ''].filter(Boolean).join(' ');
+  const where = root !== undefined && b.worktree !== null && checkedOutElsewhere(b, root, isHead) ? `in ${basename(b.worktree)}` : '';
+  return [sync, where].filter(Boolean).join(' · ');
+}
+
+export type BranchContext = 'branch.local' | 'branch.local.head' | 'branch.local.worktree';
+export const branchContext = (isHead: boolean, elsewhere = false): BranchContext =>
+  isHead ? 'branch.local.head' : elsewhere ? 'branch.local.worktree' : 'branch.local';
 
 export interface BranchLeaf { kind: 'branch'; key: string; branch: LocalBranch; label: string; isHead: boolean }
 export interface BranchFolder { kind: 'folder'; key: string; label: string; children: BranchLeaf[] }
