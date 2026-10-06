@@ -2,10 +2,11 @@
 import type { FileChange, FileStat } from '../src/git/types';
 import type { FromWebview, ToolbarAction, ToWebview } from '../src/graph/protocol';
 import './styles.css';
+import { branchOwners, childrenOf, containedIn, type Owner } from './branches';
 import { ciMatcher } from './format';
-import { graphWidth, layout, RH, visibleRows, WIP_SHA, type LaidRow } from './layout';
+import { graphWidth, laneX, layout, RH, visibleRows, WIP_SHA, type LaidRow } from './layout';
 import {
-  canDiscard, commitDetailsHtml, diffBarHtml, diffBodyHtml, HEAD_PUSHED_NOTE, keepSet, NO_SUMMARY_ERROR, noDetailsHtml, primaryClass, primaryInnerHtml, refsBySha, rowHtml,
+  branchTipHtml, canDiscard, commitDetailsHtml, diffBarHtml, diffBodyHtml, HEAD_PUSHED_NOTE, keepSet, NO_SUMMARY_ERROR, noDetailsHtml, primaryClass, primaryInnerHtml, refsBySha, rowHtml,
   SUMMARY_LIMIT, WIP_LABEL, wipBarHtml, wipCommitHtml, wipDirKeys, wipFile, wipFileCount, wipHeaderHtml, wipListsHtml, wipPrimary,
   type CommitCtx, type DiffBody, type DiffMode, type FilesState, type RefPill, type RowEnv, type WipDraft, type WipView,
 } from './render';
@@ -31,6 +32,9 @@ interface Model {
   /** shas of the shown commit rows (CI-hidden ones excluded) */
   known: Set<string>;
   indexOf: Map<string, number>;
+  /** the branch each commit was made on (inferred) and the child links behind "Also in", for the node hover card */
+  owners: Map<string, Owner>;
+  children: Map<string, string[]>;
 }
 
 let st: State | undefined;
@@ -160,6 +164,8 @@ function build(s: State): Model {
     bySha: new Map(s.commits.map((c) => [c.sha, c])),
     known: new Set(lay.rows.filter((r) => !r.wip).map((r) => r.sha)),
     indexOf: new Map(lay.rows.map((r, i) => [r.sha, i])),
+    owners: branchOwners(s.commits, s.refs, s.head),
+    children: childrenOf(s.commits),
   };
 }
 
@@ -532,6 +538,7 @@ function onState(s: State): void {
   if (files.size > 500) files.clear();
   st = s;
   model = build(s);
+  hideTip();
   showMessage(null);
   renderToolbar();
   const want = pendingReveal;
@@ -585,7 +592,48 @@ rowsEl.addEventListener('click', (ev) => {
   select(row.dataset.sha);
   list.focus();
 });
+
+// Hover card on a graph node: which branch the commit was made on. Shown after a short rest on the row's graph cell.
+const tip = document.createElement('div');
+tip.className = 'btip';
+tip.hidden = true;
+document.body.append(tip);
+let tipSha: string | null = null;
+let tipTimer: ReturnType<typeof setTimeout> | undefined;
+const TIP_DELAY = 350;
+function hideTip(): void {
+  clearTimeout(tipTimer);
+  tipSha = null;
+  tip.hidden = true;
+}
+function showTip(row: HTMLElement, sha: string): void {
+  if (!st || !model) return;
+  const r = model.rows[model.indexOf.get(sha) ?? -1];
+  if (!r || r.wip) return;
+  tip.innerHTML = branchTipHtml(model.owners.get(sha), r.col, containedIn(sha, model.children, st.refs));
+  tip.hidden = false;
+  const box = row.getBoundingClientRect();
+  const x = Math.min((row.firstElementChild ?? row).getBoundingClientRect().left + laneX(r.col) - 10, window.innerWidth - tip.offsetWidth - 8);
+  const below = box.bottom + 4 + tip.offsetHeight <= window.innerHeight;
+  tip.style.left = `${Math.max(8, x)}px`;
+  tip.style.top = `${below ? box.bottom + 4 : box.top - 4 - tip.offsetHeight}px`;
+}
+rowsEl.addEventListener('mouseover', (ev) => {
+  const cell = (ev.target as Element).closest('.gr > svg');
+  const row = cell?.parentElement;
+  const sha = row?.dataset.sha;
+  if (!row || !sha || sha === WIP_SHA) { hideTip(); return; }
+  if (sha === tipSha) return;
+  clearTimeout(tipTimer);
+  tipSha = sha;
+  // a card already open moves to the next node at once, like VS Code hovers
+  if (!tip.hidden) showTip(row, sha);
+  else tipTimer = setTimeout(() => { if (tipSha === sha && row.isConnected) showTip(row, sha); }, TIP_DELAY);
+});
+rowsEl.addEventListener('mouseleave', hideTip);
+rowsEl.addEventListener('mousedown', hideTip);
 list.addEventListener('scroll', () => {
+  hideTip();
   if (rafPending) return;
   rafPending = true;
   requestAnimationFrame(() => { rafPending = false; renderRows(); });

@@ -2,6 +2,7 @@
 import type { CommitContext, WipContext } from '../src/graph/protocol';
 import type { Commit, FileChange, FilePatch, FileStat, Head, Hunk, Refs, Status } from '../src/git/types';
 import { esc, fmtAgo, fmtAgoLong, jiraUrl, minutesAgo, parseSubject, splitPath } from './format';
+import type { Owner } from './branches';
 import { LANE_COLORS, rowSvg, WIP_SHA, type LaidRow } from './layout';
 import { buildTree, dirPaths, type TreeNode } from './wipTree';
 
@@ -394,4 +395,22 @@ export function diffBodyHtml(body: DiffBody, mode: DiffMode): string {
   if (body.hunks.length === 0) return '<div class="dnote">No content changes.</div>';
   return `<div class="dgrid ${mode === 'split' ? 'dsbs' : 'dinl'}">${mode === 'split' ? splitRowsHtml(body.hunks) : inlineRowsHtml(body.hunks)}</div>`
     + (body.truncated ? `<div class="dnote">${DIFF_TRUNCATED_NOTE}</div>` : '');
+}
+
+const ALSO_IN_MAX = 5;
+
+/** Hover card of a graph node: the branch the commit was made on (inferred, see branches.ts) and the other branches holding it. */
+export function branchTipHtml(o: Owner | undefined, col: number, contained: readonly string[]): string {
+  const pill = (name: string, cls: string): string => `<span class="ref ${cls}">${icon('branch')}${esc(name)}</span>`;
+  let h = '';
+  if (!o) h = '<div class="bnote">No branch in the loaded history</div>';
+  else if (o.via === 'ref') h = pill(o.name, `c${col % LANE_COLORS}`) + (o.name === 'HEAD' ? '<div class="bnote">Detached HEAD</div>' : '');
+  else if (o.name) h = pill(o.name, `c${col % LANE_COLORS} gone`) + `<div class="bnote">Deleted branch, merged into ${esc(o.into)}</div>`;
+  else h = `<div class="bnote">Merged into ${esc(o.into)}; the merge message does not name the branch</div>`;
+  const also = contained.filter((n) => n !== o?.name);
+  if (also.length) {
+    const more = also.length > ALSO_IN_MAX ? ` +${also.length - ALSO_IN_MAX} more` : '';
+    h += `<div class="bnote">Also in ${also.slice(0, ALSO_IN_MAX).map((n) => `<b>${esc(n)}</b>`).join(', ')}${more}</div>`;
+  }
+  return h;
 }

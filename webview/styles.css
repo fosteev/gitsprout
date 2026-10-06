@@ -234,3 +234,13 @@ button.jira:hover { text-decoration: underline; }
 .dfold { grid-column: 1 / -1; color: var(--muted); background: color-mix(in srgb, var(--vscode-focusBorder) 8%, transparent); padding: 1px 14px; font: 11.5px var(--vscode-font-family, sans-serif); }
 .dnote { padding: 20px; color: var(--muted); font-family: var(--vscode-font-family, sans-serif); font-size: 12.5px; }
 .dnote.err { color: var(--err); }
+
+/* Hover card of a graph node: the branch the commit was made on. */
+.btip { position: fixed; z-index: 20; max-width: 360px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 6px 8px; pointer-events: none;
+  background: var(--vscode-editorHoverWidget-background, var(--bg)); color: var(--vscode-editorHoverWidget-foreground, var(--fg));
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--line)); border-radius: 4px; box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent); font-size: 12px; }
+.btip[hidden] { display: none; }
+.btip .ref { max-width: 100%; }
+.btip .ref.gone { border-style: dashed; }
+.btip .bnote { color: var(--muted); overflow-wrap: anywhere; }
+.btip .bnote b { color: var(--fg); font-weight: 500; }
