@@ -1,4 +1,4 @@
-import { basename, relative, sep } from 'node:path';
+import { basename, dirname, relative, sep } from 'node:path';
 import type { RepoSummary, SummaryStatus } from '../git/types';
 
 export interface FolderRef { name: string; path: string }
@@ -39,9 +39,23 @@ export function subOf(relPath: string): string {
   return relPath.split('/').slice(1, -1).join('/');
 }
 
-export function makeRepoSummary(root: string, folders: readonly FolderRef[], status: SummaryStatus): RepoSummary {
+/**
+ * The main worktree's root for a linked worktree (its `commondir` differs from its git dir and is a `.git` folder);
+ * undefined for a main worktree, a submodule or a bare common dir.
+ */
+export function mainRootOf(gitDir: string, commonDir: string): string | undefined {
+  if (commonDir === gitDir || basename(commonDir) !== '.git') return undefined;
+  return dirname(commonDir);
+}
+
+/** `<main> ⌥ <name>` for a linked worktree, the plain name otherwise (graph tab title, status bar). */
+export function repoDisplayName(name: string, worktreeOf?: string): string {
+  return worktreeOf ? `${basename(worktreeOf)} ⌥ ${name}` : name;
+}
+
+export function makeRepoSummary(root: string, folders: readonly FolderRef[], status: SummaryStatus, worktreeOf?: string): RepoSummary {
   const { relPath, group } = locate(root, folders);
-  return { ...status, root, name: basename(root), relPath, group };
+  return { ...status, root, name: basename(root), relPath, group, ...(worktreeOf ? { worktreeOf } : {}) };
 }
 
 export function sameSummary(a: SummaryStatus, b: SummaryStatus): boolean {

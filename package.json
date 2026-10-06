@@ -59,6 +59,10 @@
           "when": "gitsprout.multiRepo"
         },
         {
+          "id": "gitsprout.worktrees",
+          "name": "Worktrees"
+        },
+        {
           "id": "gitsprout.branches",
           "name": "Branches"
         },
@@ -287,6 +291,75 @@
         "category": "Gitsprout"
       },
       {
+        "command": "gitsprout.worktreeCreate",
+        "title": "Create Worktree…",
+        "category": "Gitsprout",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitsprout.worktreeCreateFrom",
+        "title": "Create Worktree from Branch…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.worktreeOpenGraph",
+        "title": "Open Worktree Graph",
+        "category": "Gitsprout",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "gitsprout.worktreeOpenWindow",
+        "title": "Open Worktree in New Window",
+        "category": "Gitsprout",
+        "icon": "$(multiple-windows)"
+      },
+      {
+        "command": "gitsprout.worktreeOpenHere",
+        "title": "Open Worktree in This Window",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.worktreeAddToWorkspace",
+        "title": "Add Worktree to Workspace",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.worktreeTerminal",
+        "title": "Open Terminal in Worktree",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.worktreeReveal",
+        "title": "Reveal Worktree in File Manager",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.worktreeCopyPath",
+        "title": "Copy Worktree Path",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.worktreeRemove",
+        "title": "Remove Worktree…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.worktreeUnlock",
+        "title": "Unlock Worktree",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.worktreePrune",
+        "title": "Prune Worktrees…",
+        "category": "Gitsprout",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "gitsprout.switchWorktree",
+        "title": "Switch Worktree…",
+        "category": "Gitsprout"
+      },
+      {
         "command": "gitsprout.createTag",
         "title": "Create Tag Here…",
         "category": "Gitsprout"
@@ -364,6 +437,21 @@
           "command": "gitsprout.stash",
           "when": "view == gitsprout.stashes",
           "group": "navigation@1"
+        },
+        {
+          "command": "gitsprout.worktreeCreate",
+          "when": "view == gitsprout.worktrees",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitsprout.worktreePrune",
+          "when": "view == gitsprout.worktrees",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitsprout.refresh",
+          "when": "view == gitsprout.worktrees",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -511,6 +599,66 @@
           "command": "gitsprout.copyBranchLink",
           "when": "view == gitsprout.remotes && viewItem == branch.remote",
           "group": "3_copy"
+        },
+        {
+          "command": "gitsprout.worktreeOpenGraph",
+          "when": "view == gitsprout.worktrees && viewItem =~ /^worktree(\\.main|\\.current|\\.locked)?$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitsprout.worktreeOpenWindow",
+          "when": "view == gitsprout.worktrees && viewItem =~ /^worktree(\\.main|\\.locked)?$/",
+          "group": "inline@2"
+        },
+        {
+          "command": "gitsprout.worktreeOpenGraph",
+          "when": "view == gitsprout.worktrees && viewItem =~ /^worktree(\\.main|\\.current|\\.locked)?$/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "gitsprout.worktreeOpenWindow",
+          "when": "view == gitsprout.worktrees && viewItem =~ /^worktree(\\.main|\\.locked)?$/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "gitsprout.worktreeOpenHere",
+          "when": "view == gitsprout.worktrees && viewItem =~ /^worktree(\\.main|\\.locked)?$/",
+          "group": "1_open@3"
+        },
+        {
+          "command": "gitsprout.worktreeAddToWorkspace",
+          "when": "view == gitsprout.worktrees && viewItem =~ /^worktree(\\.main|\\.current|\\.locked)?$/",
+          "group": "1_open@4"
+        },
+        {
+          "command": "gitsprout.worktreeTerminal",
+          "when": "view == gitsprout.worktrees && viewItem =~ /^worktree(\\.main|\\.current|\\.locked)?$/",
+          "group": "2_tools@1"
+        },
+        {
+          "command": "gitsprout.worktreeReveal",
+          "when": "view == gitsprout.worktrees && viewItem =~ /^worktree(\\.main|\\.current|\\.locked)?$/",
+          "group": "2_tools@2"
+        },
+        {
+          "command": "gitsprout.worktreeCopyPath",
+          "when": "view == gitsprout.worktrees && viewItem =~ /^worktree/",
+          "group": "2_tools@3"
+        },
+        {
+          "command": "gitsprout.worktreeUnlock",
+          "when": "view == gitsprout.worktrees && viewItem == worktree.locked",
+          "group": "3_manage@1"
+        },
+        {
+          "command": "gitsprout.worktreeRemove",
+          "when": "view == gitsprout.worktrees && viewItem =~ /^worktree(\\.locked)?$/",
+          "group": "3_manage@2"
+        },
+        {
+          "command": "gitsprout.worktreePrune",
+          "when": "view == gitsprout.worktrees && viewItem == worktree.missing",
+          "group": "3_manage@3"
         }
       ],
       "webview/context": [
@@ -594,6 +742,16 @@
         { "command": "gitsprout.wipStage", "when": "false" },
         { "command": "gitsprout.wipUnstage", "when": "false" },
         { "command": "gitsprout.wipDiscard", "when": "false" },
+        { "command": "gitsprout.worktreeCreateFrom", "when": "false" },
+        { "command": "gitsprout.worktreeOpenGraph", "when": "false" },
+        { "command": "gitsprout.worktreeOpenWindow", "when": "false" },
+        { "command": "gitsprout.worktreeOpenHere", "when": "false" },
+        { "command": "gitsprout.worktreeAddToWorkspace", "when": "false" },
+        { "command": "gitsprout.worktreeTerminal", "when": "false" },
+        { "command": "gitsprout.worktreeReveal", "when": "false" },
+        { "command": "gitsprout.worktreeCopyPath", "when": "false" },
+        { "command": "gitsprout.worktreeRemove", "when": "false" },
+        { "command": "gitsprout.worktreeUnlock", "when": "false" },
         {
           "command": "gitsprout.openStashFile",
           "when": "false"
@@ -734,6 +892,11 @@
             "**/vendor"
           ],
           "description": "Glob patterns skipped during repository discovery."
+        },
+        "gitsprout.worktreeFolder": {
+          "type": "string",
+          "default": "",
+          "description": "Folder for new worktrees: <folder>/<repo name>/<branch>. Empty = next to the repository, in <repo>.worktrees/<branch>. A leading ~ is the home directory."
         },
         "gitsprout.logLimit": {
           "type": "number",

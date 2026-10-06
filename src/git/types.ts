@@ -24,6 +24,8 @@ export interface SummaryStatus {
 export interface RepoSummary extends SummaryStatus {
   root: string; name: string; relPath: string;
   group: string; // first segment of relPath ('' for a top-level repo)
+  /** Root of the main worktree when this repo is a linked worktree. */
+  worktreeOf?: string;
 }
 export interface Head { branch: string | null; sha: string | null } // branch null = detached, sha null = unborn
 export interface LocalBranch {

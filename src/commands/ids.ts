@@ -11,6 +11,8 @@ export const COMMAND_IDS = [
   'resetSoft', 'resetMixed', 'resetHard', 'cherryPick', 'revert',
   'compareWithWorktree', 'savePatch',
   'wipStage', 'wipUnstage', 'wipDiscard',
+  'worktreeCreate', 'worktreeCreateFrom', 'worktreeOpenGraph', 'worktreeOpenWindow', 'worktreeOpenHere', 'worktreeAddToWorkspace',
+  'worktreeTerminal', 'worktreeReveal', 'worktreeCopyPath', 'worktreeRemove', 'worktreeUnlock', 'worktreePrune', 'switchWorktree',
 ] as const;
 
-export const VIEW_IDS = ['repositories', 'branches', 'remotes', 'stashes', 'tags'] as const;
+export const VIEW_IDS = ['repositories', 'worktrees', 'branches', 'remotes', 'stashes', 'tags'] as const;

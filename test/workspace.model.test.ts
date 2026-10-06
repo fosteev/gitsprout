@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RepoSummary } from '../src/git/types';
-import { locate, makeRepoSummary, repoForPath, sameSummary, scmDepthCheck, subOf } from '../src/workspace/model';
+import { locate, mainRootOf, makeRepoSummary, repoDisplayName, repoForPath, sameSummary, scmDepthCheck, subOf } from '../src/workspace/model';
 import { mapPool } from '../src/util/pool';
 import { fetchRepos, summarizeFetch } from '../src/workspace/fetch';
 import {
@@ -193,5 +193,26 @@ describe('fetchRepos / summarizeFetch', () => {
     expect(f.isError).toBe(true);
     expect(f.text).toBe('Fetched 0 repositories. 1 failed: x (auth).');
     expect(summarizeFetch([{ root: a.root, name: 'x', ok: true }], [a], 5).text).toContain('Cancelled, 5 not fetched.');
+  });
+});
+
+describe('worktree link', () => {
+  it('mainRootOf: a linked worktree points at the folder that holds the common .git', () => {
+    expect(mainRootOf('/p/app/.git/worktrees/x', '/p/app/.git')).toBe('/p/app');
+  });
+  it('mainRootOf: a main worktree, a bare common dir and a submodule have no main', () => {
+    expect(mainRootOf('/p/app/.git', '/p/app/.git')).toBeUndefined();
+    expect(mainRootOf('/p/app.git/worktrees/x', '/p/app.git')).toBeUndefined();
+    expect(mainRootOf('/p/app/.git/modules/sub', '/p/app/.git/modules/sub')).toBeUndefined();
+  });
+  it('makeRepoSummary carries worktreeOf only when given', () => {
+    const f = [{ name: 'p', path: '/p' }];
+    expect(makeRepoSummary('/p/x', f, base).worktreeOf).toBeUndefined();
+    expect('worktreeOf' in makeRepoSummary('/p/x', f, base)).toBe(false);
+    expect(makeRepoSummary('/p/x', f, base, '/p/app').worktreeOf).toBe('/p/app');
+  });
+  it('repoDisplayName: `<main> ⌥ <name>` for a linked worktree', () => {
+    expect(repoDisplayName('feature-x', '/p/app')).toBe('app ⌥ feature-x');
+    expect(repoDisplayName('app')).toBe('app');
   });
 });

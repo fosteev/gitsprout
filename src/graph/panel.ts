@@ -7,6 +7,7 @@ import type { WipActions } from '../commands/wip';
 import { Repo } from '../git/repo';
 import type { Commit, FilePatch, Head, Status } from '../git/types';
 import { onReveal } from '../views/refsStore';
+import { repoDisplayName } from '../workspace/model';
 import type { Registry } from '../workspace/registry';
 import type { FromWebview, GraphSettings, ToolbarAction, ToWebview } from './protocol';
 import { graphHtml, inGitDir, isAllowedUrl, parseFromWebview, shaFromArg, stateMessage, wipContextFromArg } from './validate';
@@ -69,7 +70,8 @@ class GraphPanel implements vscode.Disposable {
     } else {
       this.panel = vscode.window.createWebviewPanel(VIEW_TYPE, 'Graph', vscode.ViewColumn.Active, { ...options, retainContextWhenHidden: true });
     }
-    this.panel.title = `Graph · ${registry.get(repoRoot)?.name ?? basename(repoRoot)}`;
+    const known = registry.get(repoRoot);
+    this.panel.title = `Graph · ${known ? repoDisplayName(known.name, known.worktreeOf) : basename(repoRoot)}`;
     this.panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'sprout.svg');
     const wv = this.panel.webview;
     wv.html = graphHtml({
@@ -144,7 +146,7 @@ class GraphPanel implements vscode.Disposable {
       this.commits = new Map(commits.map((c) => [c.sha, c]));
       this.head = refs.head;
       this.wip = wip;
-      this.panel.title = `Graph · ${active.name}`;
+      this.panel.title = `Graph · ${repoDisplayName(active.name, active.worktreeOf)}`;
       const msg = stateMessage({ root: active.root, name: active.name }, this.registry.repos.length, refs, commits, wip, settings, stashes.length);
       const sig = JSON.stringify(msg);
       if (sig !== this.lastState) { this.lastState = sig; this.post(msg); }
@@ -318,8 +320,14 @@ class GraphPanel implements vscode.Disposable {
   }
 }
 
+/** What other command modules need from the graph tabs. */
+export interface GraphApi {
+  /** Closes the repo's tab if it is open (a removed worktree). */
+  close: (root: string) => void;
+}
+
 /** `showGraph`, `toggleAutoBuild`, the graph's context-menu copy commands and tree → graph reveal. */
-export function registerGraph(context: vscode.ExtensionContext, registry: Registry, log: (m: string) => void, wip: WipActions): void {
+export function registerGraph(context: vscode.ExtensionContext, registry: Registry, log: (m: string) => void, wip: WipActions): GraphApi {
   /** Open graph tabs by repo root: at most one per repo. */
   const panels = new Map<string, GraphPanel>();
 
@@ -396,4 +404,5 @@ export function registerGraph(context: vscode.ExtensionContext, registry: Regist
     // The ref trees show the active repo, so a tree click goes to that repo's tab (if open).
     onReveal((s) => { const root = registry.active?.root; if (root) panels.get(root)?.revealCommit(s); }),
   );
+  return { close: (root) => panels.get(root)?.dispose() };
 }

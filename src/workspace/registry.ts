@@ -2,16 +2,19 @@ import * as vscode from 'vscode';
 import { Repo } from '../git/repo';
 import { GitError, type RepoSummary } from '../git/types';
 import { mapPool } from '../util/pool';
-import { discoverWithParents, type DiscoveredRepo } from './discovery';
-import { makeRepoSummary, repoForPath, sameSummary, type FolderRef } from './model';
+import { discover, discoverWithParents, type DiscoveredRepo } from './discovery';
+import { mainRootOf, makeRepoSummary, repoForPath, sameSummary, type FolderRef } from './model';
 
 const SUMMARY_CONCURRENCY = 8;
 const DEBOUNCE_MS = 300;
 /** A steady stream of events (a dev server writing a log in the tree) still gets a refresh this often. */
 const MAX_WAIT_MS = 2000;
-const GIT_WATCH = '{HEAD,index,FETCH_HEAD,ORIG_HEAD,packed-refs,refs/**}';
+/** `worktrees/**`: a commit, stage, lock or removal in a sibling worktree changes this repo's worktree list and statuses. */
+const GIT_WATCH = '{HEAD,index,FETCH_HEAD,ORIG_HEAD,packed-refs,refs/**,worktrees/**}';
 /** Refs of a linked worktree live in the shared (common) git dir. */
-const COMMON_WATCH = '{packed-refs,refs/**}';
+const COMMON_WATCH = '{packed-refs,refs/**,worktrees/**}';
+/** workspaceState key: roots of worktrees outside the workspace folders that were opened on demand. */
+export const EXTRA_ROOTS_KEY = 'gitsprout.extraRoots';
 
 interface Entry {
   found: DiscoveredRepo;
@@ -55,7 +58,7 @@ export class Registry implements vscode.Disposable {
   /** Fires after every completed read of a repo, even when the summary is unchanged (a new tag/branch/stash does not change it). */
   readonly onDidRefreshRepo = this.refreshedEmitter.event;
 
-  constructor(private readonly log: (msg: string) => void) {
+  constructor(private readonly log: (msg: string) => void, private readonly state?: vscode.Memento) {
     this.disposables.push(
       this.reposEmitter, this.activeEmitter, this.repoEmitter, this.refreshedEmitter,
       vscode.workspace.onDidChangeWorkspaceFolders(() => void this.rescan()),
@@ -87,6 +90,25 @@ export class Registry implements vscode.Disposable {
     return (vscode.workspace.workspaceFolders ?? []).map((f) => ({ name: f.name, path: f.uri.fsPath }));
   }
 
+  private extraRoots(): string[] {
+    const v = this.state?.get<unknown>(EXTRA_ROOTS_KEY, []);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  }
+
+  /** Adds a repo outside the workspace folders (a worktree opened on demand); remembered across reloads. Rescans. */
+  async addRoot(root: string): Promise<void> {
+    const list = this.extraRoots();
+    if (!list.includes(root)) await this.state?.update(EXTRA_ROOTS_KEY, [...list, root]);
+    await this.rescan();
+  }
+
+  /** Forgets an extra root (a removed worktree). Rescans. */
+  async removeRoot(root: string): Promise<void> {
+    const list = this.extraRoots();
+    if (list.includes(root)) await this.state?.update(EXTRA_ROOTS_KEY, list.filter((r) => r !== root));
+    await this.rescan();
+  }
+
   /** Scans the workspace folders; serialised, so overlapping triggers queue up. */
   rescan(): Promise<void> {
     this.scanning = this.scanning.then(() => this.doScan()).catch((e) => {
@@ -102,6 +124,14 @@ export class Registry implements vscode.Disposable {
     if (this.disposed) return;
     const t0 = performance.now();
     const found = await discoverWithParents(folders.map((f) => f.path), cfg.get<number>('scanDepth', 3), cfg.get<string[]>('scanExclude', ['**/node_modules', '**/vendor']), this.gitPath);
+    // Extra roots (depth 0, no climbing up): the ones that are gone drop out of the saved list.
+    const extras = this.extraRoots();
+    if (extras.length) {
+      const have = await discover(extras, 0);
+      for (const f of have) if (!found.some((x) => x.root === f.root)) found.push(f);
+      const alive = extras.filter((r) => have.some((f) => f.root === r));
+      if (alive.length !== extras.length) await this.state?.update(EXTRA_ROOTS_KEY, alive);
+    }
     const next = new Map(found.map((f) => [f.root, f]));
     const t1 = performance.now();
 
@@ -112,7 +142,7 @@ export class Registry implements vscode.Disposable {
     }
     const added = found.filter((f) => !this.entries.has(f.root));
     await mapPool(added, SUMMARY_CONCURRENCY, async (f) => {
-      const summary = await this.readSummary(f.root);
+      const summary = await this.readSummary(f);
       if (!summary || this.disposed) return;
       this.entries.set(f.root, { found: f, summary, watchers: this.watch(f) });
     });
@@ -120,8 +150,8 @@ export class Registry implements vscode.Disposable {
     // Existing repos may have moved relative to folders (multi-root changes the group prefix) — recompute.
     for (const e of this.entries.values()) {
       e.found = next.get(e.found.root) ?? e.found;
-      const s = makeRepoSummary(e.found.root, folders, e.summary);
-      if (s.relPath !== e.summary.relPath || s.group !== e.summary.group) { e.summary = s; }
+      const s = makeRepoSummary(e.found.root, folders, e.summary, mainRootOf(e.found.gitDir, e.found.commonDir));
+      if (s.relPath !== e.summary.relPath || s.group !== e.summary.group || s.worktreeOf !== e.summary.worktreeOf) { e.summary = s; }
     }
 
     await vscode.commands.executeCommand('setContext', 'gitsprout.multiRepo', this.entries.size > 1);
@@ -132,9 +162,10 @@ export class Registry implements vscode.Disposable {
     this.reposEmitter.fire();
   }
 
-  private async readSummary(root: string): Promise<RepoSummary | undefined> {
+  private async readSummary(f: DiscoveredRepo): Promise<RepoSummary | undefined> {
+    const root = f.root;
     try {
-      return makeRepoSummary(root, this.folders(), await new Repo(root, this.gitPath).summary());
+      return makeRepoSummary(root, this.folders(), await new Repo(root, this.gitPath).summary(), mainRootOf(f.gitDir, f.commonDir));
     } catch (e) {
       this.log(`summary failed for ${root}: ${e instanceof Error ? e.message : String(e)}`);
       if (e instanceof GitError && e.kind === 'GitMissing' && !this.gitMissingShown) {
@@ -193,7 +224,7 @@ export class Registry implements vscode.Disposable {
 
   private startRead(e: Entry, root: string): Promise<void> {
     const p: Promise<void> = (async () => {
-      const s = await this.readSummary(root);
+      const s = await this.readSummary(e.found);
       if (!s || this.disposed || this.entries.get(root) !== e) return;
       const changed = !sameSummary(e.summary, s);
       if (changed) e.summary = s;
