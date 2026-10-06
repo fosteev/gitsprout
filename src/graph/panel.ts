@@ -9,7 +9,8 @@ import type { Commit, FilePatch, Head, Status } from '../git/types';
 import { onReveal } from '../views/refsStore';
 import { repoDisplayName } from '../workspace/model';
 import type { Registry } from '../workspace/registry';
-import type { FromWebview, GraphSettings, ToolbarAction, ToWebview } from './protocol';
+import type { FromWebview, GraphSettings, GraphWorktree, ToolbarAction, ToWebview } from './protocol';
+import { graphWorktrees, needSummary } from './worktrees';
 import { graphHtml, inGitDir, isAllowedUrl, parseFromWebview, shaFromArg, stateMessage, wipContextFromArg } from './validate';
 
 export const VIEW_TYPE = 'gitsprout.graph';
@@ -50,6 +51,8 @@ class GraphPanel implements vscode.Disposable {
   private commits = new Map<string, Commit>();
   private head: Head = { branch: null, sha: null };
   private wip: Status | null = null;
+  /** The worktrees of the last `state`: a `worktree` message may only name one of these. */
+  private worktrees: GraphWorktree[] = [];
   readonly onDidDispose: vscode.Event<void>;
 
   /** `revived`: the panel VS Code recreated after a window reload (see `registerGraph`); else a new tab is opened. */
@@ -139,15 +142,21 @@ class GraphPanel implements vscode.Disposable {
     const t0 = performance.now();
     try {
       const repo = new Repo(active.root, this.registry.gitPath);
-      const [commits, refs, status, stashes] = await Promise.all([repo.log(settings.logLimit), repo.refs(), repo.status(), repo.stashes()]);
+      const [commits, refs, status, stashes, wts] = await Promise.all([
+        repo.log(settings.logLimit), repo.refs(), repo.status(), repo.stashes(),
+        // The graph must not fail because the worktree list could not be read.
+        repo.worktrees().catch((e: unknown) => { this.log(`graph worktrees ${active.root}: ${errText(e)}`); return []; }),
+      ]);
+      const worktrees = await this.worktreeList(wts, active.root);
       if (mine !== this.seq) return;
       const wip = status.staged.length + status.unstaged.length > 0 ? status : null;
       this.root = active.root;
       this.commits = new Map(commits.map((c) => [c.sha, c]));
       this.head = refs.head;
       this.wip = wip;
+      this.worktrees = worktrees;
       this.panel.title = `Graph · ${repoDisplayName(active.name, active.worktreeOf)}`;
-      const msg = stateMessage({ root: active.root, name: active.name }, this.registry.repos.length, refs, commits, wip, settings, stashes.length);
+      const msg = stateMessage({ root: active.root, name: active.name }, this.registry.repos.length, refs, commits, wip, settings, stashes.length, worktrees);
       const sig = JSON.stringify(msg);
       if (sig !== this.lastState) { this.lastState = sig; this.post(msg); }
       this.log(`graph state ${active.name}: ${Math.round(performance.now() - t0)} ms (${commits.length} commits)`);
@@ -159,6 +168,21 @@ class GraphPanel implements vscode.Disposable {
     } finally {
       if (mine === this.seq) this.post({ type: 'busy', on: false });
     }
+  }
+
+  /** Other worktrees' uncommitted-file counts: the registry's summary first, then at most `MAX_WORKTREE_SUMMARIES` status reads. */
+  private async worktreeList(list: Parameters<typeof graphWorktrees>[0], root: string): Promise<GraphWorktree[]> {
+    const counts = new Map<string, number>();
+    for (const w of list) {
+      const known = this.registry.get(w.path);
+      if (known) counts.set(w.path, known.changes);
+    }
+    const base = graphWorktrees(list, root, counts);
+    const reads = needSummary(base, (p) => counts.has(p));
+    await Promise.all(reads.map(async (p) => {
+      try { counts.set(p, (await new Repo(p, this.registry.gitPath).summary()).changes); } catch { /* unknown = 0 */ }
+    }));
+    return reads.length ? graphWorktrees(list, root, counts) : base;
   }
 
   private async onMessage(raw: unknown): Promise<void> {
@@ -254,6 +278,14 @@ class GraphPanel implements vscode.Disposable {
         await vscode.env.clipboard.writeText(m.text);
         vscode.window.setStatusBarMessage('Gitsprout: copied', 2000);
         return;
+      case 'worktree': {
+        // Only worktrees the last state listed; the existing commands re-check everything else (missing folder, not a repo).
+        const w = this.worktrees.find((x) => x.path === m.path);
+        if (!w) return;
+        const id = m.action === 'openGraph' ? 'worktreeOpenGraph' : m.action === 'openWindow' ? 'worktreeOpenWindow' : 'worktreeTerminal';
+        await vscode.commands.executeCommand(`gitsprout.${id}`, w.path);
+        return;
+      }
       case 'openUrl':
         if (isAllowedUrl(m.url, readSettings().jira)) await vscode.env.openExternal(vscode.Uri.parse(m.url));
         return;

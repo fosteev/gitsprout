@@ -10,5 +10,5 @@
     "types": ["node", "vscode"]
   },
   "include": ["src", "test", "vitest.config.mts"],
-  "exclude": ["test/wip.webview.test.ts", "test/diff.webview.test.ts"]
+  "exclude": ["test/wip.webview.test.ts", "test/diff.webview.test.ts", "test/worktrees.webview.test.ts"]
 }

@@ -78,11 +78,18 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .gdesc .t { overflow: hidden; text-overflow: ellipsis; }
 .gdesc.merge .t, .gdesc.ci .t { color: var(--muted); }
 .gdesc .wip { font-style: italic; }
+/* another worktree's uncommitted changes: read-only row, dimmer than ours */
+.gr.owip .gdesc .t { color: var(--muted); font-style: italic; }
+.gr.owip.on .gdesc .t { color: inherit; }
+.gdesc .wtn { display: inline-flex; align-items: center; gap: 4px; color: var(--fg); font-style: normal; }
 
 .ref { --c: var(--g0); display: inline-flex; align-items: center; gap: 3px; flex: none; max-width: 220px; height: 18px; padding: 0 6px; border-radius: 9px; font-size: 11px; border: 1px solid var(--c); color: var(--fg); background: color-mix(in srgb, var(--c) 18%, transparent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ref.c0 { --c: var(--g0); } .ref.c1 { --c: var(--g1); } .ref.c2 { --c: var(--g2); } .ref.c3 { --c: var(--g3); } .ref.c4 { --c: var(--g4); } .ref.c5 { --c: var(--g5); }
 .ref.head { background: var(--c); color: #111; font-weight: 600; }
 .ref.tag { border-style: dashed; }
+/* a branch checked out in another worktree, or that worktree's detached HEAD */
+.ref.other { background: transparent; border-style: dashed; }
+.ref.other svg { opacity: .85; }
 .jira { flex: none; font: 11px var(--mono); padding: 0 5px; border-radius: 3px; border: 1px solid var(--input-line); background: none; color: var(--fg); }
 button.jira { color: var(--link); }
 button.jira:hover { text-decoration: underline; }
@@ -244,3 +251,15 @@ button.jira:hover { text-decoration: underline; }
 .btip .ref.gone { border-style: dashed; }
 .btip .bnote { color: var(--muted); overflow-wrap: anywhere; }
 .btip .bnote b { color: var(--fg); font-weight: 500; }
+
+/* details card of another worktree */
+.wtcard { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; }
+.wtcard h2 { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+.wtcard .muted { color: var(--muted); font-weight: 400; font-size: 12px; }
+.wtcard .path { font: 12px var(--mono); color: var(--muted); word-break: break-all; }
+.wtcard .wtline { display: flex; align-items: center; gap: 4px; font-size: 12.5px; }
+.wtcard .vbtns { flex-wrap: wrap; gap: 6px; }
+.wtcard .vbtns .vbtn { flex: 1 1 auto; white-space: nowrap; }
+.wtcard .vbtn.sec { background: var(--input); color: var(--fg); border: 1px solid var(--line); }
+.wtcard .vbtn.sec:hover { background: var(--hover); }
+.wtcard .note { padding: 0; }

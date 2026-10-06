@@ -7,6 +7,10 @@ export const RH = 26;
 /** Lane colours cycle through `--g0..--g4` (VS Code's scmGraph.foreground1..5). */
 export const LANE_COLORS = 5;
 export const WIP_SHA = 'WIP';
+/** Row id of another worktree's WIP row: `WIP:<worktree path>`. A real sha is hex, so it never collides. */
+export const WORKTREE_WIP_PREFIX = 'WIP:';
+export const worktreeWipSha = (path: string): string => WORKTREE_WIP_PREFIX + path;
+export const isWorktreeWipSha = (sha: string): boolean => sha.startsWith(WORKTREE_WIP_PREFIX);
 
 export const laneX = (j: number): number => 8 + j * LANE;
 export const graphWidth = (maxLanes: number): number => laneX(maxLanes - 1) + 10;
@@ -17,6 +21,8 @@ export interface Row {
   parents: string[];
   commit?: Commit;
   wip?: true;
+  /** Another worktree's WIP row (read-only here): the path of that worktree. */
+  worktree?: string;
 }
 
 export interface VisibleOptions {
@@ -28,6 +34,8 @@ export interface VisibleOptions {
   headSha: string | null;
   /** Add the "Uncommitted Changes" row on top. */
   dirty: boolean;
+  /** Other worktrees with uncommitted changes: a dashed WIP row each, below our own, parent = their HEAD. */
+  otherWip?: readonly { path: string; head: string }[];
 }
 
 export function visibleRows(commits: readonly Commit[], o: VisibleOptions): { rows: Row[]; hiddenN: number } {
@@ -43,6 +51,13 @@ export function visibleRows(commits: readonly Commit[], o: VisibleOptions): { ro
     commit: c,
     parents: [...new Set(c.parents.map(vis).filter((p): p is string => !!p))],
   }));
+  // A head outside the loaded commits has no row to hang on; a CI-hidden one hangs on its first visible ancestor.
+  const other: Row[] = [];
+  for (const w of o.otherWip ?? []) {
+    const head = bySha.has(w.head) ? vis(w.head) : undefined;
+    if (head && bySha.has(head)) other.push({ sha: worktreeWipSha(w.path), wip: true, worktree: w.path, parents: [head] });
+  }
+  rows.unshift(...other);
   if (o.dirty) rows.unshift({ sha: WIP_SHA, wip: true, parents: o.headSha ? [o.headSha] : [] });
   return { rows, hiddenN: hidden.size };
 }

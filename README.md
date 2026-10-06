@@ -26,6 +26,8 @@ Gitsprout adds what the built-in Source Control lacks: a commit graph with a Git
 
 **Branches, remotes, stashes, tags.** Tree views for the active repo: checkout (a remote checkout creates a tracking branch), create, rename, delete, set upstream, stash push/apply/pop/drop, push and delete tags.
 
+**Worktrees.** A Worktrees view lists every `git worktree` of the active repo with its branch, changes and ahead/behind, and creates one from a branch, a remote branch, a new branch or a commit. Open one as a graph tab, in a new or this window, as a workspace folder or in a terminal; remove and prune them. Linked worktrees nest under their repo in Repositories, branches checked out in another worktree are marked and guarded against checkout, and the graph shows other worktrees' checked-out branches and their uncommitted changes as dashed rows on top of their HEAD commits.
+
 **Fetch, pull, push with clear errors.** Pull fast-forwards or merges, a rejected push offers Pull, a branch without upstream offers Publish, an authentication failure offers the same command in a terminal.
 
 Not planned: hunk/line staging, interactive rebase, conflict editor, PR/issue integrations, AI features.
@@ -43,6 +45,7 @@ Requires VS Code 1.90+ (or an editor on a matching VS Code base) and git 2.24+ o
 - Gitsprout view in the activity bar: Repositories (multi-repo workspaces only), Branches, Remotes, Stashes, Tags. The status bar item shows the active repository and branch; the active repo follows the active editor.
 - Graph tab: `Gitsprout: Show Graph` (`⌥⌘G` on macOS, `Ctrl+Alt+G` elsewhere). One tab per repository: clicking a repo in Repositories opens its graph the first time and brings the open tab back after that; focusing a graph tab makes its repo active. Tabs are restored after a window reload.
 - Graph toolbar: Fetch, Pull, Push (with ahead/behind badges), Create Branch, Stash, Pop Latest Stash, Open Terminal in Repository.
+- Worktrees: the Worktrees view (Create, Prune, Open Graph, Open in New Window / This Window, Add to Workspace, Terminal, Remove), `Gitsprout: Switch Worktree…`, `Create Worktree from Branch…` in Branches and `Create Worktree Here…` in the graph's commit menu. In the graph, a branch pill with a worktree icon is checked out in another worktree, and a dashed row `<name> · N uncommitted changes` on top of a commit is that worktree's working tree: select it for a card with Open Graph / Open in New Window / Open Terminal (staging happens in that worktree's own graph tab), right-click it for the same commands and Remove Worktree…. The `Worktrees` toolbar chip hides these rows and pills; the choice is remembered per tab. Edits to files in another worktree show up in its row on the next refresh, window focus or index change.
 - `Gitsprout: Switch Repository…`: `⌥⌘R` / `Ctrl+Alt+R`.
 - Commands (Command Palette, view toolbars and context menus): Checkout…, Create Branch…, Rename/Delete Branch, Stash… (push, apply, pop, drop), Fetch, Pull, Push, Fetch All.
 - WIP panel: select the `Uncommitted Changes` row at the top of the graph. Unstaged and Staged lists (Path or Tree view, Collapse All), with Stage/Unstage/Discard per file or folder (buttons and right-click menu) and Stage All / Unstage All / Discard All (Discard asks first and cannot be undone). Below: a commit summary with a 72-character counter, a description, Amend previous commit (prefilled from HEAD, with a note when HEAD is already pushed) and Commit, or Commit and Push from the ▾ menu. With nothing staged the button reads "Stage Changes to Commit" and stages everything. ⌘/Ctrl+Enter commits. Hooks run as usual; a rejected commit keeps your text. The draft is kept per tab and survives a window reload. Edits in the working tree show up in the lists within a second.
@@ -63,6 +66,7 @@ Requires VS Code 1.90+ (or an editor on a matching VS Code base) and git 2.24+ o
 | `gitsprout.logLimit` | `1000` | Maximum number of commits loaded into the graph |
 | `gitsprout.ciPattern` | `^AutoBuild$` | Regular expression matching CI commit subjects |
 | `gitsprout.hideCi` | `false` | Hide CI commits in the graph (also toggled from the graph toolbar) |
+| `gitsprout.worktreeFolder` | `""` | Where new worktrees go: `<setting>/<repo name>/<branch slug>` (`~` is expanded); empty = `<repo>.worktrees/<branch slug>` next to the repository |
 | `gitsprout.jira` | `{}` | Jira project key → browse URL prefix; keys in commit messages become links |
 
 Example for Jira links:

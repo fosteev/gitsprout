@@ -160,7 +160,7 @@ describe('wip commit box', () => {
 describe('wip row label', () => {
   it('shows the draft summary or // WIP, and the file count', () => {
     const lay = layout(visibleRows([], { hideCi: false, isCi: () => false, keep: new Set(), headSha: null, dirty: true }).rows);
-    const env: RowEnv = { root: '/r', width: 20, selected: null, headSha: null, jira: {}, pills: new Map(), isCi: () => false, query: '', nowMs: 0, wipCount: 1, wipSummary: '' };
+    const env: RowEnv = { root: '/r', width: 20, selected: null, headSha: null, jira: {}, pills: new Map(), isCi: () => false, query: '', nowMs: 0, wipCount: 1, wipSummary: '', worktrees: [] };
     expect(rowHtml(lay.rows[0], env)).toContain('<span class="wip">// WIP</span><span class="kind">1 file</span>');
     expect(rowHtml(lay.rows[0], { ...env, wipCount: 3, wipSummary: ' Fix <x> ' })).toContain('<span class="wip">Fix &lt;x&gt;</span><span class="kind">3 files</span>');
   });

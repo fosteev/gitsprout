@@ -1,18 +1,37 @@
 // Pure HTML builders for the graph UI. Every piece of repository data (subjects, names, paths) goes through esc().
-import type { CommitContext, WipContext } from '../src/graph/protocol';
+import type { CommitContext, GraphWorktree, WipContext, WorktreeAction, WorktreeContext } from '../src/graph/protocol';
 import type { Commit, FileChange, FilePatch, FileStat, Head, Hunk, Refs, Status } from '../src/git/types';
 import { esc, fmtAgo, fmtAgoLong, jiraUrl, minutesAgo, parseSubject, splitPath } from './format';
 import type { Owner } from './branches';
 import { LANE_COLORS, rowSvg, WIP_SHA, type LaidRow } from './layout';
 import { buildTree, dirPaths, type TreeNode } from './wipTree';
 
-export interface RefPill { kind: 'local' | 'remote' | 'tag'; name: string; head: boolean }
+const baseName = (p: string): string => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
 
-/** Refs by the commit they point to; the checked-out branch comes first. */
-export function refsBySha(refs: Refs, head: Head): Map<string, RefPill[]> {
+/** `worktree` set: a local branch checked out in another worktree, or (kind 'worktree') that worktree's detached HEAD. */
+export interface RefPill { kind: 'local' | 'remote' | 'tag' | 'worktree'; name: string; head: boolean; worktree?: { name: string; path: string } }
+
+/**
+ * Refs by the commit they point to; the checked-out branch comes first. `worktrees` (null = the Worktrees chip is off) marks
+ * branches checked out in other worktrees and adds a pill for each other worktree's detached HEAD. A branch's worktree path and
+ * `GraphWorktree.path` both come from git; whether a worktree is this tab's own is `GraphWorktree.current`, never a path
+ * comparison here.
+ */
+export function refsBySha(refs: Refs, head: Head, worktrees: readonly GraphWorktree[] | null = null): Map<string, RefPill[]> {
   const m = new Map<string, RefPill[]>();
   const add = (sha: string, p: RefPill) => { const l = m.get(sha); if (l) l.push(p); else m.set(sha, [p]); };
-  for (const b of refs.locals) add(b.sha, { kind: 'local', name: b.name, head: b.name === head.branch });
+  for (const b of refs.locals) {
+    const isHead = b.name === head.branch;
+    const pill: RefPill = { kind: 'local', name: b.name, head: isHead };
+    if (worktrees && !isHead && b.worktree !== null) {
+      const w = worktrees.find((x) => x.path === b.worktree);
+      if (!w?.current) pill.worktree = { name: w?.name ?? baseName(b.worktree), path: b.worktree };
+    }
+    add(b.sha, pill);
+  }
+  for (const w of worktrees ?? []) {
+    if (!w.current && w.branch === null && w.head) add(w.head, { kind: 'worktree', name: w.name, head: false, worktree: { name: w.name, path: w.path } });
+  }
   for (const b of refs.remotes) add(b.sha, { kind: 'remote', name: b.name, head: false });
   for (const t of refs.tags) add(t.sha, { kind: 'tag', name: t.name, head: false });
   for (const l of m.values()) l.sort((a, b) => Number(b.head) - Number(a.head));
@@ -31,6 +50,7 @@ const ICONS = {
   branch: '<circle cx="4.5" cy="3.5" r="1.7"/><circle cx="4.5" cy="12.5" r="1.7"/><circle cx="11.5" cy="5.5" r="1.7"/><path d="M4.5 5.2v5.6M11.5 7.2c0 3-7 1.4-7 3.6"/>',
   cloud: '<path d="M4.5 12.5a3 3 0 0 1-.4-5.97A4 4 0 0 1 11.8 6.3a3.1 3.1 0 0 1-.3 6.2z"/>',
   tag: '<path d="M2 2h5.5L14 8.5 8.5 14 2 7.5z"/><circle cx="5" cy="5" r="1"/>',
+  worktree: '<rect x="2" y="2.5" width="12" height="8.5" rx="1.2"/><path d="M5.5 14h5M8 11v3"/>',
 };
 const icon = (name: keyof typeof ICONS): string =>
   `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -39,8 +59,11 @@ export function pillsHtml(pills: readonly RefPill[] | undefined, col: number): s
   if (!pills) return '';
   return pills.map((p) => {
     const c = p.kind === 'tag' ? 'c0' : p.kind === 'remote' ? 'c5' : `c${col % LANE_COLORS}`;
-    const ic = p.kind === 'remote' ? 'cloud' : p.kind === 'tag' ? 'tag' : p.head ? 'check' : 'branch';
-    return `<span class="ref ${c}${p.head ? ' head' : ''}${p.kind === 'tag' ? ' tag' : ''}" title="${esc(p.name)}">${icon(ic)}${esc(p.name)}</span>`;
+    const ic = p.worktree ? 'worktree' : p.kind === 'remote' ? 'cloud' : p.kind === 'tag' ? 'tag' : p.head ? 'check' : 'branch';
+    const title = !p.worktree ? p.name
+      : p.kind === 'worktree' ? `Detached HEAD of worktree ${p.worktree.name} (${p.worktree.path})`
+      : `Checked out in worktree ${p.worktree.name} (${p.worktree.path})`;
+    return `<span class="ref ${c}${p.head ? ' head' : ''}${p.kind === 'tag' ? ' tag' : ''}${p.worktree ? ' other' : ''}" title="${esc(title)}">${icon(ic)}${esc(p.name)}</span>`;
   }).join('');
 }
 
@@ -62,6 +85,10 @@ export function commitContext(sha: string, root: string): CommitContext {
   return { webviewSection: 'commit', sha, root, preventDefaultContextMenuItems: true };
 }
 
+export function worktreeContext(path: string, root: string, main: boolean): WorktreeContext {
+  return { webviewSection: 'worktree', path, root, worktreeMain: main, preventDefaultContextMenuItems: true };
+}
+
 export interface RowEnv {
   /** Root of the repo the graph shows; goes into every row's context. */
   root: string;
@@ -78,6 +105,8 @@ export interface RowEnv {
   wipCount: number;
   /** the draft commit summary; the WIP row shows it, or `// WIP` when empty */
   wipSummary: string;
+  /** Worktrees of the repo, for the other worktrees' WIP rows */
+  worktrees: readonly GraphWorktree[];
 }
 
 export const WIP_LABEL = '// WIP';
@@ -86,7 +115,34 @@ export function rowMatches(c: Commit, q: string): boolean {
   return !q || c.subject.toLowerCase().includes(q) || c.sha.startsWith(q) || c.author.toLowerCase().includes(q);
 }
 
+/** `3 uncommitted changes` */
+export const changesLabel = (n: number): string => `${n} uncommitted change${n === 1 ? '' : 's'}`;
+
+/** Another worktree's WIP row: read-only (no staging from here), a right click offers that worktree's commands. */
+function worktreeWipRowHtml(r: LaidRow, e: RowEnv): string {
+  const path = r.worktree as string;
+  const w = e.worktrees.find((x) => x.path === path);
+  const name = w?.name ?? baseName(path);
+  return `<div class="gr owip${e.selected === r.sha ? ' on' : ''}" data-sha="${esc(r.sha)}" data-vscode-context="${esc(JSON.stringify(worktreeContext(path, e.root, w?.main ?? false)))}" title="${esc(path)}">`
+    + rowSvg(r, e.width, { head: false, ci: false })
+    + `<div class="gdesc"><span class="t"><span class="wtn">${icon('worktree')}${esc(name)}</span> · ${changesLabel(w?.changes ?? 0)}</span></div>`
+    + '<div class="gwhen"></div><div class="gwho"></div><div class="gsha"></div></div>';
+}
+
+/** Details card of another worktree (selected through its WIP row). */
+export function worktreeCardHtml(w: GraphWorktree): string {
+  const where = w.branch !== null ? `${icon('branch')} ${esc(w.branch)}` : `detached HEAD ${esc((w.head ?? '').slice(0, 7))}`;
+  const btn = (action: WorktreeAction, label: string, sec: boolean): string =>
+    `<button class="vbtn${sec ? ' sec' : ''}" data-wt="${action}" data-path="${esc(w.path)}">${label}</button>`;
+  return `<div class="wtcard"><h2>${icon('worktree')} ${esc(w.name)}${w.main ? ' <span class="muted">(main worktree)</span>' : ''}</h2>`
+    + `<div class="path">${esc(w.path)}</div>`
+    + `<div class="wtline">${where} · ${w.changes} change${w.changes === 1 ? '' : 's'}</div>`
+    + `<div class="vbtns">${btn('openGraph', 'Open Graph', false)}${btn('openWindow', 'Open in New Window', true)}${btn('terminal', 'Open Terminal', true)}</div>`
+    + '<div class="note">Staging belongs to that worktree\'s own graph tab: its index is separate.</div></div>';
+}
+
 export function rowHtml(r: LaidRow, e: RowEnv): string {
+  if (r.worktree !== undefined) return worktreeWipRowHtml(r, e);
   if (r.wip) {
     return `<div class="gr${e.selected === WIP_SHA ? ' on' : ''}" data-sha="${WIP_SHA}">${rowSvg(r, e.width, { head: false, ci: false })}`
       + `<div class="gdesc"><span class="wip">${esc(e.wipSummary.trim() || WIP_LABEL)}</span><span class="kind">${e.wipCount} file${e.wipCount === 1 ? '' : 's'}</span></div><div class="gwhen">*</div><div class="gwho">*</div><div class="gsha">*</div></div>`;

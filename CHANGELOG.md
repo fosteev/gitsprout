@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Git worktrees: a Worktrees view (create from a branch, remote branch, new branch or commit; open as a graph tab, in a new or this window, as a workspace folder or in a terminal; remove, unlock, prune), `gitsprout.worktreeFolder` for the default location, linked worktrees nested under their repo in Repositories, branches checked out elsewhere marked and guarded against checkout.
+- The commit graph shows worktrees: a branch pill with a worktree icon for a branch checked out in another worktree, a pill for another worktree's detached HEAD, and a dashed row with the uncommitted-change count on top of each other worktree's HEAD commit (card with Open Graph / New Window / Terminal, context menu with Remove Worktree…). The `Worktrees` toolbar chip hides them.
+
 ## 0.2.0
 
 - Hovering a node in the commit graph shows which branch the commit was made on and which other branches contain it. Git does not record the branch, so it is inferred from first-parent chains (main/master/develop first); a deleted branch is named from its merge commit's message.

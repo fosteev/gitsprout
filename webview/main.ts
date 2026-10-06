@@ -1,13 +1,13 @@
 // Graph UI entry point: DOM glue around the pure model (layout.ts, render.ts, format.ts).
 import type { FileChange, FileStat } from '../src/git/types';
-import type { FromWebview, ToolbarAction, ToWebview } from '../src/graph/protocol';
+import type { FromWebview, ToolbarAction, ToWebview, WorktreeAction } from '../src/graph/protocol';
 import './styles.css';
 import { branchOwners, childrenOf, containedIn, type Owner } from './branches';
 import { ciMatcher } from './format';
-import { graphWidth, laneX, layout, RH, visibleRows, WIP_SHA, type LaidRow } from './layout';
+import { graphWidth, isWorktreeWipSha, laneX, layout, RH, visibleRows, WIP_SHA, type LaidRow } from './layout';
 import {
   branchTipHtml, canDiscard, commitDetailsHtml, diffBarHtml, diffBodyHtml, HEAD_PUSHED_NOTE, keepSet, NO_SUMMARY_ERROR, noDetailsHtml, primaryClass, primaryInnerHtml, refsBySha, rowHtml,
-  SUMMARY_LIMIT, WIP_LABEL, wipBarHtml, wipCommitHtml, wipDirKeys, wipFile, wipFileCount, wipHeaderHtml, wipListsHtml, wipPrimary,
+  SUMMARY_LIMIT, WIP_LABEL, wipBarHtml, worktreeCardHtml, wipCommitHtml, wipDirKeys, wipFile, wipFileCount, wipHeaderHtml, wipListsHtml, wipPrimary,
   type CommitCtx, type DiffBody, type DiffMode, type FilesState, type RefPill, type RowEnv, type WipDraft, type WipView,
 } from './render';
 
@@ -32,6 +32,8 @@ interface Model {
   /** shas of the shown commit rows (CI-hidden ones excluded) */
   known: Set<string>;
   indexOf: Map<string, number>;
+  /** other worktrees' WIP rows by row id (`WIP:<path>`) → the worktree path */
+  worktreeRows: Map<string, string>;
   /** the branch each commit was made on (inferred) and the child links behind "Also in", for the node hover card */
   owners: Map<string, Owner>;
   children: Map<string, string[]>;
@@ -92,14 +94,17 @@ const PANE_MIN = 240, GRAPH_MIN = 240;
 let paneWidth: number | null = null;
 /** Unstaged share of the WIP lists' height (0..1) the user dragged the sash to; null = half. */
 let listSplit: number | null = null;
+/** The `Worktrees` toolbar chip: other worktrees' WIP rows and pills. On by default; persisted. */
+let showWorktrees = true;
 
 function restore(): void {
   const raw = api.getState?.();
   if (typeof raw !== 'object' || raw === null) return;
-  const o = raw as { root?: unknown; draft?: unknown; view?: unknown; collapsed?: unknown; paneWidth?: unknown; listSplit?: unknown; diffMode?: unknown };
+  const o = raw as { root?: unknown; draft?: unknown; view?: unknown; collapsed?: unknown; paneWidth?: unknown; listSplit?: unknown; diffMode?: unknown; worktrees?: unknown };
   if (typeof o.paneWidth === 'number' && o.paneWidth > 0) paneWidth = o.paneWidth;
   if (typeof o.listSplit === 'number' && o.listSplit > 0 && o.listSplit < 1) listSplit = o.listSplit;
   if (o.diffMode === 'inline' || o.diffMode === 'split') diffMode = o.diffMode;
+  if (typeof o.worktrees === 'boolean') showWorktrees = o.worktrees;
   if (typeof o.root === 'string') stateRoot = o.root;
   const d = o.draft as Partial<WipDraft> | null | undefined;
   if (d && typeof d.summary === 'string' && typeof d.description === 'string' && typeof d.amend === 'boolean') {
@@ -112,7 +117,7 @@ restore();
 
 function persist(): void {
   if (stateRoot === undefined) return;
-  api.setState({ root: stateRoot, draft, view: wipView, collapsed: [...collapsed], paneWidth, listSplit, diffMode });
+  api.setState({ root: stateRoot, draft, view: wipView, collapsed: [...collapsed], paneWidth, listSplit, diffMode, worktrees: showWorktrees });
 }
 
 /** Toolbar action buttons (GitKraken-style row); 16×16 stroke icons, `group` puts a separator between groups. */
@@ -132,6 +137,7 @@ app.innerHTML = `
     <button class="vchip" id="repo" title="Switch repository (⌥⌘R)"></button>
     <input id="q" class="vin" placeholder="Search commits, SHA, author" autocomplete="off" aria-label="Search commits">
     <button class="vchip" id="ci" aria-pressed="false"></button>
+    <button class="vchip" id="wt" aria-pressed="true" title="Show other worktrees: their uncommitted changes and checked-out branches"></button>
     <span class="busy" id="busy" hidden>Loading…</span>
     <span class="cnt" id="cnt"></span>
     <div class="acts" role="toolbar" aria-label="Repository actions">${ACTIONS.map((a, i) =>
@@ -154,9 +160,10 @@ const list = $('list'), rowsEl = $('rows'), details = $('details'), qEl = $<HTML
 function build(s: State): Model {
   const isCiSubject = ciMatcher(s.settings.ciPattern);
   const isCi: Model['isCi'] = (c) => isCiSubject(c.subject);
-  const pills = refsBySha(s.refs, s.head);
+  const pills = refsBySha(s.refs, s.head, showWorktrees ? s.worktrees : null);
   const keep = keepSet(pills, s.head);
-  const vr = visibleRows(s.commits, { hideCi: s.settings.hideCi, isCi, keep, headSha: s.head.sha, dirty: s.wip !== null });
+  const otherWip = showWorktrees ? s.worktrees.filter((w) => !w.current && w.changes > 0 && w.head).map((w) => ({ path: w.path, head: w.head as string })) : [];
+  const vr = visibleRows(s.commits, { hideCi: s.settings.hideCi, isCi, keep, headSha: s.head.sha, dirty: s.wip !== null, otherWip });
   const lay = layout(vr.rows);
   return {
     rows: lay.rows, width: graphWidth(lay.max), pills, hiddenN: vr.hiddenN,
@@ -164,6 +171,7 @@ function build(s: State): Model {
     bySha: new Map(s.commits.map((c) => [c.sha, c])),
     known: new Set(lay.rows.filter((r) => !r.wip).map((r) => r.sha)),
     indexOf: new Map(lay.rows.map((r, i) => [r.sha, i])),
+    worktreeRows: new Map(lay.rows.flatMap((r) => (r.worktree !== undefined ? [[r.sha, r.worktree] as [string, string]] : []))),
     owners: branchOwners(s.commits, s.refs, s.head),
     children: childrenOf(s.commits),
   };
@@ -173,6 +181,7 @@ function rowEnv(s: State, m: Model): RowEnv {
   return {
     root: s.repo.root, width: m.width, selected, headSha: s.head.sha, jira: s.settings.jira, pills: m.pills, isCi: m.isCi,
     query: query.trim().toLowerCase(), nowMs: Date.now(), wipCount: s.wip ? wipFileCount(s.wip) : 0, wipSummary: draft.summary,
+    worktrees: s.worktrees,
   };
 }
 
@@ -306,6 +315,13 @@ function renderDetails(): void {
 function renderDetailsInner(): void {
   if (!st || !model) { setWipLayout(false); details.innerHTML = noDetailsHtml; return; }
   if (selected === WIP_SHA && st.wip) { setWipLayout(true); renderWip(st, st.wip); return; }
+  const wtPath = selected ? model.worktreeRows.get(selected) : undefined;
+  if (wtPath !== undefined) {
+    setWipLayout(false);
+    const w = st.worktrees.find((x) => x.path === wtPath);
+    details.innerHTML = w ? worktreeCardHtml(w) : noDetailsHtml;
+    return;
+  }
   setWipLayout(false);
   const c = selected ? model.bySha.get(selected) : undefined;
   if (!c) { details.innerHTML = noDetailsHtml; return; }
@@ -474,6 +490,12 @@ function renderToolbar(): void {
   const label = st.settings.ciPattern === '^AutoBuild$' ? 'AutoBuild' : 'CI';
   ci.textContent = `Hide ${label} · ${st.settings.hideCi ? `${model.hiddenN} hidden` : model.ciTotal}`;
   ci.setAttribute('aria-pressed', String(st.settings.hideCi));
+  // Nothing to show or hide in a repo with a single worktree.
+  const others = st.worktrees.filter((w) => !w.current);
+  const wt = $('wt');
+  wt.hidden = others.length === 0;
+  wt.textContent = `Worktrees · ${others.length}`;
+  wt.setAttribute('aria-pressed', String(showWorktrees));
   const n = st.commits.length - (st.settings.hideCi ? model.hiddenN : 0);
   $('cnt').textContent = `${n}${st.commits.length >= st.settings.logLimit ? '+' : ''} commits`;
   const head = st.head.branch ? st.refs.locals.find((b) => b.name === st!.head.branch) : undefined;
@@ -513,7 +535,7 @@ function select(sha: string, o: { center?: boolean } = {}): void {
 
 function defaultSelection(): string | null {
   if (!st || !model) return null;
-  if (selected && ((selected === WIP_SHA && st.wip) || model.known.has(selected))) return selected;
+  if (selected && ((selected === WIP_SHA && st.wip) || model.known.has(selected) || model.worktreeRows.has(selected))) return selected;
   if (st.head.sha && model.bySha.has(st.head.sha)) return st.head.sha;
   return model.rows.find((r) => !r.wip)?.sha ?? model.rows[0]?.sha ?? null;
 }
@@ -622,7 +644,7 @@ rowsEl.addEventListener('mouseover', (ev) => {
   const cell = (ev.target as Element).closest('.gr > svg');
   const row = cell?.parentElement;
   const sha = row?.dataset.sha;
-  if (!row || !sha || sha === WIP_SHA) { hideTip(); return; }
+  if (!row || !sha || sha === WIP_SHA || isWorktreeWipSha(sha)) { hideTip(); return; }
   if (sha === tipSha) return;
   clearTimeout(tipTimer);
   tipSha = sha;
@@ -708,9 +730,10 @@ details.addEventListener('click', (ev) => {
   if (!st) return;
   const a = (ev.target as HTMLElement).closest<HTMLElement>('[data-act]');
   if (a && wipMounted) { onWipAct(a); return; }
-  const t = (ev.target as HTMLElement).closest<HTMLElement>('[data-url],[data-select],[data-file],[data-copy]');
+  const t = (ev.target as HTMLElement).closest<HTMLElement>('[data-url],[data-select],[data-file],[data-copy],[data-wt]');
   if (!t) return;
-  if (t.dataset.copy) send({ type: 'copy', text: t.dataset.copy });
+  if (t.dataset.wt) send({ type: 'worktree', action: t.dataset.wt as WorktreeAction, path: t.dataset.path ?? '' });
+  else if (t.dataset.copy) send({ type: 'copy', text: t.dataset.copy });
   else if (t.dataset.url) send({ type: 'openUrl', url: t.dataset.url });
   else if (t.dataset.select) { if (model?.known.has(t.dataset.select)) select(t.dataset.select, { center: true }); }
   else if (t.dataset.file !== undefined) {
@@ -873,6 +896,17 @@ $('ci').addEventListener('click', () => {
   if (sel !== null && sel !== selected) select(sel);
   else { selected = sel; renderRows(true); renderDetails(); }
   send({ type: 'toggleCi', hideCi: st.settings.hideCi });
+});
+$('wt').addEventListener('click', () => {
+  if (!st) return;
+  showWorktrees = !showWorktrees;
+  persist();
+  model = build(st);
+  renderToolbar();
+  // a hidden worktree row can't stay selected
+  const sel = defaultSelection();
+  if (sel !== null && sel !== selected) select(sel);
+  else { selected = sel; renderRows(true); renderDetails(); }
 });
 qEl.addEventListener('input', () => { closeDiff(); query = qEl.value; renderRows(true); });
 qEl.addEventListener('keydown', (ev) => {

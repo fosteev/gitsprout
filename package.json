@@ -683,6 +683,21 @@
       ],
       "webview/context": [
         {
+          "command": "gitsprout.worktreeOpenGraph",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'worktree'",
+          "group": "1_open@1"
+        },
+        {
+          "command": "gitsprout.worktreeOpenWindow",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'worktree'",
+          "group": "1_open@2"
+        },
+        {
+          "command": "gitsprout.worktreeRemove",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'worktree' && !worktreeMain",
+          "group": "9_remove@1"
+        },
+        {
           "command": "gitsprout.createBranchFrom",
           "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
           "group": "1_create@1"

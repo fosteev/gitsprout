@@ -14,8 +14,19 @@ export interface GraphSettings {
 export const TOOLBAR_ACTIONS = ['fetch', 'pull', 'push', 'branch', 'stash', 'pop', 'terminal'] as const;
 export type ToolbarAction = typeof TOOLBAR_ACTIONS[number];
 
+/**
+ * One worktree of the repo the graph shows (prunable ones excluded). `current` = the worktree this tab is bound to, decided by
+ * the extension (the webview never compares paths with the repo root: symlinks like `/var` vs `/private/var` break that).
+ * `changes` = uncommitted files, 0 when unknown (summaries are read for a limited number of worktrees).
+ */
+export interface GraphWorktree { path: string; name: string; branch: string | null; head: string | null; changes: number; current: boolean; main: boolean }
+
+/** What the details card's buttons of another worktree ask for; run through the `gitsprout.worktree*` commands. */
+export const WORKTREE_ACTIONS = ['openGraph', 'openWindow', 'terminal'] as const;
+export type WorktreeAction = typeof WORKTREE_ACTIONS[number];
+
 export type ToWebview =
-  | { type: 'state'; repo: { root: string; name: string }; /** more than one repo in the window: the toolbar shows the repo chip */ multiRepo: boolean; head: Head; commits: Commit[]; refs: Refs; wip: Status | null; /** stash count: Pop is disabled at 0 */ stashes: number; settings: GraphSettings }
+  | { type: 'state'; repo: { root: string; name: string }; /** more than one repo in the window: the toolbar shows the repo chip */ multiRepo: boolean; head: Head; commits: Commit[]; refs: Refs; wip: Status | null; /** stash count: Pop is disabled at 0 */ stashes: number; /** every worktree of the repo, this tab's own included (`current`) */ worktrees: GraphWorktree[]; settings: GraphSettings }
   /** `error` set = the file list could not be read (`files` is empty then). */
   | { type: 'details'; sha: string; files: FileStat[]; error?: string }
   | { type: 'reveal'; sha: string }                      // select + scroll (from tree views)
@@ -54,11 +65,15 @@ export type FromWebview =
   /** A toolbar action button (Fetch, Pull, Push, Branch, Stash, Pop, Terminal). */
   | { type: 'action'; action: ToolbarAction }
   | { type: 'openUrl'; url: string }
+  /** A button of another worktree's details card; `path` must be one of the `state.worktrees` (checked by the extension). */
+  | { type: 'worktree'; action: WorktreeAction; path: string }
   /** Copy text to the clipboard (the details card's "Copy SHA" button). */
   | { type: 'copy'; text: string };
 
 /** Context attached to a row (`data-vscode-context`); `webview/context` commands receive it. */
 export interface CommitContext { webviewSection: 'commit'; sha: string; /** the repo the row belongs to */ root: string; preventDefaultContextMenuItems: true }
+/** Context of another worktree's WIP row: `webview/context` commands get `path` (the worktree) and `root` (the repo of the tab). */
+export interface WorktreeContext { webviewSection: 'worktree'; path: string; root: string; /** the main worktree: no Remove in its menu */ worktreeMain: boolean; preventDefaultContextMenuItems: true }
 /**
  * Context of a WIP file or folder row. `path` is the file's path, or a folder's path (the command acts on every file under
  * it in that list). The `wip*` keys feed the menus' `when` clauses.

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Commit, FilePatch, Refs } from '../src/git/types';
 import { ciMatcher, esc, fmtAgo, fmtAgoLong, jiraUrl, parseSubject, splitPath } from '../webview/format';
 import { layout, visibleRows } from '../webview/layout';
-import { commitDetailsHtml, diffBarHtml, diffBodyHtml, keepSet, pillsHtml, refsBySha, rowHtml, subjectHtml, type RowEnv } from '../webview/render';
+import { commitDetailsHtml, diffBarHtml, diffBodyHtml, keepSet, pillsHtml, refsBySha, rowHtml, subjectHtml, worktreeCardHtml, type RowEnv } from '../webview/render';
+import type { GraphWorktree } from '../src/graph/protocol';
 import { asFileChange, asFileStat, graphHtml, isAllowedUrl, isSafeRelPath, parseFromWebview, shaFromArg, wipContextFromArg } from '../src/graph/validate';
 
 const SHA = 'a'.repeat(40);
@@ -57,7 +58,7 @@ describe('render', () => {
   it('rows carry the webview context and escape author/subject', () => {
     const c = commit();
     const lay = layout(visibleRows([c], { hideCi: false, isCi: () => false, keep: new Set(), headSha: SHA, dirty: false }).rows);
-    const env: RowEnv = { root: '/work/repo', width: 20, selected: SHA, headSha: SHA, jira: JIRA, pills: refsBySha(refs, refs.head), isCi: () => false, query: 'zzz', nowMs: 2_000_000, wipCount: 0, wipSummary: '' };
+    const env: RowEnv = { root: '/work/repo', width: 20, selected: SHA, headSha: SHA, jira: JIRA, pills: refsBySha(refs, refs.head), isCi: () => false, query: 'zzz', nowMs: 2_000_000, wipCount: 0, wipSummary: '', worktrees: [] };
     const h = rowHtml(lay.rows[0], env);
     expect(h).toContain(`data-sha="${SHA}"`);
     expect(h).toContain('data-vscode-context="{&quot;webviewSection&quot;:&quot;commit&quot;');
@@ -212,5 +213,79 @@ describe('diff rendering', () => {
     expect(html).toContain('Open in Editor');
     expect(html).toContain('Close (Esc)');
     expect(diffBarHtml({ ...bar, mode: 'split' })).toContain('aria-pressed="true" title="Switch to Inline">Split');
+  });
+});
+
+describe('worktrees in the graph', () => {
+  const A = 'a'.repeat(40);
+  const B = 'b'.repeat(40);
+  const wt = (o: Partial<GraphWorktree>): GraphWorktree => ({ path: '/w/x', name: 'x', branch: null, head: null, changes: 0, current: false, main: false, ...o });
+  const branch = (name: string, sha: string, worktree: string | null) => ({ name, sha, upstream: null, ahead: 0, behind: 0, upstreamGone: false, worktree });
+  const refs: Refs = {
+    head: { branch: 'main', sha: A },
+    locals: [branch('main', A, '/w/main'), branch('feat', B, '/w/feat'), branch('plain', B, null)],
+    remotes: [], tags: [],
+  };
+  const list = [wt({ path: '/w/main', name: 'main', branch: 'main', head: A, current: true, main: true }), wt({ path: '/w/feat', name: 'feat', branch: 'feat', head: B, changes: 2 })];
+
+  it('marks a branch checked out in another worktree; our own branch and plain branches stay plain', () => {
+    const pills = refsBySha(refs, refs.head, list);
+    expect(pills.get(A)![0].worktree).toBeUndefined();
+    const [feat, plain] = pills.get(B)!;
+    expect(feat).toMatchObject({ name: 'feat', worktree: { name: 'feat', path: '/w/feat' } });
+    expect(plain.worktree).toBeUndefined();
+    const h = pillsHtml([feat], 0);
+    expect(h).toContain('title="Checked out in worktree feat (/w/feat)"');
+    expect(h).toContain(' other');
+    expect(h).toContain('<rect'); // the worktree icon
+  });
+
+  it('with the chip off (null) or no worktree list, no pill is marked', () => {
+    for (const w of [null, undefined]) {
+      for (const l of refsBySha(refs, refs.head, w).values()) for (const p of l) expect(p.worktree).toBeUndefined();
+    }
+  });
+
+  it('a branch whose worktree is not in the list is still marked, named after its folder', () => {
+    const pills = refsBySha(refs, refs.head, [list[0]]).get(B)!;
+    expect(pills[0].worktree).toEqual({ name: 'feat', path: '/w/feat' });
+  });
+
+  it('adds a pill for another worktree\'s detached HEAD, not for ours or one on a branch', () => {
+    const detached = wt({ path: '/w/d<>', name: 'd<>', head: B });
+    const pills = refsBySha(refs, refs.head, [...list, detached, wt({ path: '/w/me', name: 'me', head: A, current: true })]);
+    const d = pills.get(B)!.find((p) => p.kind === 'worktree')!;
+    expect(d.name).toBe('d<>');
+    expect(pills.get(A)!.some((p) => p.kind === 'worktree')).toBe(false);
+    const h = pillsHtml([d], 1);
+    expect(h).toContain('Detached HEAD of worktree d&lt;&gt;');
+    expect(h).not.toContain('d<>');
+    expect(keepSet(pills, refs.head).has(B)).toBe(true);
+  });
+
+  it('a worktree WIP row is read-only, labelled, and carries the worktree context', () => {
+    const commits = [commit({ sha: B, parents: [] })];
+    const rows = layout(visibleRows(commits, { hideCi: false, isCi: () => false, keep: new Set(), headSha: null, dirty: false, otherWip: [{ path: '/w/feat', head: B }] }).rows).rows;
+    const env: RowEnv = { root: '/w/main', width: 20, selected: 'WIP:/w/feat', headSha: null, jira: {}, pills: new Map(), isCi: () => false, query: '', nowMs: 0, wipCount: 0, wipSummary: '', worktrees: list };
+    const h = rowHtml(rows[0], env);
+    expect(h).toContain('data-sha="WIP:/w/feat"');
+    expect(h).toContain('2 uncommitted changes');
+    expect(h).toContain('feat');
+    expect(h).toContain('webviewSection&quot;:&quot;worktree');
+    expect(h).toContain('path&quot;:&quot;/w/feat');
+    expect(h).toContain('root&quot;:&quot;/w/main');
+    expect(h).toContain(' on');
+    expect(h).not.toContain('data-act');
+    expect(rowHtml(rows[0], { ...env, worktrees: [wt({ path: '/w/feat', name: 'feat', changes: 1 })] })).toContain('1 uncommitted change<');
+  });
+
+  it('the card names the worktree and offers the three actions, escaped', () => {
+    const h = worktreeCardHtml(wt({ path: '/w/<i>', name: '<i>', branch: 'a"b', changes: 3 }));
+    expect(h).not.toContain('<i>');
+    expect(h).toContain('3 changes');
+    for (const a of ['openGraph', 'openWindow', 'terminal']) expect(h).toContain(`data-wt="${a}" data-path="/w/&lt;i&gt;"`);
+    expect(h).toContain('a&quot;b');
+    expect(worktreeCardHtml(wt({ head: B, changes: 1 }))).toContain('detached HEAD bbbbbbb · 1 change<');
+    expect(worktreeCardHtml(wt({ main: true }))).toContain('main worktree');
   });
 });

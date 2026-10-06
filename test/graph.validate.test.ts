@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_COMMIT_TEXT, MAX_FILES, parseFromWebview } from '../src/graph/validate';
+import { MAX_COMMIT_TEXT, MAX_FILES, MAX_PATH, parseFromWebview } from '../src/graph/validate';
 
 const F = { path: 'app/widgets/a.php', origPath: null, status: 'M', untracked: false };
 const R = { path: 'new.txt', origPath: 'old.txt', status: 'R', untracked: false };
@@ -95,5 +95,38 @@ describe('parseFromWebview: inline diff requests', () => {
     expect(parseFromWebview({ type: 'diffWipFile', req: 0, file: F, area: 'staged' })).toBeUndefined();
     expect(parseFromWebview({ type: 'diffWipFile', req: 1, file: F, area: 'other' })).toBeUndefined();
     expect(parseFromWebview({ type: 'diffWipFile', req: 1, file: { ...F, path: '.git/config' }, area: 'staged' })).toBeUndefined();
+  });
+});
+
+describe('parseFromWebview: worktree buttons', () => {
+  it('accepts the three actions with a non-empty path', () => {
+    for (const action of ['openGraph', 'openWindow', 'terminal'] as const) {
+      expect(parseFromWebview({ type: 'worktree', action, path: '/w/x' })).toEqual({ type: 'worktree', action, path: '/w/x' });
+    }
+  });
+
+  it('rejects other actions, a missing, empty, non-string, NUL or oversized path', () => {
+    expect(parseFromWebview({ type: 'worktree', action: 'remove', path: '/w/x' })).toBeUndefined();
+    expect(parseFromWebview({ type: 'worktree', path: '/w/x' })).toBeUndefined();
+    expect(parseFromWebview({ type: 'worktree', action: 'openGraph' })).toBeUndefined();
+    expect(parseFromWebview({ type: 'worktree', action: 'openGraph', path: '' })).toBeUndefined();
+    expect(parseFromWebview({ type: 'worktree', action: 'openGraph', path: 5 })).toBeUndefined();
+    expect(parseFromWebview({ type: 'worktree', action: 'openGraph', path: '/w/\0x' })).toBeUndefined();
+    expect(parseFromWebview({ type: 'worktree', action: 'openGraph', path: '/' + 'x'.repeat(MAX_PATH) })).toBeUndefined();
+  });
+
+  it('strips unknown fields', () => {
+    expect(parseFromWebview({ type: 'worktree', action: 'terminal', path: '/w/x', evil: 1 })).toEqual({ type: 'worktree', action: 'terminal', path: '/w/x' });
+  });
+});
+
+describe('stateMessage: worktrees', () => {
+  it('carries the list, empty by default', async () => {
+    const { stateMessage } = await import('../src/graph/validate');
+    const refs = { head: { branch: null, sha: null }, locals: [], remotes: [], tags: [] };
+    const settings = { ciPattern: '', hideCi: false, jira: {}, logLimit: 10 };
+    expect(stateMessage({ root: '/r', name: 'r' }, 1, refs, [], null, settings).worktrees).toEqual([]);
+    const w = { path: '/w', name: 'w', branch: 'b', head: 'abcdef1', changes: 1, current: false, main: false };
+    expect(stateMessage({ root: '/r', name: 'r' }, 1, refs, [], null, settings, 0, [w]).worktrees).toEqual([w]);
   });
 });

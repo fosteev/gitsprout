@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Commit } from '../src/git/types';
-import { graphWidth, laneX, layout, rowSvg, visibleRows, WIP_SHA, type VisibleOptions } from '../webview/layout';
+import { graphWidth, isWorktreeWipSha, laneX, layout, rowSvg, visibleRows, WIP_SHA, worktreeWipSha, type VisibleOptions } from '../webview/layout';
 
 const c = (sha: string, parents: string[], subject = sha): Commit => ({ sha, parents, author: 'a', email: 'a@x', time: 0, subject, body: '' });
 const opts = (o: Partial<VisibleOptions> = {}): VisibleOptions => ({
@@ -114,5 +114,43 @@ describe('geometry', () => {
     expect(rowSvg(l.rows[0], 40, { head: false, ci: false })).toContain('r="3" fill="var(--g0)"');
     expect(rowSvg(l.rows[1], 40, { head: false, ci: true })).toContain('stroke-width="1.5"');
     expect(rowSvg(l.rows[1], 40, { head: true, ci: false })).toContain('r="7.5"');
+  });
+});
+
+describe('other worktrees\' WIP rows', () => {
+  const hist = [c('c', ['b']), c('b', ['a']), c('a', [])];
+
+  it('one row on top of its head, dashed, with the worktree path', () => {
+    const { rows } = visibleRows(hist, opts({ otherWip: [{ path: '/w/x', head: 'b' }] }));
+    expect(rows.map((r) => r.sha)).toEqual([worktreeWipSha('/w/x'), 'c', 'b', 'a']);
+    expect(rows[0]).toMatchObject({ wip: true, worktree: '/w/x', parents: ['b'] });
+    expect(isWorktreeWipSha(rows[0].sha)).toBe(true);
+    expect(isWorktreeWipSha('c')).toBe(false);
+    const l = layout(rows);
+    expect(l.rows[0].outs).toEqual([0]);
+    expect(l.rows[1].before).toEqual(['~b']); // c sits in its own lane next to the dashed one
+    expect(rowSvg(l.rows[0], 30, { head: false, ci: false })).toContain('stroke-dasharray="2 2"');
+  });
+
+  it('two rows come after our own WIP row, in the given order, and converge on a shared head', () => {
+    const { rows } = visibleRows(hist, opts({ dirty: true, headSha: 'c', otherWip: [{ path: '/w/x', head: 'b' }, { path: '/w/y', head: 'b' }] }));
+    expect(rows.map((r) => r.sha)).toEqual([WIP_SHA, worktreeWipSha('/w/x'), worktreeWipSha('/w/y'), 'c', 'b', 'a']);
+    const l = layout(rows);
+    const b = l.rows.find((r) => r.sha === 'b')!;
+    expect(b.before.filter((v) => v === '~b')).toHaveLength(2); // both dashed lanes end on b
+    expect(l.rows.find((r) => r.sha === 'c')!.outs).toEqual([l.rows.find((r) => r.sha === 'c')!.col]);
+  });
+
+  it('a head hidden by CI hiding hangs on its first visible ancestor', () => {
+    const commits = [c('c', ['b']), c('b', ['a'], 'AutoBuild'), c('a', [])];
+    const { rows } = visibleRows(commits, opts({ hideCi: true, otherWip: [{ path: '/w/x', head: 'b' }] }));
+    expect(rows.map((r) => r.sha)).toEqual([worktreeWipSha('/w/x'), 'c', 'a']);
+    expect(rows[0].parents).toEqual(['a']);
+  });
+
+  it('a head outside the loaded commits gets no row; neither does a hidden chain that leaves them', () => {
+    expect(visibleRows(hist, opts({ otherWip: [{ path: '/w/x', head: 'zzz' }] })).rows.map((r) => r.sha)).toEqual(['c', 'b', 'a']);
+    const cut = [c('c', ['b']), c('b', ['gone'], 'AutoBuild')];
+    expect(visibleRows(cut, opts({ hideCi: true, otherWip: [{ path: '/w/x', head: 'b' }] })).rows.map((r) => r.sha)).toEqual(['c']);
   });
 });
