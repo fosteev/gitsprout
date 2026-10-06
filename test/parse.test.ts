@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  mergeFileStats, parseLog, parseNameStatusZ, parseNumstatZ, parsePatch, parseRefs, parseStashList, parseStatus, parseStatusSummary, parseTrack,
+  mergeFileStats, parseLog, parseNameStatusZ, parseNumstatZ, parsePatch, parseRefs, parseStashList, parseStatus, parseStatusSummary, parseTrack, parseWorktreeList,
 } from '../src/git/parse';
 import { classify, gitEnv, lastLine } from '../src/git/run';
 import { commitMessage, splitMessage } from '../src/git/message';
@@ -67,7 +67,7 @@ describe('parseRefs', () => {
   const out = [
     rec('refs/heads/main', 'm1', 'origin/main', 'ahead 1, behind 2', ''),
     rec('refs/heads/old', 'o1', 'origin/old', 'gone', ''),
-    rec('refs/heads/local', 'l1', '', '', ''),
+    rec('refs/heads/local', 'l1', '', '', '', '/w/local'),
     rec('refs/remotes/origin/HEAD', 'm1', '', '', ''),
     rec('refs/remotes/origin/main', 'm1', '', '', ''),
     rec('refs/remotes/origin/feature/x', 'f1', '', '', ''),
@@ -78,15 +78,45 @@ describe('parseRefs', () => {
     const r = parseRefs(out, { branch: 'main', sha: 'm1' });
     expect(r.head).toEqual({ branch: 'main', sha: 'm1' });
     expect(r.locals).toEqual([
-      { name: 'main', sha: 'm1', upstream: 'origin/main', ahead: 1, behind: 2, upstreamGone: false },
-      { name: 'old', sha: 'o1', upstream: 'origin/old', ahead: 0, behind: 0, upstreamGone: true },
-      { name: 'local', sha: 'l1', upstream: null, ahead: 0, behind: 0, upstreamGone: false },
+      { name: 'main', sha: 'm1', upstream: 'origin/main', ahead: 1, behind: 2, upstreamGone: false, worktree: null },
+      { name: 'old', sha: 'o1', upstream: 'origin/old', ahead: 0, behind: 0, upstreamGone: true, worktree: null },
+      { name: 'local', sha: 'l1', upstream: null, ahead: 0, behind: 0, upstreamGone: false, worktree: '/w/local' },
     ]);
     expect(r.remotes).toEqual([{ name: 'origin/main', sha: 'm1' }, { name: 'origin/feature/x', sha: 'f1' }]);
     expect(r.tags).toEqual([{ name: 'v1', sha: 't1' }, { name: 'v2', sha: 'peeled2' }]);
   });
   it('empty output', () => {
     expect(parseRefs('', { branch: null, sha: null })).toEqual({ head: { branch: null, sha: null }, locals: [], remotes: [], tags: [] });
+  });
+});
+
+describe('parseWorktreeList', () => {
+  const S = 'b'.repeat(40);
+  it('main + linked + detached + bare, locked with and without a reason, prunable with a reason, path with spaces', () => {
+    const out = [
+      `worktree /r/main\nHEAD ${H}\nbranch refs/heads/main\n`,
+      `worktree /r/my repo.worktrees/feat\nHEAD ${S}\nbranch refs/heads/feat/x\nlocked\n`,
+      `worktree /r/wt/why\nHEAD ${S}\nbranch refs/heads/why\nlocked on a usb stick\n`,
+      `worktree /r/wt/det\nHEAD ${S}\ndetached\n`,
+      `worktree /r/wt/gone\nHEAD ${S}\nbranch refs/heads/gone\nprunable gitdir file points to non-existent location\n`,
+      `worktree /r/bare.git\nbare\n`,
+    ].join('\n');
+    const base = { bare: false, locked: null, prunable: null };
+    expect(parseWorktreeList(out)).toEqual([
+      { ...base, path: '/r/main', head: H, branch: 'main', main: true },
+      { ...base, path: '/r/my repo.worktrees/feat', head: S, branch: 'feat/x', main: false, locked: '' },
+      { ...base, path: '/r/wt/why', head: S, branch: 'why', main: false, locked: 'on a usb stick' },
+      { ...base, path: '/r/wt/det', head: S, branch: null, main: false },
+      { ...base, path: '/r/wt/gone', head: S, branch: 'gone', main: false, prunable: 'gitdir file points to non-existent location' },
+      { ...base, path: '/r/bare.git', head: null, branch: null, main: false, bare: true },
+    ]);
+  });
+  it('a bare main worktree is first; prunable without a reason; empty output', () => {
+    const out = `worktree /r/bare.git\nbare\n\nworktree /r/w\nHEAD ${S}\nbranch refs/heads/w\nprunable\n`;
+    const l = parseWorktreeList(out);
+    expect(l[0]).toMatchObject({ main: true, bare: true });
+    expect(l[1].prunable).toBe('prunable');
+    expect(parseWorktreeList('')).toEqual([]);
   });
 });
 

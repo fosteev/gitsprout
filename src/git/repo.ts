@@ -1,11 +1,12 @@
+import { existsSync } from 'node:fs';
 import { classify, run, type RunOptions, type RunResult } from './run';
 import {
-  mergeFileStats, parseLog, parseNameStatusZ, parseNumstatZ, parsePatch, parseRefs, parseStashList, parseStatus, parseStatusSummary,
+  mergeFileStats, parseLog, parseNameStatusZ, parseNumstatZ, parsePatch, parseRefs, parseStashList, parseStatus, parseStatusSummary, parseWorktreeList,
 } from './parse';
 import type { NameStatus } from './parse';
 import { splitMessage } from './message';
 import {
-  GitError, type Commit, type ErrorKind, type FileChange, type FilePatch, type FileStat, type Refs, type Stash, type StashFile, type Status, type SummaryStatus,
+  GitError, type Commit, type ErrorKind, type FileChange, type FilePatch, type FileStat, type Refs, type Stash, type StashFile, type Status, type SummaryStatus, type Worktree,
 } from './types';
 
 type Rule = [RegExp, ErrorKind];
@@ -21,6 +22,20 @@ const LOCAL_CHANGES: Rule[] = [[/would be overwritten|local changes to the follo
 // Case-sensitive and anchored: branch names like `conflict-fix` or `unmerged-ui` show up in unrelated failures.
 const CONFLICT: Rule[] = [[/^CONFLICT \(|Automatic merge failed|you have unmerged files|: needs merge$/m, 'Conflict']];
 const PUSH_REJECTED: Rule[] = [[/\[rejected\]/, 'PushRejected']];
+// Old ("is already checked out at '<path>'") and 2.42+ ("is already used by worktree at '<path>'") wording.
+const CHECKED_OUT_ELSEWHERE: Rule[] = [[/is already (checked out|used by worktree) at|(checked out|used by worktree) at '/i, 'CheckedOutElsewhere']];
+const WORKTREE_RULES: Rule[] = [
+  ...CHECKED_OUT_ELSEWHERE,
+  [/locked working tree|is locked/i, 'WorktreeLocked'],
+  [/contains modified or untracked files/i, 'WorktreeDirty'],
+];
+
+/** What `Repo.addWorktree` creates; `path` is absolute. */
+export type WorktreeSpec =
+  | { path: string; branch: string }
+  | { path: string; newBranch: string; base: string }
+  | { path: string; track: string; newBranch: string }
+  | { path: string; detach: string };
 
 /** A fetch running longer than this in total is killed with its children (a dead VPN/remote would otherwise hang the progress forever). */
 export const FETCH_TIMEOUT_MS = 300_000;
@@ -57,7 +72,7 @@ export class Repo {
   }
 
   async refs(): Promise<Refs> {
-    const fmt = '%(refname)%00%(objectname)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(*objectname)';
+    const fmt = '%(refname)%00%(objectname)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(*objectname)%00%(worktreepath)';
     const [list, sym, head] = await Promise.all([
       this.git(['for-each-ref', `--format=${fmt}`, 'refs/heads', 'refs/remotes', 'refs/tags'], READ),
       this.git(['symbolic-ref', '-q', '--short', 'HEAD'], { ...READ, okCodes: [1] }),
@@ -67,6 +82,12 @@ export class Repo {
       branch: sym.code === 0 ? sym.stdout.trim() || null : null,
       sha: head.code === 0 ? head.stdout.trim() || null : null,
     });
+  }
+
+  /** Every worktree of the repo, the main one first. A folder that is gone is marked `prunable = 'missing'` even if git is too old to say so. */
+  async worktrees(): Promise<Worktree[]> {
+    const { stdout } = await this.git(['worktree', 'list', '--porcelain'], READ);
+    return parseWorktreeList(stdout).map((w) => (w.prunable === null && !w.bare && !existsSync(w.path) ? { ...w, prunable: 'missing' } : w));
   }
 
   async log(limit: number): Promise<Commit[]> {
@@ -195,7 +216,7 @@ export class Repo {
   // ---- branches ----
 
   async checkout(name: string): Promise<void> {
-    await this.git(['switch', '--end-of-options', name], {}, LOCAL_CHANGES);
+    await this.git(['switch', '--end-of-options', name], {}, [...LOCAL_CHANGES, ...CHECKED_OUT_ELSEWHERE]);
   }
 
   async checkoutRemote(remote: string): Promise<void> {
@@ -224,7 +245,30 @@ export class Repo {
   }
 
   async deleteBranch(name: string, force: boolean): Promise<void> {
-    await this.git(['branch', force ? '-D' : '-d', '--end-of-options', name], {}, [[/not fully merged/i, 'NotFullyMerged']]);
+    await this.git(['branch', force ? '-D' : '-d', '--end-of-options', name], {}, [[/not fully merged/i, 'NotFullyMerged'], ...CHECKED_OUT_ELSEWHERE]);
+  }
+
+  // ---- worktrees ----
+
+  async addWorktree(spec: WorktreeSpec): Promise<void> {
+    const args = 'detach' in spec ? ['--detach', '--end-of-options', spec.path, spec.detach]
+      : 'track' in spec ? ['--track', '-b', spec.newBranch, '--end-of-options', spec.path, spec.track]
+      : 'newBranch' in spec ? ['-b', spec.newBranch, '--end-of-options', spec.path, spec.base]
+      : ['--end-of-options', spec.path, spec.branch];
+    await this.git(['worktree', 'add', ...args], {}, WORKTREE_RULES);
+  }
+
+  /** `force` only after the user confirmed losing changes; a locked worktree is never force-removed (no `-f -f`). */
+  async removeWorktree(path: string, force: boolean): Promise<void> {
+    await this.git(['worktree', 'remove', ...(force ? ['--force'] : []), '--end-of-options', path], {}, WORKTREE_RULES);
+  }
+
+  async unlockWorktree(path: string): Promise<void> {
+    await this.git(['worktree', 'unlock', '--end-of-options', path]);
+  }
+
+  async pruneWorktrees(): Promise<void> {
+    await this.git(['worktree', 'prune']);
   }
 
   // ---- tags ----

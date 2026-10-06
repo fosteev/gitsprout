@@ -5,7 +5,7 @@ import { branchOwners, childrenOf, containedIn, mergedBranch } from '../webview/
 const c = (sha: string, parents: string[], subject = sha): Commit => ({ sha, parents, author: 'a', email: 'a@x', time: 0, subject, body: '' });
 const refs = (locals: Record<string, string>, remotes: Record<string, string> = {}, tags: Record<string, string> = {}): Refs => ({
   head: { branch: null, sha: null },
-  locals: Object.entries(locals).map(([name, sha]) => ({ name, sha, upstream: null, ahead: 0, behind: 0, upstreamGone: false })),
+  locals: Object.entries(locals).map(([name, sha]) => ({ name, sha, upstream: null, ahead: 0, behind: 0, upstreamGone: false, worktree: null })),
   remotes: Object.entries(remotes).map(([name, sha]) => ({ name, sha })),
   tags: Object.entries(tags).map(([name, sha]) => ({ name, sha })),
 });

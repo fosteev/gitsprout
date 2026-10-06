@@ -1,5 +1,5 @@
 // Pure parsers over git output. No I/O.
-import type { Commit, FileChange, FilePatch, FileStat, FileStatus, Head, Hunk, LocalBranch, RemoteBranch, Refs, Stash, Status, SummaryStatus, Tag } from './types';
+import type { Commit, FileChange, FilePatch, FileStat, FileStatus, Head, Hunk, LocalBranch, RemoteBranch, Refs, Stash, Status, SummaryStatus, Tag, Worktree } from './types';
 
 const nonEmpty = (s: string) => s.length > 0;
 
@@ -92,7 +92,7 @@ export function parseTrack(text: string): { ahead: number; behind: number; gone:
 }
 
 /**
- * `for-each-ref --format=%(refname)%00%(objectname)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(*objectname)`
+ * `for-each-ref --format=%(refname)%00%(objectname)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(*objectname)%00%(worktreepath)`
  * over refs/heads, refs/remotes, refs/tags (one record per line). `head` comes from separate calls.
  */
 export function parseRefs(out: string, head: Head): Refs {
@@ -101,10 +101,10 @@ export function parseRefs(out: string, head: Head): Refs {
   const tags: Tag[] = [];
   for (const line of out.split('\n')) {
     if (!line) continue;
-    const [ref, sha, upstream = '', track = '', peeled = ''] = line.split('\0');
+    const [ref, sha, upstream = '', track = '', peeled = '', worktree = ''] = line.split('\0');
     if (ref.startsWith('refs/heads/')) {
       const tr = parseTrack(track);
-      locals.push({ name: ref.slice('refs/heads/'.length), sha, upstream: upstream || null, ahead: tr.ahead, behind: tr.behind, upstreamGone: tr.gone });
+      locals.push({ name: ref.slice('refs/heads/'.length), sha, upstream: upstream || null, ahead: tr.ahead, behind: tr.behind, upstreamGone: tr.gone, worktree: worktree || null });
     } else if (ref.startsWith('refs/remotes/')) {
       const name = ref.slice('refs/remotes/'.length);
       if (name.endsWith('/HEAD')) continue;
@@ -114,6 +114,38 @@ export function parseRefs(out: string, head: Head): Refs {
     }
   }
   return { head, locals, remotes, tags };
+}
+
+/**
+ * `worktree list --porcelain`: records separated by a blank line; lines `worktree <path>`, `HEAD <sha>`,
+ * `branch refs/heads/<name>`, `detached`, `bare`, `locked[ <reason>]`, `prunable[ <reason>]`. The first record is the main
+ * worktree. `prunable` is only what git reports (git >= 2.31); `Repo.worktrees()` fills in missing folders.
+ * Paths containing a newline are not supported (`-z` needs git 2.36, the minimum is 2.24).
+ */
+export function parseWorktreeList(out: string): Worktree[] {
+  const list: Worktree[] = [];
+  for (const block of out.split(/\r?\n\r?\n/)) {
+    let wt: Worktree | null = null;
+    for (const line of block.split(/\r?\n/)) {
+      if (!line) continue;
+      if (line.startsWith('worktree ')) {
+        wt = { path: line.slice('worktree '.length), head: null, branch: null, bare: false, main: list.length === 0, locked: null, prunable: null };
+        continue;
+      }
+      if (!wt) continue;
+      if (line.startsWith('HEAD ')) {
+        const sha = line.slice('HEAD '.length);
+        wt.head = /^0+$/.test(sha) ? null : sha;
+      } else if (line.startsWith('branch ')) {
+        const ref = line.slice('branch '.length);
+        wt.branch = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+      } else if (line === 'bare') wt.bare = true;
+      else if (line === 'locked' || line.startsWith('locked ')) wt.locked = line.slice('locked'.length).trim();
+      else if (line === 'prunable' || line.startsWith('prunable ')) wt.prunable = line.slice('prunable'.length).trim() || 'prunable';
+    }
+    if (wt) list.push(wt);
+  }
+  return list;
 }
 
 /** `log -z --format=%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%s%x1f%b` */

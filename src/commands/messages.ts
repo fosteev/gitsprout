@@ -214,7 +214,7 @@ export const committedFlash = (sha: string): string => `Committed ${shortSha(sha
 
 export type Op = 'fetch' | 'pull' | 'push' | 'checkout' | 'create' | 'rename' | 'delete' | 'stash' | 'apply' | 'pop' | 'drop'
   | 'tag' | 'reset' | 'cherryPick' | 'revert' | 'upstream' | 'compare'
-  | 'stage' | 'unstage' | 'discard' | 'commit';
+  | 'stage' | 'unstage' | 'discard' | 'commit' | 'worktreeAdd' | 'worktreeRemove' | 'worktreeUnlock' | 'worktreePrune';
 export type ActionId = 'pull' | 'publish' | 'terminal' | 'scm' | 'stash' | 'output';
 export interface ErrorPlan { text: string; level: 'error' | 'warn' | 'info'; actions: ActionId[] }
 
@@ -227,6 +227,7 @@ const OP_WORD: Record<Op, string> = {
   delete: 'Delete branch', stash: 'Stash', apply: 'Apply stash', pop: 'Pop stash', drop: 'Drop stash',
   tag: 'Tag', reset: 'Reset', cherryPick: 'Cherry pick', revert: 'Revert', upstream: 'Set upstream', compare: 'Compare',
   stage: 'Stage', unstage: 'Unstage', discard: 'Discard', commit: 'Commit',
+  worktreeAdd: 'Create worktree', worktreeRemove: 'Remove worktree', worktreeUnlock: 'Unlock worktree', worktreePrune: 'Prune worktrees',
 };
 const NETWORK: readonly Op[] = ['fetch', 'pull', 'push'];
 
@@ -265,6 +266,15 @@ function basePlan(e: { kind: ErrorKind; message: string }, op: Op, branch?: stri
       };
     case 'LocalChanges':
       return { text: `Your local changes would be overwritten by ${op === 'apply' || op === 'pop' ? 'the stash' : OP_WORD[op].toLowerCase()}. Commit or stash them first.`, level: 'error', actions: op === 'apply' || op === 'pop' ? ['scm'] : ['stash', 'scm'] };
+    case 'CheckedOutElsewhere': {
+      // git: "fatal: 'x' is already checked out at '/p'" / "... is already used by worktree at '/p'"
+      const at = /(?:checked out|used by worktree) at '([^']+)'/i.exec(e.message)?.[1];
+      return { text: `Branch ${branch ? `'${branch}' ` : ''}is checked out in another worktree${at ? ` (${at})` : ''}.`, level: 'warn', actions: [] };
+    }
+    case 'WorktreeLocked':
+      return { text: 'The worktree is locked. Unlock it first, then try again.', level: 'warn', actions: [] };
+    case 'WorktreeDirty':
+      return { text: 'The worktree has uncommitted changes.', level: 'warn', actions: [] };
     case 'NothingToStash':
       return { text: 'There are no changes to stash.', level: 'info', actions: [] };
     default:

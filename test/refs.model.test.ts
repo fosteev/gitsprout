@@ -5,7 +5,7 @@ import {
 } from '../src/views/refsModel';
 
 const lb = (name: string, o: Partial<LocalBranch> = {}): LocalBranch =>
-  ({ name, sha: 'a'.repeat(40), upstream: `origin/${name}`, ahead: 0, behind: 0, upstreamGone: false, ...o });
+  ({ name, sha: 'a'.repeat(40), upstream: `origin/${name}`, ahead: 0, behind: 0, upstreamGone: false, worktree: null, ...o });
 
 describe('branch rows', () => {
   it('descriptions', () => {

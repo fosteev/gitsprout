@@ -89,7 +89,7 @@ describe('command arguments', () => {
 describe('checkout quick pick', () => {
   const refs: Refs = {
     head: { branch: 'main', sha: SHA },
-    locals: [{ name: 'main', sha: SHA, upstream: null, ahead: 0, behind: 0, upstreamGone: false }, { name: 'dev', sha: 'b'.repeat(40), upstream: null, ahead: 0, behind: 0, upstreamGone: false }],
+    locals: [{ name: 'main', sha: SHA, upstream: null, ahead: 0, behind: 0, upstreamGone: false, worktree: null }, { name: 'dev', sha: 'b'.repeat(40), upstream: null, ahead: 0, behind: 0, upstreamGone: false, worktree: null }],
     remotes: [{ name: 'origin/main', sha: SHA }],
     tags: [{ name: 'v1.9', sha: SHA }, { name: 'v1.10', sha: SHA }],
   };
@@ -124,6 +124,19 @@ describe('errorPlan', () => {
     expect(errorPlan(E('Other'), 'checkout')?.actions).toEqual([]);
     expect(errorPlan(E('NoUpstream'), 'push', 'x')?.actions).toEqual(['publish']);
     expect(ACTION_LABEL.output).toBe('Show Command Output');
+  });
+  it('worktree error kinds: old and new git wording', () => {
+    const old = "fatal: 'feat' is already checked out at '/r/wt'";
+    const neu = "fatal: 'feat' is already used by worktree at '/r/wt'";
+    for (const message of [old, neu]) {
+      expect(errorPlan({ kind: 'CheckedOutElsewhere', message }, 'checkout', 'feat'))
+        .toEqual({ text: "Branch 'feat' is checked out in another worktree (/r/wt).", level: 'warn', actions: [] });
+    }
+    expect(errorPlan({ kind: 'CheckedOutElsewhere', message: 'x' }, 'delete')?.text).toBe('Branch is checked out in another worktree.');
+    expect(errorPlan({ kind: 'WorktreeLocked', message: "fatal: cannot remove a locked working tree, lock reason: x" }, 'worktreeRemove'))
+      .toMatchObject({ level: 'warn', text: expect.stringContaining('Unlock') });
+    expect(errorPlan({ kind: 'WorktreeDirty', message: "fatal: '/r/wt' contains modified or untracked files, use --force to delete it" }, 'worktreeRemove'))
+      .toMatchObject({ level: 'warn', text: expect.stringContaining('uncommitted changes') });
   });
   it('a cancelled call shows nothing; Auth outside network ops is a plain error', () => {
     expect(errorPlan(E('Cancelled'), 'fetch')).toBeNull();

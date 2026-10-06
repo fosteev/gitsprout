@@ -1,5 +1,6 @@
 export type ErrorKind = 'NotARepo' | 'GitMissing' | 'PushRejected' | 'NoUpstream' | 'Conflict'
-  | 'LocalChanges' | 'NotFullyMerged' | 'Auth' | 'NothingToStash' | 'Cancelled' | 'Other';
+  | 'LocalChanges' | 'NotFullyMerged' | 'Auth' | 'NothingToStash' | 'CheckedOutElsewhere' | 'WorktreeLocked' | 'WorktreeDirty'
+  | 'Cancelled' | 'Other';
 
 export class GitError extends Error {
   constructor(
@@ -25,7 +26,25 @@ export interface RepoSummary extends SummaryStatus {
   group: string; // first segment of relPath ('' for a top-level repo)
 }
 export interface Head { branch: string | null; sha: string | null } // branch null = detached, sha null = unborn
-export interface LocalBranch { name: string; sha: string; upstream: string | null; ahead: number; behind: number; upstreamGone: boolean }
+export interface LocalBranch {
+  name: string; sha: string; upstream: string | null; ahead: number; behind: number; upstreamGone: boolean;
+  /** Path of the worktree where the branch is checked out (the current root included); null = checked out nowhere. */
+  worktree: string | null;
+}
+/** One `git worktree list --porcelain` record. */
+export interface Worktree {
+  path: string;
+  head: string | null;
+  /** Short branch name; null = detached or bare. */
+  branch: string | null;
+  bare: boolean;
+  /** The first record of the list. */
+  main: boolean;
+  /** Lock reason; '' = locked without a reason; null = not locked. */
+  locked: string | null;
+  /** Prune reason (as git reports it, or 'missing' filled in by `Repo.worktrees()`); null = not prunable. */
+  prunable: string | null;
+}
 export interface RemoteBranch { name: string; sha: string } // "origin/develop"
 export interface Tag { name: string; sha: string } // peeled commit sha
 export interface Refs { head: Head; locals: LocalBranch[]; remotes: RemoteBranch[]; tags: Tag[] }

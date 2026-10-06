@@ -37,7 +37,7 @@ describe('format', () => {
 describe('render', () => {
   const refs: Refs = {
     head: { branch: 'develop', sha: SHA },
-    locals: [{ name: 'x', sha: SHA, upstream: null, ahead: 0, behind: 0, upstreamGone: false }, { name: 'develop', sha: SHA, upstream: null, ahead: 0, behind: 0, upstreamGone: false }],
+    locals: [{ name: 'x', sha: SHA, upstream: null, ahead: 0, behind: 0, upstreamGone: false, worktree: null }, { name: 'develop', sha: SHA, upstream: null, ahead: 0, behind: 0, upstreamGone: false, worktree: null }],
     remotes: [{ name: 'origin/develop', sha: SHA }], tags: [{ name: 'v1', sha: SHA }],
   };
 
@@ -103,7 +103,7 @@ describe('webview message validation', () => {
   it('keepSet: every ref tip plus a detached HEAD commit', () => {
     const refs: Refs = {
       head: { branch: null, sha: 'd'.repeat(40) },
-      locals: [{ name: 'main', sha: 'a'.repeat(40), upstream: null, ahead: 0, behind: 0, upstreamGone: false }],
+      locals: [{ name: 'main', sha: 'a'.repeat(40), upstream: null, ahead: 0, behind: 0, upstreamGone: false, worktree: null }],
       remotes: [{ name: 'origin/main', sha: 'b'.repeat(40) }],
       tags: [{ name: 'v1', sha: 'c'.repeat(40) }],
     };
