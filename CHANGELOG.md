@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0
+
+- Hovering a node in the commit graph shows which branch the commit was made on and which other branches contain it. Git does not record the branch, so it is inferred from first-parent chains (main/master/develop first); a deleted branch is named from its merge commit's message.
+
 ## 0.1.0
 
 First release.

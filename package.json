@@ -2,7 +2,7 @@
   "name": "gitsprout",
   "displayName": "Gitsprout",
   "description": "Multi-repo git overview, commit graph and native diffs for VS Code and Cursor.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "fosteev",
   "license": "MIT",
   "repository": {
