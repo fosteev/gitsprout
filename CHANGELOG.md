@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- The checked-out branch (Branches) and the active repository (Repositories) are highlighted: green icon and green label. The colour is themable as `gitsprout.currentForeground`.
+
 ## 0.3.0
 
 - Git worktrees: a Worktrees view (create from a branch, remote branch, new branch or commit; open as a graph tab, in a new or this window, as a workspace folder or in a terminal; remove, unlock, prune), `gitsprout.worktreeFolder` for the default location, linked worktrees nested under their repo in Repositories, branches checked out elsewhere marked and guarded against checkout.
