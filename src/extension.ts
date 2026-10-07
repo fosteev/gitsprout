@@ -8,6 +8,7 @@ import { REPO_COMMAND_IDS, registerRepoCommands } from './commands/repos';
 import { registerWorktreeCommands, WORKTREE_COMMAND_IDS } from './commands/worktrees';
 import { GRAPH_COMMAND_IDS, registerGraph } from './graph/panel';
 import { createLog } from './util/log';
+import { registerCurrentMark } from './views/currentMark';
 import { RepositoriesView } from './views/repositories';
 import { createStatusBar } from './views/statusBar';
 import { WorktreesView } from './views/worktrees';
@@ -22,7 +23,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const registry = new Registry(log, context.workspaceState);
   const view = new RepositoriesView(registry, context.workspaceState);
   const worktrees = new WorktreesView(registry, log);
-  context.subscriptions.push(registry, view, worktrees, createStatusBar(registry));
+  context.subscriptions.push(registerCurrentMark(), registry, view, worktrees, createStatusBar(registry));
   registerRepoCommands(context, registry, view, log);
   registerRefViews(context, registry, log);
   const mutator = registerMutations(context, registry, log);

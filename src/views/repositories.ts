@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { Registry } from '../workspace/registry';
 import { buildRepoTree, repoDescription, repoTooltip, viewDescription, type RepoTreeNode } from './repoModel';
+import { CURRENT_COLOR, CURRENT_URI } from './currentMark';
 
 const FILTER_KEY = 'gitsprout.onlyAttention';
 /** Internal (not contributed): a click on a repo row. Selection events alone miss a click on the already selected row. */
@@ -100,7 +101,8 @@ export class RepositoriesView implements vscode.TreeDataProvider<RepoTreeNode>, 
     item.tooltip = repoTooltip(r);
     item.contextValue = 'repo';
     item.command = { command: ACTIVATE_CMD, title: 'Make Active', arguments: [r.root] };
-    item.iconPath = new vscode.ThemeIcon('repo', active ? new vscode.ThemeColor('charts.green') : undefined);
+    item.iconPath = new vscode.ThemeIcon('repo', active ? CURRENT_COLOR : undefined);
+    if (active) item.resourceUri = CURRENT_URI;
     return item;
   }
 

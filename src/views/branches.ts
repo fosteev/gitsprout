@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
 import { branchContext, checkedOutElsewhere, branchDescription, buildBranchTree, short, type BranchLeaf, type BranchNode } from './refsModel';
+import { CURRENT_COLOR, CURRENT_URI } from './currentMark';
 import { createRefTree, REVEAL_CMD, type RefsStore } from './refsStore';
 import type { Registry } from '../workspace/registry';
 
-/** Branches: locals grouped by the first `/` segment; HEAD has a check icon. Commands receive the `BranchLeaf`. */
+/** Branches: locals grouped by the first `/` segment; HEAD has a green check and a green label. Commands receive the `BranchLeaf`. */
 export class BranchesView implements vscode.TreeDataProvider<BranchNode> {
   private readonly emitter = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.emitter.event;
@@ -26,7 +27,8 @@ export class BranchesView implements vscode.TreeDataProvider<BranchNode> {
     }
     const item = new vscode.TreeItem(n.label, vscode.TreeItemCollapsibleState.None);
     item.id = `${root}|${n.key}`;
-    item.iconPath = new vscode.ThemeIcon(n.isHead ? 'check' : 'git-branch');
+    item.iconPath = n.isHead ? new vscode.ThemeIcon('check', CURRENT_COLOR) : new vscode.ThemeIcon('git-branch');
+    if (n.isHead) item.resourceUri = CURRENT_URI;
     item.description = branchDescription(n.branch, root, n.isHead);
     item.contextValue = branchContext(n.isHead, checkedOutElsewhere(n.branch, root, n.isHead));
     item.tooltip = `${n.branch.name} · ${short(n.branch.sha)}${n.branch.upstream ? ` → ${n.branch.upstream}` : ''}`;

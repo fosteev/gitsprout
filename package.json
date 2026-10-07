@@ -42,6 +42,13 @@
     "onWebviewPanel:gitsprout.graph"
   ],
   "contributes": {
+    "colors": [
+      {
+        "id": "gitsprout.currentForeground",
+        "description": "Label and icon colour of the checked-out branch and the active repository.",
+        "defaults": { "dark": "charts.green", "light": "charts.green", "highContrast": "charts.green", "highContrastLight": "charts.green" }
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
