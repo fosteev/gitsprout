@@ -3,6 +3,7 @@ import type { CommitContext, GraphWorktree, WipContext, WorktreeAction, Worktree
 import type { Commit, FileChange, FilePatch, FileStat, Head, Hunk, Refs, Status } from '../src/git/types';
 import { esc, fmtAgo, fmtAgoLong, jiraUrl, minutesAgo, parseSubject, splitPath } from './format';
 import type { Owner } from './branches';
+import { highlightLines } from './highlight';
 import { LANE_COLORS, rowSvg, WIP_SHA, type LaidRow } from './layout';
 import { buildTree, dirPaths, type TreeNode } from './wipTree';
 
@@ -409,47 +410,68 @@ export function diffBarHtml(b: DiffBar): string {
 
 const num = (n: number | null): string => (n === null ? '' : String(n));
 
-function inlineRowsHtml(hunks: Hunk[]): string {
-  return hunks.map((h) => `<span class="dfold">${esc(h.header)}</span>` + h.lines.map((l) => {
-    const c = l.kind === '+' ? ' ins' : l.kind === '-' ? ' rem' : '';
-    return `<span class="dn${c}">${num(l.old)}</span><span class="dn${c}">${num(l.new)}</span><span class="dg${c}">${l.kind === ' ' ? '' : l.kind}</span><span class="dc${c}">${esc(l.text)}</span>`;
-  }).join('')).join('');
+/** Per-line HTML of a hunk: `old` for context and `-` lines, `new` for context and `+` lines (each side highlighted as one block). */
+function hunkSides(h: Hunk, lang: string | null): { old: string[]; new: string[] } {
+  const oldIdx: number[] = [];
+  const newIdx: number[] = [];
+  h.lines.forEach((l, i) => { if (l.kind !== '+') oldIdx.push(i); if (l.kind !== '-') newIdx.push(i); });
+  const side = (idx: number[]): string[] => {
+    const html = highlightLines(idx.map((i) => h.lines[i].text), lang);
+    const out: string[] = new Array(h.lines.length).fill('');
+    idx.forEach((i, k) => { out[i] = html[k]; });
+    return out;
+  };
+  return { old: side(oldIdx), new: side(newIdx) };
+}
+
+function inlineRowsHtml(hunks: Hunk[], lang: string | null): string {
+  return hunks.map((h) => {
+    const sides = hunkSides(h, lang);
+    return `<span class="dfold">${esc(h.header)}</span>` + h.lines.map((l, i) => {
+      const c = l.kind === '+' ? ' ins' : l.kind === '-' ? ' rem' : '';
+      const code = l.kind === '-' ? sides.old[i] : sides.new[i];
+      return `<span class="dn${c}">${num(l.old)}</span><span class="dn${c}">${num(l.new)}</span><span class="dg${c}">${l.kind === ' ' ? '' : l.kind}</span><span class="dc${c}">${code}</span>`;
+    }).join('');
+  }).join('');
 }
 
 const fill = (right: boolean): string => `<span class="dn fill${right ? ' dr' : ''}"></span><span class="dc fill"></span>`;
 
-function splitRowsHtml(hunks: Hunk[]): string {
+function splitRowsHtml(hunks: Hunk[], lang: string | null): string {
   return hunks.map((h) => {
+    const sides = hunkSides(h, lang);
     let out = `<span class="dfold">${esc(h.header)}</span>`;
     const ls = h.lines;
     for (let i = 0; i < ls.length;) {
       if (ls[i].kind === ' ') {
-        const l = ls[i++];
-        out += `<span class="dn">${num(l.old)}</span><span class="dc">${esc(l.text)}</span><span class="dn dr">${num(l.new)}</span><span class="dc">${esc(l.text)}</span>`;
+        const l = ls[i];
+        out += `<span class="dn">${num(l.old)}</span><span class="dc">${sides.old[i]}</span><span class="dn dr">${num(l.new)}</span><span class="dc">${sides.new[i]}</span>`;
+        i++;
         continue;
       }
       // a run of removals followed by a run of additions is shown side by side, row by row
-      const dels: typeof ls = [];
-      const adds: typeof ls = [];
-      while (i < ls.length && ls[i].kind === '-') dels.push(ls[i++]);
-      while (i < ls.length && ls[i].kind === '+') adds.push(ls[i++]);
+      const dels: number[] = [];
+      const adds: number[] = [];
+      while (i < ls.length && ls[i].kind === '-') dels.push(i++);
+      while (i < ls.length && ls[i].kind === '+') adds.push(i++);
       for (let k = 0; k < Math.max(dels.length, adds.length); k++) {
         const d = dels[k];
         const a = adds[k];
-        out += (d ? `<span class="dn rem">${num(d.old)}</span><span class="dc rem">${esc(d.text)}</span>` : fill(false))
-          + (a ? `<span class="dn ins dr">${num(a.new)}</span><span class="dc ins">${esc(a.text)}</span>` : fill(true));
+        out += (d !== undefined ? `<span class="dn rem">${num(ls[d].old)}</span><span class="dc rem">${sides.old[d]}</span>` : fill(false))
+          + (a !== undefined ? `<span class="dn ins dr">${num(ls[a].new)}</span><span class="dc ins">${sides.new[a]}</span>` : fill(true));
       }
     }
     return out;
   }).join('');
 }
 
-export function diffBodyHtml(body: DiffBody, mode: DiffMode): string {
+/** `lang` (a highlight.js language, see `languageFor`) turns highlighting on: `.hl` on the grid, token spans in the code cells. */
+export function diffBodyHtml(body: DiffBody, mode: DiffMode, lang: string | null = null): string {
   if (body === 'loading') return '<div class="dnote">Loading…</div>';
   if ('error' in body) return `<div class="dnote err">${esc(body.error)}</div>`;
   if (body.binary) return '<div class="dnote">Binary file — not shown.</div>';
   if (body.hunks.length === 0) return '<div class="dnote">No content changes.</div>';
-  return `<div class="dgrid ${mode === 'split' ? 'dsbs' : 'dinl'}">${mode === 'split' ? splitRowsHtml(body.hunks) : inlineRowsHtml(body.hunks)}</div>`
+  return `<div class="dgrid ${mode === 'split' ? 'dsbs' : 'dinl'}${lang ? ' hl' : ''}">${mode === 'split' ? splitRowsHtml(body.hunks, lang) : inlineRowsHtml(body.hunks, lang)}</div>`
     + (body.truncated ? `<div class="dnote">${DIFF_TRUNCATED_NOTE}</div>` : '');
 }
 

@@ -184,6 +184,35 @@ describe('diff rendering', () => {
     expect(del).toContain('<span class="dn rem">1</span><span class="dc rem">y</span><span class="dn fill dr"></span><span class="dc fill"></span>');
   });
 
+  it('with lang: .hl on the grid, tokens in code cells, old side for - and new side for + (inline)', () => {
+    const p = patch([line(' ', '/* c', 1, 1), line('-', ' old */ let a', 2, null), line('+', ' new */ let b', null, 2)]);
+    const html = diffBodyHtml(p, 'inline', 'javascript');
+    expect(html).toContain('class="dgrid dinl hl"');
+    expect(html).toContain('<span class="dc"><span class="hljs-comment">/* c</span></span>');
+    expect(html).toContain('<span class="dc rem"><span class="hljs-comment"> old */</span> <span class="hljs-keyword">let</span> a</span>');
+    expect(html).toContain('<span class="dc ins"><span class="hljs-comment"> new */</span> <span class="hljs-keyword">let</span> b</span>');
+    expect(diffBodyHtml(p, 'inline')).not.toContain('hljs');
+    expect(diffBodyHtml(p, 'inline')).not.toContain(' hl"');
+  });
+
+  it('with lang: split highlights both sides, context on each', () => {
+    const html = diffBodyHtml(mixed, 'split', 'javascript');
+    expect(html).toContain('class="dgrid dsbs hl"');
+    const p = patch([line(' ', 'let a', 1, 1), line('-', 'let b', 2, null), line('+', 'let c', null, 2)]);
+    const s = diffBodyHtml(p, 'split', 'javascript');
+    const kw = '<span class="hljs-keyword">let</span>';
+    expect(s).toContain(`<span class="dc">${kw} a</span><span class="dn dr">1</span><span class="dc">${kw} a</span>`);
+    expect(s).toContain(`<span class="dc rem">${kw} b</span><span class="dn ins dr">2</span><span class="dc ins">${kw} c</span>`);
+  });
+
+  it('with lang: unknown language and hostile content stay escaped', () => {
+    const p = patch([line('+', '<img src=x onerror=alert(1)>', null, 1)]);
+    for (const lang of ['nope', 'xml', 'javascript']) {
+      const html = diffBodyHtml(p, 'inline', lang);
+      expect(html).not.toContain('<img');
+    }
+  });
+
   it('escapes file content in both modes', () => {
     const p = patch([line('+', '<img src=x onerror=alert(1)> & "q"', null, 1)]);
     for (const mode of ['inline', 'split'] as const) {

@@ -46,7 +46,12 @@
       {
         "id": "gitsprout.currentForeground",
         "description": "Label and icon colour of the checked-out branch and the active repository.",
-        "defaults": { "dark": "charts.green", "light": "charts.green", "highContrast": "charts.green", "highContrastLight": "charts.green" }
+        "defaults": {
+          "dark": "charts.green",
+          "light": "charts.green",
+          "highContrast": "charts.green",
+          "highContrastLight": "charts.green"
+        }
       }
     ],
     "viewsContainers": {
@@ -781,24 +786,72 @@
         }
       ],
       "gitsprout.resetSubmenu": [
-        { "command": "gitsprout.resetSoft", "group": "reset@1" },
-        { "command": "gitsprout.resetMixed", "group": "reset@2" },
-        { "command": "gitsprout.resetHard", "group": "reset@3" }
+        {
+          "command": "gitsprout.resetSoft",
+          "group": "reset@1"
+        },
+        {
+          "command": "gitsprout.resetMixed",
+          "group": "reset@2"
+        },
+        {
+          "command": "gitsprout.resetHard",
+          "group": "reset@3"
+        }
       ],
       "commandPalette": [
-        { "command": "gitsprout.wipStage", "when": "false" },
-        { "command": "gitsprout.wipUnstage", "when": "false" },
-        { "command": "gitsprout.wipDiscard", "when": "false" },
-        { "command": "gitsprout.worktreeCreateFrom", "when": "false" },
-        { "command": "gitsprout.worktreeOpenGraph", "when": "false" },
-        { "command": "gitsprout.worktreeOpenWindow", "when": "false" },
-        { "command": "gitsprout.worktreeOpenHere", "when": "false" },
-        { "command": "gitsprout.worktreeAddToWorkspace", "when": "false" },
-        { "command": "gitsprout.worktreeTerminal", "when": "false" },
-        { "command": "gitsprout.worktreeReveal", "when": "false" },
-        { "command": "gitsprout.worktreeCopyPath", "when": "false" },
-        { "command": "gitsprout.worktreeRemove", "when": "false" },
-        { "command": "gitsprout.worktreeUnlock", "when": "false" },
+        {
+          "command": "gitsprout.wipStage",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.wipUnstage",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.wipDiscard",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.worktreeCreateFrom",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.worktreeOpenGraph",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.worktreeOpenWindow",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.worktreeOpenHere",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.worktreeAddToWorkspace",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.worktreeTerminal",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.worktreeReveal",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.worktreeCopyPath",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.worktreeRemove",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.worktreeUnlock",
+          "when": "false"
+        },
         {
           "command": "gitsprout.openStashFile",
           "when": "false"
@@ -887,9 +940,18 @@
           "command": "gitsprout.setUpstream",
           "when": "false"
         },
-        { "command": "gitsprout.resetSoft", "when": "false" },
-        { "command": "gitsprout.resetMixed", "when": "false" },
-        { "command": "gitsprout.resetHard", "when": "false" },
+        {
+          "command": "gitsprout.resetSoft",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.resetMixed",
+          "when": "false"
+        },
+        {
+          "command": "gitsprout.resetHard",
+          "when": "false"
+        },
         {
           "command": "gitsprout.cherryPick",
           "when": "false"
@@ -920,68 +982,142 @@
         "mac": "alt+cmd+r"
       }
     ],
-    "configuration": {
-      "title": "Gitsprout",
-      "properties": {
-        "gitsprout.scanDepth": {
-          "type": "number",
-          "default": 3,
-          "minimum": 0,
-          "description": "How deep to scan workspace folders for git repositories."
-        },
-        "gitsprout.scanExclude": {
-          "type": "array",
-          "items": {
-            "type": "string"
+    "configuration": [
+      {
+        "title": "Diff",
+        "order": 0,
+        "properties": {
+          "gitsprout.diff.syntaxHighlighting": {
+            "type": "boolean",
+            "default": true,
+            "description": "Highlight syntax in the graph's inline diff.",
+            "order": 0
           },
-          "default": [
-            "**/node_modules",
-            "**/vendor"
-          ],
-          "description": "Glob patterns skipped during repository discovery."
-        },
-        "gitsprout.worktreeFolder": {
-          "type": "string",
-          "default": "",
-          "description": "Folder for new worktrees: <folder>/<repo name>/<branch>. Empty = next to the repository, in <repo>.worktrees/<branch>. A leading ~ is the home directory."
-        },
-        "gitsprout.logLimit": {
-          "type": "number",
-          "default": 1000,
-          "minimum": 1,
-          "description": "Maximum number of commits loaded into the graph."
-        },
-        "gitsprout.ciPattern": {
-          "type": "string",
-          "default": "^AutoBuild$",
-          "description": "Regular expression matching CI commit subjects (hidden when hideCi is on)."
-        },
-        "gitsprout.hideCi": {
-          "type": "boolean",
-          "default": false,
-          "description": "Hide CI commits in the graph."
-        },
-        "gitsprout.followActiveEditor": {
-          "type": "boolean",
-          "default": true,
-          "description": "Switch the active repository to the one containing the active editor."
-        },
-        "gitsprout.fetchConcurrency": {
-          "type": "number",
-          "default": 4,
-          "minimum": 1,
-          "description": "Number of repositories fetched in parallel by Fetch All."
-        },
-        "gitsprout.jira": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
+          "gitsprout.diff.highlightTheme": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "simple",
+              "github",
+              "one"
+            ],
+            "enumDescriptions": [
+              "Use the colours of the active VS Code colour theme.",
+              "A small VS Code-like palette: comments, keywords, strings and numbers.",
+              "GitHub-like palette.",
+              "One Dark / One Light-like palette."
+            ],
+            "default": "auto",
+            "description": "Colour palette of the highlighted diff.",
+            "order": 1
           },
-          "default": {},
-          "description": "Jira project key to browse URL prefix, e.g. {\"PROJ\": \"https://jira.example.com/browse/\"}; keys in commit messages become links."
+          "gitsprout.diff.fontFamily": {
+            "type": "string",
+            "default": "",
+            "description": "Font family of the inline diff. Empty = editor.fontFamily.",
+            "order": 2
+          },
+          "gitsprout.diff.fontSize": {
+            "type": "number",
+            "default": 0,
+            "minimum": 0,
+            "maximum": 40,
+            "description": "Font size of the inline diff in pixels. 0 = editor.fontSize.",
+            "order": 3
+          }
+        }
+      },
+      {
+        "title": "Graph",
+        "order": 1,
+        "properties": {
+          "gitsprout.logLimit": {
+            "type": "number",
+            "default": 1000,
+            "minimum": 1,
+            "description": "Maximum number of commits loaded into the graph.",
+            "order": 0
+          },
+          "gitsprout.ciPattern": {
+            "type": "string",
+            "default": "^AutoBuild$",
+            "description": "Regular expression matching CI commit subjects (hidden when hideCi is on).",
+            "order": 1
+          },
+          "gitsprout.hideCi": {
+            "type": "boolean",
+            "default": false,
+            "description": "Hide CI commits in the graph.",
+            "order": 2
+          }
+        }
+      },
+      {
+        "title": "Repositories",
+        "order": 2,
+        "properties": {
+          "gitsprout.scanDepth": {
+            "type": "number",
+            "default": 3,
+            "minimum": 0,
+            "description": "How deep to scan workspace folders for git repositories.",
+            "order": 0
+          },
+          "gitsprout.scanExclude": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "**/node_modules",
+              "**/vendor"
+            ],
+            "description": "Glob patterns skipped during repository discovery.",
+            "order": 1
+          },
+          "gitsprout.followActiveEditor": {
+            "type": "boolean",
+            "default": true,
+            "description": "Switch the active repository to the one containing the active editor.",
+            "order": 2
+          },
+          "gitsprout.fetchConcurrency": {
+            "type": "number",
+            "default": 4,
+            "minimum": 1,
+            "description": "Number of repositories fetched in parallel by Fetch All.",
+            "order": 3
+          }
+        }
+      },
+      {
+        "title": "Worktrees",
+        "order": 3,
+        "properties": {
+          "gitsprout.worktreeFolder": {
+            "type": "string",
+            "default": "",
+            "description": "Folder for new worktrees: <folder>/<repo name>/<branch>. Empty = next to the repository, in <repo>.worktrees/<branch>. A leading ~ is the home directory.",
+            "order": 0
+          }
+        }
+      },
+      {
+        "title": "Jira",
+        "order": 4,
+        "properties": {
+          "gitsprout.jira": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "description": "Jira project key to browse URL prefix, e.g. {\"PROJ\": \"https://jira.example.com/browse/\"}; keys in commit messages become links.",
+            "order": 0
+          }
         }
       }
-    },
+    ],
     "viewsWelcome": [
       {
         "view": "gitsprout.branches",
@@ -1062,5 +1198,8 @@
     "playwright-core": "^1.63.0",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "highlight.js": "^11"
   }
 }

@@ -10,6 +10,31 @@ export interface GraphSettings {
   logLimit: number;
 }
 
+/** Token kinds of the highlighted diff: the contract between the highlighter CSS (`webview/tokens.css`) and the theme resolver. */
+export const TOKEN_KINDS = [
+  'comment', 'keyword', 'string', 'number', 'literal', 'builtIn', 'type', 'function',
+  'variable', 'property', 'tag', 'attribute', 'regexp', 'meta', 'operator', 'heading',
+] as const;
+export type TokenKind = typeof TOKEN_KINDS[number];
+
+export type HighlightTheme = 'auto' | 'simple' | 'github' | 'one';
+export interface TokenStyle { color?: string; italic?: boolean; bold?: boolean }
+export interface FontFaceSrc { weight: number; style: string; url: string; unicodeRange?: string }
+
+/** `gitsprout.diff.*` as the diff view needs it. */
+export interface DiffStyle {
+  highlight: boolean;
+  theme: HighlightTheme;
+  /** resolved token styles of the active VS Code theme; null unless theme === 'auto' and resolution succeeded */
+  tokens: Partial<Record<TokenKind, TokenStyle>> | null;
+  /** '' = the editor font */
+  fontFamily: string;
+  /** 0 = the editor size */
+  fontSize: number;
+  /** webview URIs of a downloaded Google font; [] otherwise */
+  fontFaces: FontFaceSrc[];
+}
+
 /** Buttons of the graph toolbar's action group; each runs the matching `gitsprout.*` command on the tab's repo. */
 export const TOOLBAR_ACTIONS = ['fetch', 'pull', 'push', 'branch', 'stash', 'pop', 'terminal'] as const;
 export type ToolbarAction = typeof TOOLBAR_ACTIONS[number];
@@ -34,6 +59,8 @@ export type ToWebview =
   | { type: 'diff'; req: number; patch: FilePatch }
   | { type: 'diff'; req: number; error: string }
   | { type: 'busy'; on: boolean }
+  /** `gitsprout.diff.*` changed (also sent after `ready`): restyles the diff without a reload. */
+  | { type: 'diffStyle'; style: DiffStyle }
   /** A WIP operation (stage, unstage, discard, commit) is running: the webview disables every WIP button. Separate from the loading `busy`. */
   | { type: 'wipBusy'; on: boolean }
   /** The commit was made (`sha` = the new HEAD): the webview clears the draft. */

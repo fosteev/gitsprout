@@ -9,7 +9,7 @@ import type { Commit, FilePatch, Head, Status } from '../git/types';
 import { onReveal } from '../views/refsStore';
 import { repoDisplayName } from '../workspace/model';
 import type { Registry } from '../workspace/registry';
-import type { FromWebview, GraphSettings, GraphWorktree, ToolbarAction, ToWebview } from './protocol';
+import type { DiffStyle, FromWebview, GraphSettings, GraphWorktree, ToolbarAction, ToWebview } from './protocol';
 import { graphWorktrees, needSummary } from './worktrees';
 import { graphHtml, inGitDir, isAllowedUrl, parseFromWebview, shaFromArg, stateMessage, wipContextFromArg } from './validate';
 
@@ -26,6 +26,23 @@ export function readSettings(): GraphSettings {
     hideCi: c.get<boolean>('hideCi', false),
     jira: c.get<Record<string, string>>('jira', {}),
     logLimit: Math.max(1, c.get<number>('logLimit', 1000)),
+  };
+}
+
+const HIGHLIGHT_THEMES: readonly string[] = ['auto', 'simple', 'github', 'one'];
+
+/** `gitsprout.diff.*`, normalised. Tokens (auto theme) and downloaded font faces are filled by later stages. */
+export function diffStyle(): DiffStyle {
+  const c = vscode.workspace.getConfiguration('gitsprout');
+  const theme = c.get<string>('diff.highlightTheme', 'auto');
+  const size = c.get<number>('diff.fontSize', 0);
+  return {
+    highlight: c.get<boolean>('diff.syntaxHighlighting', true),
+    theme: (HIGHLIGHT_THEMES.includes(theme) ? theme : 'auto') as DiffStyle['theme'],
+    tokens: null,
+    fontFamily: c.get<string>('diff.fontFamily', '').trim(),
+    fontSize: Number.isFinite(size) ? Math.min(40, Math.max(0, size)) : 0,
+    fontFaces: [],
   };
 }
 
@@ -102,6 +119,7 @@ class GraphPanel implements vscode.Disposable {
       this.registry.onDidRefreshRepo((root) => { if (root === this.repoRoot) reload(); }),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (['ciPattern', 'hideCi', 'jira', 'logLimit'].some((k) => e.affectsConfiguration(`gitsprout.${k}`))) reload();
+        if (e.affectsConfiguration('gitsprout.diff')) this.postDiffStyle();
       }),
     );
   }
@@ -114,6 +132,8 @@ class GraphPanel implements vscode.Disposable {
     this.panel.reveal(this.panel.viewColumn, true);
     this.post({ type: 'reveal', sha });
   }
+
+  private postDiffStyle(): void { if (this.ready) this.post({ type: 'diffStyle', style: diffStyle() }); }
 
   commit(sha: string): Commit | undefined { return this.commits.get(sha); }
 
@@ -202,6 +222,7 @@ class GraphPanel implements vscode.Disposable {
         this.ready = true;
         this.lastState = undefined;
         await this.load();
+        this.postDiffStyle();
         return;
       case 'select': {
         const root = this.root;

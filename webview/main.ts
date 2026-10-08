@@ -1,9 +1,13 @@
 // Graph UI entry point: DOM glue around the pure model (layout.ts, render.ts, format.ts).
 import type { FileChange, FileStat } from '../src/git/types';
-import type { FromWebview, ToolbarAction, ToWebview, WorktreeAction } from '../src/graph/protocol';
+import type { DiffStyle, FromWebview, ToolbarAction, ToWebview, WorktreeAction } from '../src/graph/protocol';
 import './styles.css';
+import './diff.css';
+import './tokens.css';
 import { branchOwners, childrenOf, containedIn, type Owner } from './branches';
+import { applyDiffStyle } from './diffStyle';
 import { ciMatcher } from './format';
+import { languageFor } from './highlight';
 import { graphWidth, isWorktreeWipSha, laneX, layout, RH, visibleRows, WIP_SHA, type LaidRow } from './layout';
 import {
   branchTipHtml, canDiscard, commitDetailsHtml, diffBarHtml, diffBodyHtml, HEAD_PUSHED_NOTE, keepSet, NO_SUMMARY_ERROR, noDetailsHtml, primaryClass, primaryInnerHtml, refsBySha, rowHtml,
@@ -383,11 +387,27 @@ function renderDiffBar(hasPrev: boolean, hasNext: boolean): void {
   });
 }
 
+/** `gitsprout.diff.*` as last sent by the host; until the first `diffStyle` the diff is plain text. */
+let diffStyle: DiffStyle | undefined;
+/** Rendered diff bodies per patch object, keyed by language and mode: highlighting is not repeated on re-renders. */
+const bodyHtmlMemo = new WeakMap<object, Map<string, string>>();
+
+function diffBodyFor(d: OpenDiff): string {
+  const lang = diffStyle?.highlight ? languageFor(d.file.path) : null;
+  if (typeof d.body === 'string') return diffBodyHtml(d.body, diffMode, lang);
+  let byKey = bodyHtmlMemo.get(d.body);
+  if (!byKey) bodyHtmlMemo.set(d.body, byKey = new Map());
+  const key = `${lang ?? ''}|${diffMode}`;
+  let html = byKey.get(key);
+  if (html === undefined) byKey.set(key, html = diffBodyHtml(d.body, diffMode, lang));
+  return html;
+}
+
 function renderDiffBody(keepScroll = false): void {
   if (!diff) return;
   const body = $('dbody');
   const top = body.scrollTop;
-  body.innerHTML = diffBodyHtml(diff.body, diffMode);
+  body.innerHTML = diffBodyFor(diff);
   body.scrollTop = keepScroll ? top : 0;
 }
 
@@ -590,6 +610,11 @@ window.addEventListener('message', (ev: MessageEvent<ToWebview>) => {
       if (m.sha === selected) renderDetails();
       break;
     case 'diff': onDiff(m); break;
+    case 'diffStyle':
+      diffStyle = m.style;
+      applyDiffStyle(m.style);
+      renderDiffBody(true);
+      break;
     case 'reveal':
       closeDiff();
       if (model?.known.has(m.sha)) select(m.sha, { center: true });

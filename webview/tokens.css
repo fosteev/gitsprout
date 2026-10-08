@@ -1,0 +1,141 @@
+/* Syntax highlighting of the inline diff. Token kinds = TOKEN_KINDS in src/graph/protocol.ts; palettes set --tok-<kind>
+   (colour), --tok-<kind>-i (italic), --tok-<kind>-b (bold). `auto` defines nothing here: webview/diffStyle.ts sets the
+   variables on :root from the resolved VS Code theme. */
+
+.dgrid.hl .hljs-comment,
+.dgrid.hl .hljs-quote { color: var(--tok-comment, currentColor); font-style: var(--tok-comment-i, normal); font-weight: var(--tok-comment-b, normal); }
+.dgrid.hl .hljs-keyword,
+.dgrid.hl .hljs-doctag { color: var(--tok-keyword, currentColor); font-style: var(--tok-keyword-i, normal); font-weight: var(--tok-keyword-b, normal); }
+.dgrid.hl .hljs-string,
+.dgrid.hl .hljs-symbol,
+.dgrid.hl .hljs-char.escape_ { color: var(--tok-string, currentColor); font-style: var(--tok-string-i, normal); font-weight: var(--tok-string-b, normal); }
+.dgrid.hl .hljs-number { color: var(--tok-number, currentColor); font-style: var(--tok-number-i, normal); font-weight: var(--tok-number-b, normal); }
+.dgrid.hl .hljs-literal { color: var(--tok-literal, currentColor); font-style: var(--tok-literal-i, normal); font-weight: var(--tok-literal-b, normal); }
+.dgrid.hl .hljs-built_in { color: var(--tok-builtIn, currentColor); font-style: var(--tok-builtIn-i, normal); font-weight: var(--tok-builtIn-b, normal); }
+.dgrid.hl .hljs-type,
+.dgrid.hl .hljs-title.class_,
+.dgrid.hl .hljs-title.class_.inherited__ { color: var(--tok-type, currentColor); font-style: var(--tok-type-i, normal); font-weight: var(--tok-type-b, normal); }
+.dgrid.hl .hljs-title.function_,
+.dgrid.hl .hljs-title { color: var(--tok-function, currentColor); font-style: var(--tok-function-i, normal); font-weight: var(--tok-function-b, normal); }
+.dgrid.hl .hljs-variable,
+.dgrid.hl .hljs-params,
+.dgrid.hl .hljs-template-variable,
+.dgrid.hl .hljs-variable.language_ { color: var(--tok-variable, currentColor); font-style: var(--tok-variable-i, normal); font-weight: var(--tok-variable-b, normal); }
+.dgrid.hl .hljs-property,
+.dgrid.hl .hljs-attr { color: var(--tok-property, currentColor); font-style: var(--tok-property-i, normal); font-weight: var(--tok-property-b, normal); }
+.dgrid.hl .hljs-tag,
+.dgrid.hl .hljs-name,
+.dgrid.hl .hljs-selector-tag { color: var(--tok-tag, currentColor); font-style: var(--tok-tag-i, normal); font-weight: var(--tok-tag-b, normal); }
+.dgrid.hl .hljs-attribute,
+.dgrid.hl .hljs-selector-attr,
+.dgrid.hl .hljs-selector-class,
+.dgrid.hl .hljs-selector-id,
+.dgrid.hl .hljs-selector-pseudo { color: var(--tok-attribute, currentColor); font-style: var(--tok-attribute-i, normal); font-weight: var(--tok-attribute-b, normal); }
+.dgrid.hl .hljs-regexp,
+.dgrid.hl .hljs-link { color: var(--tok-regexp, currentColor); font-style: var(--tok-regexp-i, normal); font-weight: var(--tok-regexp-b, normal); }
+.dgrid.hl .hljs-meta,
+.dgrid.hl .hljs-meta .hljs-keyword,
+.dgrid.hl .hljs-subst { color: var(--tok-meta, currentColor); font-style: var(--tok-meta-i, normal); font-weight: var(--tok-meta-b, normal); }
+.dgrid.hl .hljs-operator,
+.dgrid.hl .hljs-punctuation { color: var(--tok-operator, currentColor); font-style: var(--tok-operator-i, normal); font-weight: var(--tok-operator-b, normal); }
+.dgrid.hl .hljs-section,
+.dgrid.hl .hljs-bullet { color: var(--tok-heading, currentColor); font-style: var(--tok-heading-i, normal); font-weight: var(--tok-heading-b, normal); }
+.dgrid.hl .hljs-emphasis { font-style: italic; }
+.dgrid.hl .hljs-strong { font-weight: bold; }
+
+/* simple */
+body[data-hl-theme="simple"] {
+  --tok-comment: #6a9955;
+  --tok-comment-i: italic;
+  --tok-keyword: #569cd6;
+  --tok-string: #ce9178;
+  --tok-number: #ce9178;
+}
+body.vscode-light[data-hl-theme="simple"],
+body.vscode-high-contrast-light[data-hl-theme="simple"] {
+  --tok-comment: #008000;
+  --tok-comment-i: italic;
+  --tok-keyword: #0000ff;
+  --tok-string: #a31515;
+  --tok-number: #a31515;
+}
+/* github */
+body[data-hl-theme="github"] {
+  --tok-keyword: #ff7b72;
+  --tok-operator: #ff7b72;
+  --tok-string: #a5d6ff;
+  --tok-regexp: #a5d6ff;
+  --tok-comment: #8b949e;
+  --tok-number: #79c0ff;
+  --tok-literal: #79c0ff;
+  --tok-builtIn: #79c0ff;
+  --tok-function: #d2a8ff;
+  --tok-type: #ffa657;
+  --tok-meta: #ffa657;
+  --tok-tag: #7ee787;
+  --tok-attribute: #79c0ff;
+  --tok-property: #79c0ff;
+  --tok-heading: #1f6feb;
+  --tok-heading-b: bold;
+}
+body.vscode-light[data-hl-theme="github"],
+body.vscode-high-contrast-light[data-hl-theme="github"] {
+  --tok-keyword: #cf222e;
+  --tok-operator: #cf222e;
+  --tok-string: #0a3069;
+  --tok-regexp: #0a3069;
+  --tok-comment: #6e7781;
+  --tok-number: #0550ae;
+  --tok-literal: #0550ae;
+  --tok-builtIn: #0550ae;
+  --tok-function: #8250df;
+  --tok-type: #953800;
+  --tok-meta: #953800;
+  --tok-tag: #116329;
+  --tok-attribute: #0550ae;
+  --tok-property: #0550ae;
+  --tok-heading: #0550ae;
+  --tok-heading-b: bold;
+}
+/* one */
+body[data-hl-theme="one"] {
+  --tok-keyword: #c678dd;
+  --tok-string: #98c379;
+  --tok-comment: #5c6370;
+  --tok-comment-i: italic;
+  --tok-number: #d19a66;
+  --tok-literal: #d19a66;
+  --tok-function: #61afef;
+  --tok-type: #e5c07b;
+  --tok-builtIn: #e5c07b;
+  --tok-tag: #e06c75;
+  --tok-variable: #e06c75;
+  --tok-attribute: #d19a66;
+  --tok-property: #d19a66;
+  --tok-operator: #56b6c2;
+  --tok-regexp: #56b6c2;
+  --tok-meta: #c678dd;
+  --tok-heading: #e06c75;
+  --tok-heading-b: bold;
+}
+body.vscode-light[data-hl-theme="one"],
+body.vscode-high-contrast-light[data-hl-theme="one"] {
+  --tok-keyword: #a626a4;
+  --tok-string: #50a14f;
+  --tok-comment: #a0a1a7;
+  --tok-comment-i: italic;
+  --tok-number: #986801;
+  --tok-literal: #986801;
+  --tok-function: #4078f2;
+  --tok-type: #c18401;
+  --tok-builtIn: #c18401;
+  --tok-tag: #e45649;
+  --tok-variable: #e45649;
+  --tok-attribute: #986801;
+  --tok-property: #986801;
+  --tok-operator: #0184bc;
+  --tok-regexp: #0184bc;
+  --tok-meta: #a626a4;
+  --tok-heading: #e45649;
+  --tok-heading-b: bold;
+}

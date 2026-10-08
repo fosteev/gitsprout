@@ -1,0 +1,25 @@
+/* Inline diff: takes the graph's grid cell while open */
+.details { grid-column: 2; grid-row: 1; }
+.dview { grid-column: 1; grid-row: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.dbar { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--line); flex: none; font-size: 12.5px; white-space: nowrap; }
+.dbar .st { width: 16px; flex: none; font-size: 11px; font-weight: 700; text-align: center; }
+.dbar .st.M, .dbar .st.R { color: var(--mod); } .dbar .st.A { color: var(--added); } .dbar .st.D { color: var(--deleted); } .dbar .st.U { color: var(--err); }
+.dpath { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ddir { color: var(--muted); }
+.dctx { color: var(--muted); font: 11.5px var(--mono); flex: none; }
+.dsp { flex: 1; min-width: 4px; }
+.dbody { flex: 1; min-height: 0; overflow: auto; font-family: var(--diff-font, var(--mono)); font-size: var(--diff-size, var(--vscode-editor-font-size, 12px)); line-height: 1.5; }
+.dgrid { display: grid; min-width: 0; }
+.dinl { grid-template-columns: 46px 46px 18px minmax(0, 1fr); }
+.dsbs { grid-template-columns: 46px minmax(0, 1fr) 46px minmax(0, 1fr); }
+.dgrid > span { white-space: pre-wrap; word-break: break-all; min-height: 1.5em; }
+.dn { color: var(--vscode-editorLineNumber-foreground, var(--muted)); text-align: right; padding-right: 10px; user-select: none; font-variant-numeric: tabular-nums; }
+.dg { color: var(--muted); user-select: none; }
+.dc { padding-right: 10px; }
+.dsbs .dr { border-left: 1px solid var(--line); padding-left: 0; }
+.ins { background: var(--vscode-diffEditor-insertedLineBackground, rgba(155, 185, 85, .2)); }
+.rem { background: var(--vscode-diffEditor-removedLineBackground, rgba(255, 0, 0, .2)); }
+.fill { background: repeating-linear-gradient(-45deg, rgba(128, 128, 128, .18) 0 2px, transparent 2px 7px); }
+.dfold { grid-column: 1 / -1; color: var(--muted); background: color-mix(in srgb, var(--vscode-focusBorder) 8%, transparent); padding: 1px 14px; font: 11.5px var(--vscode-font-family, sans-serif); }
+.dnote { padding: 20px; color: var(--muted); font-family: var(--vscode-font-family, sans-serif); font-size: 12.5px; }
+.dnote.err { color: var(--err); }
