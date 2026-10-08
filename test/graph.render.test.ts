@@ -148,6 +148,10 @@ describe('webview message validation', () => {
     expect(h).toContain('<script nonce="N0nce"');
     expect(h).not.toContain('unsafe-inline');
     expect(h).toContain("default-src 'none'");
+    expect(h).toContain('<title>Graph</title>');
+  });
+  it('html takes a title (the settings page)', () => {
+    expect(graphHtml({ cspSource: 'x', nonce: 'N', scriptUri: 's.js', styleUri: 's.css', title: 'Gitsprout Settings' })).toContain('<title>Gitsprout Settings</title>');
   });
 });
 

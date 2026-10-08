@@ -68,6 +68,14 @@ Requires VS Code 1.90+ (or an editor on a matching VS Code base) and git 2.24+ o
 | `gitsprout.hideCi` | `false` | Hide CI commits in the graph (also toggled from the graph toolbar) |
 | `gitsprout.worktreeFolder` | `""` | Where new worktrees go: `<setting>/<repo name>/<branch slug>` (`~` is expanded); empty = `<repo>.worktrees/<branch slug>` next to the repository |
 | `gitsprout.jira` | `{}` | Jira project key → browse URL prefix; keys in commit messages become links |
+| `gitsprout.diff.syntaxHighlighting` | `true` | Highlight syntax in the graph's inline diff |
+| `gitsprout.diff.highlightTheme` | `auto` | Palette of the highlighted diff: `auto` (colours of the active VS Code theme), `simple`, `github`, `one` |
+| `gitsprout.diff.fontFamily` | `""` | Font family of the inline diff; empty = `editor.fontFamily` |
+| `gitsprout.diff.fontSize` | `0` | Font size of the inline diff in pixels; `0` = `editor.fontSize` |
+
+All of them can be edited on the Gitsprout settings page (a tab with a live diff preview): the gear in the graph toolbar, the gear in the Repositories view title, or the command `Gitsprout: Open Settings`. The page only edits the regular VS Code settings above.
+
+**Google Fonts (opt-in).** `Gitsprout: Download Google Font` (or the "Google Fonts…" button on the settings page) downloads a font family once into the extension's storage and sets `gitsprout.diff.fontFamily` to it; after that the diff uses it offline. This is the only place where the extension talks to the network, and only when you run that command. `Gitsprout: Remove Google Font` deletes the download.
 
 Example for Jira links:
 
@@ -82,7 +90,7 @@ Example for Jira links:
 
 ```
 pnpm install
-pnpm build            # esbuild: dist/extension.js + dist/webview.js
+pnpm build            # esbuild: dist/extension.js + dist/webview.js + dist/settings.js
 pnpm typecheck
 pnpm test             # vitest: parsers, graph layout, discovery, git integration on temp repos
 pnpm package          # -> gitsprout-<version>.vsix

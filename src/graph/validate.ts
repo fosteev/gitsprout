@@ -60,7 +60,7 @@ export function parseFromWebview(m: unknown): FromWebview | undefined {
   const o = m as { type?: unknown; req?: unknown; sha?: unknown; file?: unknown; area?: unknown; files?: unknown; summary?: unknown; description?: unknown; amend?: unknown; push?: unknown; hideCi?: unknown; url?: unknown; text?: unknown; action?: unknown; path?: unknown } | null;
   if (!o || typeof o !== 'object') return undefined;
   switch (o.type) {
-    case 'ready': case 'openScm': case 'switchRepo': case 'refresh':
+    case 'ready': case 'openScm': case 'switchRepo': case 'refresh': case 'openSettings':
     case 'stageAll': case 'unstageAll': case 'discardAll': case 'amendInfo': return { type: o.type };
     case 'stage': case 'unstage': {
       const files = asFileChanges(o.files);
@@ -134,9 +134,9 @@ export function wipContextFromArg(arg: unknown): { root: string; area: 'staged' 
   return { root: o.root, area: o.wipArea, path: o.path, origPath };
 }
 
-export interface HtmlParts { cspSource: string; nonce: string; scriptUri: string; styleUri: string }
+export interface HtmlParts { cspSource: string; nonce: string; scriptUri: string; styleUri: string; /** document title; default "Graph" */ title?: string }
 
-/** The webview document: strict CSP (no inline script/style), one script, one stylesheet. */
+/** The webview document (the graph, and with a `title` the settings page): strict CSP (no inline script/style), one script, one stylesheet. */
 export function graphHtml(p: HtmlParts): string {
   const csp = `default-src 'none'; style-src ${p.cspSource}; script-src 'nonce-${p.nonce}'; img-src ${p.cspSource} data:; font-src ${p.cspSource};`;
   return `<!DOCTYPE html>
@@ -146,7 +146,7 @@ export function graphHtml(p: HtmlParts): string {
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="${p.styleUri}">
-<title>Graph</title>
+<title>${p.title ?? 'Graph'}</title>
 </head>
 <body>
 <div id="app"></div>

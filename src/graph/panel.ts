@@ -240,6 +240,9 @@ class GraphPanel implements vscode.Disposable {
         await this.load();
         this.postDiffStyle();
         return;
+      case 'openSettings':
+        await vscode.commands.executeCommand('gitsprout.openSettings');
+        return;
       case 'select': {
         const root = this.root;
         if (!root || !this.commits.has(m.sha)) return;

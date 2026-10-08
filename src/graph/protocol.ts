@@ -88,6 +88,8 @@ export type FromWebview =
   /** The Amend checkbox was ticked: the extension answers with `amendInfo`. */
   | { type: 'amendInfo' }
   | { type: 'openScm' } | { type: 'switchRepo' } | { type: 'refresh' }
+  /** The gear at the end of the toolbar: opens the settings page. */
+  | { type: 'openSettings' }
   | { type: 'toggleCi'; hideCi: boolean }
   /** A toolbar action button (Fetch, Pull, Push, Branch, Stash, Pop, Terminal). */
   | { type: 'action'; action: ToolbarAction }

@@ -1,45 +1,4 @@
-/* Graph UI on VS Code theme variables. Lane colours fall back to the prototype palette when a theme lacks scmGraph.*. */
-:root {
-  --bg: var(--vscode-editor-background);
-  --fg: var(--vscode-foreground);
-  --fg-strong: var(--vscode-list-activeSelectionForeground, var(--vscode-foreground));
-  --muted: var(--vscode-descriptionForeground);
-  --line: var(--vscode-panel-border, var(--vscode-widget-border, rgba(128, 128, 128, .35)));
-  --hover: var(--vscode-list-hoverBackground);
-  --sel: var(--vscode-list-inactiveSelectionBackground);
-  --sel-fg: var(--vscode-list-inactiveSelectionForeground, var(--vscode-foreground));
-  --accent: var(--vscode-button-background);
-  --accent-fg: var(--vscode-button-foreground);
-  --accent-hover: var(--vscode-button-hoverBackground);
-  --input: var(--vscode-input-background);
-  --input-line: var(--vscode-input-border, var(--line));
-  --link: var(--vscode-textLink-foreground);
-  --added: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
-  --mod: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
-  --deleted: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
-  --err: var(--vscode-errorForeground, #f85149);
-  --warn: var(--vscode-editorWarning-foreground, #cca700);
-  --mono: var(--vscode-editor-font-family, Menlo, Monaco, Consolas, monospace);
-  --g0: var(--vscode-scmGraph-foreground1, #ffb000);
-  --g1: var(--vscode-scmGraph-foreground2, #dc267f);
-  --g2: var(--vscode-scmGraph-foreground3, #994f00);
-  --g3: var(--vscode-scmGraph-foreground4, #40b0a6);
-  --g4: var(--vscode-scmGraph-foreground5, #b66dff);
-  --g5: var(--vscode-charts-blue, #3794ff);
-}
-body.vscode-light {
-  --g0: var(--vscode-scmGraph-foreground1, #c98a00);
-  --g3: var(--vscode-scmGraph-foreground4, #2a9187);
-  --g4: var(--vscode-scmGraph-foreground5, #9a4fe0);
-  --g5: var(--vscode-charts-blue, #005fb8);
-}
-
-* { box-sizing: border-box; }
-html, body { height: 100%; }
-body { margin: 0; padding: 0; overflow: hidden; background: var(--bg); color: var(--fg); font: var(--vscode-font-size, 13px) var(--vscode-font-family, system-ui, sans-serif); }
-button { font: inherit; color: inherit; cursor: pointer; }
-#app { height: 100vh; display: flex; flex-direction: column; }
-
+/* Graph UI on VS Code theme variables (defined in base.css). Lane colours fall back to the prototype palette when a theme lacks scmGraph.*. */
 .wvbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .vin { height: 24px; background: var(--input); color: var(--vscode-input-foreground, var(--fg)); border: 1px solid var(--input-line); border-radius: 2px; padding: 0 6px; outline: none; width: 240px; max-width: 100%; font: inherit; }
 .vin:focus { border-color: var(--vscode-focusBorder); }

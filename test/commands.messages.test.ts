@@ -190,6 +190,7 @@ describe('checkout of a remote branch with an existing local branch', () => {
 
 describe('graph: copy message and multiRepo flag', () => {
   it('validates the copy message', () => {
+    expect(parseFromWebview({ type: 'openSettings' })).toEqual({ type: 'openSettings' });
     expect(parseFromWebview({ type: 'copy', text: SHA })).toEqual({ type: 'copy', text: SHA });
     expect(parseFromWebview({ type: 'copy', text: '' })).toBeUndefined();
     expect(parseFromWebview({ type: 'copy', text: 'x'.repeat(MAX_COPY + 1) })).toBeUndefined();

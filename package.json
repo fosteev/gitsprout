@@ -415,6 +415,12 @@
         "command": "gitsprout.setUpstream",
         "title": "Set Upstream…",
         "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.openSettings",
+        "title": "Open Settings",
+        "category": "Gitsprout",
+        "icon": "$(gear)"
       }
     ],
     "submenus": [
@@ -454,6 +460,11 @@
           "command": "gitsprout.toggleOnlyAttention",
           "when": "view == gitsprout.repositories",
           "group": "navigation@2"
+        },
+        {
+          "command": "gitsprout.openSettings",
+          "when": "view == gitsprout.repositories",
+          "group": "navigation@3"
         },
         {
           "command": "gitsprout.stash",

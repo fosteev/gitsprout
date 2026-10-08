@@ -26,7 +26,11 @@ src/
   graph/                panel.ts (webview host), protocol.ts (shared message types)
   diff/                 provider.ts (gitsprout: content provider, openDiff helpers)
   commands/             command implementations
-webview/                graph UI (plain TS) + layout.ts (pure) + styles.css
+  settings/             protocol.ts (shared types), model.ts (pure: manifest schema, validation), panel.ts (settings page host)
+  theme/                active VS Code theme -> token colours for the diff (pure resolvers + host glue)
+  fonts/                opt-in Google Fonts download (google.ts pure, store.ts host); the only network access
+webview/                graph UI (plain TS) + layout.ts (pure) + styles.css; base.css (theme vars), diff.css, tokens.css (palettes)
+  settings/             settings page UI (own bundle: dist/settings.js + settings.css)
 test/                   vitest: unit + integration on temp repos
 media/                  icons
 ```
@@ -35,7 +39,7 @@ media/                  icons
 
 ```
 pnpm install
-pnpm build            # esbuild: dist/extension.js + dist/webview.js
+pnpm build            # esbuild: dist/extension.js + dist/webview.js + dist/settings.js
 pnpm watch            # rebuild on change (used by F5)
 pnpm typecheck        # tsc --noEmit for extension and webview
 pnpm test             # vitest run

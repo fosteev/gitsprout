@@ -23,6 +23,8 @@ const webview = {
   sourcemap: true,
 };
 
+const settings = { ...webview, entryPoints: ['webview/settings/main.ts'], outfile: 'dist/settings.js' };
+
 // Markers for the background problem matcher in .vscode/tasks.json: F5 waits for
 // "build finished" so the Extension Development Host never starts before dist/ exists.
 const watchLog = (name) => ({
@@ -37,9 +39,10 @@ if (watch) {
   const ctxs = await Promise.all([
     context({ ...extension, plugins: [watchLog('extension')], logLevel: 'error' }),
     context({ ...webview, plugins: [watchLog('webview')], logLevel: 'error' }),
+    context({ ...settings, plugins: [watchLog('settings')], logLevel: 'error' }),
   ]);
   await Promise.all(ctxs.map((c) => c.watch()));
 } else {
-  await Promise.all([build(extension), build(webview)]);
-  console.log('built dist/extension.js, dist/webview.js');
+  await Promise.all([build(extension), build(webview), build(settings)]);
+  console.log('built dist/extension.js, dist/webview.js, dist/settings.js');
 }

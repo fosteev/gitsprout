@@ -1,6 +1,7 @@
 // Graph UI entry point: DOM glue around the pure model (layout.ts, render.ts, format.ts).
 import type { FileChange, FileStat } from '../src/git/types';
 import type { DiffStyle, FromWebview, ToolbarAction, ToWebview, WorktreeAction } from '../src/graph/protocol';
+import './base.css';
 import './styles.css';
 import './diff.css';
 import './tokens.css';
@@ -147,6 +148,7 @@ app.innerHTML = `
     <div class="acts" role="toolbar" aria-label="Repository actions">${ACTIONS.map((a, i) =>
       `${i && ACTIONS[i - 1].group !== a.group ? '<span class="acts-sep"></span>' : ''}<button class="act" id="act-${a.id}" data-action="${a.id}" title="${a.title}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="${a.icon}"/></svg><span class="lbl">${a.label}</span><span class="badge" hidden></span></button>`).join('')}</div>
     <button class="vchip" id="refresh" title="Refresh">Refresh</button>
+    <button class="ib" id="settings" title="Gitsprout settings" aria-label="Gitsprout settings"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></button>
   </div>
   <div class="msg" id="msg" hidden></div>
   <div class="split" id="split">
@@ -910,6 +912,7 @@ document.addEventListener('click', (ev) => {
 // Toolbar.
 $('repo').addEventListener('click', () => send({ type: 'switchRepo' }));
 $('refresh').addEventListener('click', () => send({ type: 'refresh' }));
+$('settings').addEventListener('click', () => send({ type: 'openSettings' }));
 for (const a of ACTIONS) $(`act-${a.id}`).addEventListener('click', () => send({ type: 'action', action: a.id }));
 $('ci').addEventListener('click', () => {
   if (!st) return;

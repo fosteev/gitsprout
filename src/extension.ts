@@ -8,6 +8,7 @@ import { createWipActions } from './commands/wip';
 import { REPO_COMMAND_IDS, registerRepoCommands } from './commands/repos';
 import { registerWorktreeCommands, WORKTREE_COMMAND_IDS } from './commands/worktrees';
 import { GRAPH_COMMAND_IDS, registerGraph } from './graph/panel';
+import { registerSettings, SETTINGS_COMMAND_IDS } from './settings/panel';
 import { registerThemeTokens } from './theme/active';
 import { createLog } from './util/log';
 import { registerCurrentMark } from './views/currentMark';
@@ -34,7 +35,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const graph = registerGraph(context, registry, log, createWipActions(registry, log, mutator));
   registerWorktreeCommands(context, registry, graph, mutator, log);
   registerFontCommands(context, log);
-  registerStubCommands(context, [...REPO_COMMAND_IDS, ...REF_COMMAND_IDS, ...MUTATION_COMMAND_IDS, ...COMMIT_COMMAND_IDS, ...GRAPH_COMMAND_IDS, ...WORKTREE_COMMAND_IDS, ...FONT_COMMAND_IDS]);
+  registerSettings(context, log);
+  registerStubCommands(context, [...REPO_COMMAND_IDS, ...REF_COMMAND_IDS, ...MUTATION_COMMAND_IDS, ...COMMIT_COMMAND_IDS, ...GRAPH_COMMAND_IDS, ...WORKTREE_COMMAND_IDS, ...FONT_COMMAND_IDS, ...SETTINGS_COMMAND_IDS]);
 
   const checkScmDepth = createScmDepthCheck(registry, context.workspaceState, log);
   void registry.rescan().then(() => checkScmDepth());
