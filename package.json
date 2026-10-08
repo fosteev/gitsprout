@@ -303,6 +303,16 @@
         "category": "Gitsprout"
       },
       {
+        "command": "gitsprout.downloadGoogleFont",
+        "title": "Download Google Font for the Diff…",
+        "category": "Gitsprout"
+      },
+      {
+        "command": "gitsprout.removeGoogleFont",
+        "title": "Remove Downloaded Google Font…",
+        "category": "Gitsprout"
+      },
+      {
         "command": "gitsprout.worktreeCreate",
         "title": "Create Worktree…",
         "category": "Gitsprout",

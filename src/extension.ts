@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { COMMIT_COMMAND_IDS, registerCommitCommands } from './commands/commits';
+import { FONT_COMMAND_IDS, registerFontCommands } from './commands/fonts';
 import { registerStubCommands } from './commands/stubs';
 import { MUTATION_COMMAND_IDS, registerMutations } from './commands/mutations';
 import { REF_COMMAND_IDS, registerRefViews } from './commands/refs';
@@ -32,7 +33,8 @@ export function activate(context: vscode.ExtensionContext): void {
   registerCommitCommands(context, registry, log, mutator);
   const graph = registerGraph(context, registry, log, createWipActions(registry, log, mutator));
   registerWorktreeCommands(context, registry, graph, mutator, log);
-  registerStubCommands(context, [...REPO_COMMAND_IDS, ...REF_COMMAND_IDS, ...MUTATION_COMMAND_IDS, ...COMMIT_COMMAND_IDS, ...GRAPH_COMMAND_IDS, ...WORKTREE_COMMAND_IDS]);
+  registerFontCommands(context, log);
+  registerStubCommands(context, [...REPO_COMMAND_IDS, ...REF_COMMAND_IDS, ...MUTATION_COMMAND_IDS, ...COMMIT_COMMAND_IDS, ...GRAPH_COMMAND_IDS, ...WORKTREE_COMMAND_IDS, ...FONT_COMMAND_IDS]);
 
   const checkScmDepth = createScmDepthCheck(registry, context.workspaceState, log);
   void registry.rescan().then(() => checkScmDepth());

@@ -11,6 +11,7 @@ export const COMMAND_IDS = [
   'resetSoft', 'resetMixed', 'resetHard', 'cherryPick', 'revert',
   'compareWithWorktree', 'savePatch',
   'wipStage', 'wipUnstage', 'wipDiscard',
+  'downloadGoogleFont', 'removeGoogleFont',
   'worktreeCreate', 'worktreeCreateFrom', 'worktreeOpenGraph', 'worktreeOpenWindow', 'worktreeOpenHere', 'worktreeAddToWorkspace',
   'worktreeTerminal', 'worktreeReveal', 'worktreeCopyPath', 'worktreeRemove', 'worktreeUnlock', 'worktreePrune', 'switchWorktree',
 ] as const;

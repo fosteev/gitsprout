@@ -8,9 +8,10 @@ import { Repo } from '../git/repo';
 import type { Commit, FilePatch, Head, Status } from '../git/types';
 import { onReveal } from '../views/refsStore';
 import { repoDisplayName } from '../workspace/model';
+import { fontFaces, onDidChangeFonts } from '../fonts/store';
 import { onDidChangeThemeTokens, themeTokens } from '../theme/active';
 import type { Registry } from '../workspace/registry';
-import type { DiffStyle, FromWebview, GraphSettings, GraphWorktree, ToolbarAction, ToWebview } from './protocol';
+import type { DiffStyle, FontFaceSrc, FromWebview, GraphSettings, GraphWorktree, ToolbarAction, ToWebview } from './protocol';
 import { graphWorktrees, needSummary } from './worktrees';
 import { graphHtml, inGitDir, isAllowedUrl, parseFromWebview, shaFromArg, stateMessage, wipContextFromArg } from './validate';
 
@@ -32,8 +33,8 @@ export function readSettings(): GraphSettings {
 
 const HIGHLIGHT_THEMES: readonly string[] = ['auto', 'simple', 'github', 'one'];
 
-/** `gitsprout.diff.*`, normalised. Tokens (auto theme) and downloaded font faces are filled by later stages. */
-export function diffStyle(): DiffStyle {
+/** `gitsprout.diff.*`, normalised. `faces`: webview URIs of the downloaded Google font named by `fontFamily` (see `fontFaces`). */
+export function diffStyle(faces: FontFaceSrc[] = []): DiffStyle {
   const c = vscode.workspace.getConfiguration('gitsprout');
   const raw = c.get<string>('diff.highlightTheme', 'auto');
   const theme = (HIGHLIGHT_THEMES.includes(raw) ? raw : 'auto') as DiffStyle['theme'];
@@ -44,12 +45,12 @@ export function diffStyle(): DiffStyle {
     tokens: theme === 'auto' ? themeTokens() : null,
     fontFamily: c.get<string>('diff.fontFamily', '').trim(),
     fontSize: Number.isFinite(size) ? Math.min(40, Math.max(0, size)) : 0,
-    fontFaces: [],
+    fontFaces: faces,
   };
 }
 
 /** Writes where the user's value currently lives (workspace if set there, else user settings). */
-async function setSetting(key: string, value: unknown): Promise<void> {
+export async function setSetting(key: string, value: unknown): Promise<void> {
   const c = vscode.workspace.getConfiguration('gitsprout');
   const target = c.inspect(key)?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
   await c.update(key, value, target);
@@ -62,6 +63,8 @@ class GraphPanel implements vscode.Disposable {
   private ready = false;
   private disposed = false;
   private seq = 0;
+  private styleSeq = 0;
+  private readonly storage: vscode.Uri;
   /** A refresh arrived while the tab was hidden: reload when it becomes visible. */
   private dirty = false;
   private lastState: string | undefined;
@@ -84,7 +87,8 @@ class GraphPanel implements vscode.Disposable {
     revived?: vscode.WebviewPanel,
   ) {
     const dist = vscode.Uri.joinPath(context.extensionUri, 'dist');
-    const options = { enableScripts: true, localResourceRoots: [dist] };
+    this.storage = context.globalStorageUri;
+    const options = { enableScripts: true, localResourceRoots: [dist, context.globalStorageUri] };
     if (revived) {
       this.panel = revived;
       // VS Code restores the creation options (incl. `retainContextWhenHidden`) with the tab; re-applied to be explicit.
@@ -120,6 +124,7 @@ class GraphPanel implements vscode.Disposable {
       this.registry.onDidChangeRepos(reload),
       this.registry.onDidRefreshRepo((root) => { if (root === this.repoRoot) reload(); }),
       onDidChangeThemeTokens(() => this.postDiffStyle()),
+      onDidChangeFonts(() => this.postDiffStyle()),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (['ciPattern', 'hideCi', 'jira', 'logLimit'].some((k) => e.affectsConfiguration(`gitsprout.${k}`))) reload();
         if (e.affectsConfiguration('gitsprout.diff')) this.postDiffStyle();
@@ -136,7 +141,15 @@ class GraphPanel implements vscode.Disposable {
     this.post({ type: 'reveal', sha });
   }
 
-  private postDiffStyle(): void { if (this.ready) this.post({ type: 'diffStyle', style: diffStyle() }); }
+  private postDiffStyle(): void {
+    if (!this.ready) return;
+    const seq = ++this.styleSeq;
+    const family = vscode.workspace.getConfiguration('gitsprout').get<string>('diff.fontFamily', '').trim();
+    void fontFaces(this.storage, family, this.panel.webview).catch(() => [] as FontFaceSrc[]).then((faces) => {
+      // a newer change superseded this one while the manifest was being read
+      if (!this.disposed && seq === this.styleSeq) this.post({ type: 'diffStyle', style: diffStyle(faces) });
+    });
+  }
 
   commit(sha: string): Commit | undefined { return this.commits.get(sha); }
 
