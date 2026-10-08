@@ -8,6 +8,7 @@ import { Repo } from '../git/repo';
 import type { Commit, FilePatch, Head, Status } from '../git/types';
 import { onReveal } from '../views/refsStore';
 import { repoDisplayName } from '../workspace/model';
+import { onDidChangeThemeTokens, themeTokens } from '../theme/active';
 import type { Registry } from '../workspace/registry';
 import type { DiffStyle, FromWebview, GraphSettings, GraphWorktree, ToolbarAction, ToWebview } from './protocol';
 import { graphWorktrees, needSummary } from './worktrees';
@@ -34,12 +35,13 @@ const HIGHLIGHT_THEMES: readonly string[] = ['auto', 'simple', 'github', 'one'];
 /** `gitsprout.diff.*`, normalised. Tokens (auto theme) and downloaded font faces are filled by later stages. */
 export function diffStyle(): DiffStyle {
   const c = vscode.workspace.getConfiguration('gitsprout');
-  const theme = c.get<string>('diff.highlightTheme', 'auto');
+  const raw = c.get<string>('diff.highlightTheme', 'auto');
+  const theme = (HIGHLIGHT_THEMES.includes(raw) ? raw : 'auto') as DiffStyle['theme'];
   const size = c.get<number>('diff.fontSize', 0);
   return {
     highlight: c.get<boolean>('diff.syntaxHighlighting', true),
-    theme: (HIGHLIGHT_THEMES.includes(theme) ? theme : 'auto') as DiffStyle['theme'],
-    tokens: null,
+    theme,
+    tokens: theme === 'auto' ? themeTokens() : null,
     fontFamily: c.get<string>('diff.fontFamily', '').trim(),
     fontSize: Number.isFinite(size) ? Math.min(40, Math.max(0, size)) : 0,
     fontFaces: [],
@@ -117,6 +119,7 @@ class GraphPanel implements vscode.Disposable {
       wv.onDidReceiveMessage((m: unknown) => void this.onMessage(m)),
       this.registry.onDidChangeRepos(reload),
       this.registry.onDidRefreshRepo((root) => { if (root === this.repoRoot) reload(); }),
+      onDidChangeThemeTokens(() => this.postDiffStyle()),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (['ciPattern', 'hideCi', 'jira', 'logLimit'].some((k) => e.affectsConfiguration(`gitsprout.${k}`))) reload();
         if (e.affectsConfiguration('gitsprout.diff')) this.postDiffStyle();

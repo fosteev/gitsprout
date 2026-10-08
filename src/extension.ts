@@ -7,6 +7,7 @@ import { createWipActions } from './commands/wip';
 import { REPO_COMMAND_IDS, registerRepoCommands } from './commands/repos';
 import { registerWorktreeCommands, WORKTREE_COMMAND_IDS } from './commands/worktrees';
 import { GRAPH_COMMAND_IDS, registerGraph } from './graph/panel';
+import { registerThemeTokens } from './theme/active';
 import { createLog } from './util/log';
 import { registerCurrentMark } from './views/currentMark';
 import { RepositoriesView } from './views/repositories';
@@ -20,6 +21,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   void vscode.commands.executeCommand('setContext', 'gitsprout.multiRepo', false);
 
+  registerThemeTokens(context, log);
   const registry = new Registry(log, context.workspaceState);
   const view = new RepositoriesView(registry, context.workspaceState);
   const worktrees = new WorktreesView(registry, log);
