@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+- Syntax highlighting in the graph's inline diff (26 languages). `gitsprout.diff.highlightTheme`: `auto` takes token colours from the active VS Code colour theme (falls back to the simple palette when the theme can't be read); `simple`, `github` and `one` are fixed palettes. `gitsprout.diff.syntaxHighlighting`, `gitsprout.diff.fontFamily` and `gitsprout.diff.fontSize` tune the diff.
+- Google Fonts for the diff: "Download Google Font for the Diff…" fetches a family once into extension storage and the graph uses it offline; "Remove Downloaded Google Font…" deletes it. This is the extension's only network access and happens only on request.
+- Gitsprout Settings page: an editor tab over the `gitsprout.*` settings with search, User/Workspace scope, categories, per-setting reset, a live diff preview and the Google Fonts controls. Open it from the gear in the graph toolbar, the gear in the Repositories view, or "Gitsprout: Open Settings".
+
 ## 0.3.1
 
 - The checked-out branch (Branches) and the active repository (Repositories) are highlighted: green icon and green label. The colour is themable as `gitsprout.currentForeground`.
