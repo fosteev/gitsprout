@@ -12,7 +12,7 @@ Gitsprout adds what the built-in Source Control lacks: a commit graph with a Git
 
 **Commit graph.** One tab per repository: lanes, branch and tag pills, search by message, SHA or author, hide CI commits, commit details, Jira keys (`PROJ-123`) as links. A toolbar for Fetch, Pull, Push (with ahead/behind counts), Create Branch, Stash, Pop and a terminal in the repo.
 
-**Inline diffs.** Click a file of a commit or of your working tree and its diff replaces the graph: inline or split, `j`/`k` to the next file, "Open in Editor" for VS Code's native diff editor.
+**Inline diffs.** Click a file of a commit or of your working tree and its diff replaces the graph: inline or split, `j`/`k` to the next file, "Open Diff" for VS Code's native diff editor, "Open File" for the file itself.
 
 ![Inline diff of a commit file](docs/screenshots/diff.png)
 

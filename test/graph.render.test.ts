@@ -120,6 +120,12 @@ describe('webview message validation', () => {
     expect(parseFromWebview(null)).toBeUndefined();
     expect(parseFromWebview({ type: 'openWipFile', area: 'staged', file: { path: '../../etc/passwd', origPath: null, status: 'M', untracked: false } })).toBeUndefined();
     expect(parseFromWebview({ type: 'openWipFile', area: 'staged', file: { path: 'a.ts', origPath: null, status: 'M', untracked: false } })).toMatchObject({ type: 'openWipFile', area: 'staged' });
+    expect(parseFromWebview({ type: 'openWorkingFile', path: 'src/a.ts', line: 12 })).toEqual({ type: 'openWorkingFile', path: 'src/a.ts', line: 12 });
+    expect(parseFromWebview({ type: 'openWorkingFile', path: 'src/a.ts' })).toEqual({ type: 'openWorkingFile', path: 'src/a.ts' });
+    expect(parseFromWebview({ type: 'openWorkingFile', path: '../x' })).toBeUndefined();
+    expect(parseFromWebview({ type: 'openWorkingFile', path: '/etc/passwd' })).toBeUndefined();
+    expect(parseFromWebview({ type: 'openWorkingFile', path: 'a.ts', line: 0 })).toBeUndefined();
+    expect(parseFromWebview({ type: 'openWorkingFile', path: 'a.ts', line: 1.5 })).toBeUndefined();
     expect(parseFromWebview({ type: 'openCommitFile', sha: SHA, file: { path: 'a.ts', origPath: null, status: 'M', add: 1, del: 2 } })).toMatchObject({ type: 'openCommitFile' });
   });
   it('safe paths', () => {
@@ -257,7 +263,7 @@ describe('diff rendering', () => {
     expect(diffBodyHtml({ error: 'boom <x>' }, 'inline')).toContain('boom &lt;x&gt;');
     expect(diffBodyHtml({ binary: true, hunks: [], truncated: false }, 'inline')).toContain('Binary file — not shown.');
     expect(diffBodyHtml({ binary: false, hunks: [], truncated: false }, 'split')).toContain('No content changes.');
-    expect(diffBodyHtml(patch([line('+', 'x', null, 1)], { truncated: true }), 'inline')).toContain('Diff truncated at 10 000 lines — Open in Editor for the full diff.');
+    expect(diffBodyHtml(patch([line('+', 'x', null, 1)], { truncated: true }), 'inline')).toContain('Diff truncated at 10 000 lines — Open Diff for the full diff.');
     expect(diffBodyHtml(mixed, 'inline')).not.toContain('truncated');
   });
 
@@ -269,7 +275,9 @@ describe('diff rendering', () => {
     expect(html).toContain('data-dact="prev" title="Previous file (k)" disabled');
     expect(html).toContain('data-dact="next" title="Next file (j)">');
     expect(html).toContain('aria-pressed="false" title="Switch to Split">Inline');
-    expect(html).toContain('Open in Editor');
+    expect(html).toContain('>Open Diff<');
+    expect(html).toContain('data-dact="file" title="Open the working tree file in the editor">Open File');
+    expect(diffBarHtml({ ...bar, status: 'D' })).toContain('data-dact="file" title="Open the working tree file in the editor" disabled');
     expect(html).toContain('Close (Esc)');
     expect(diffBarHtml({ ...bar, mode: 'split' })).toContain('aria-pressed="true" title="Switch to Inline">Split');
   });

@@ -500,6 +500,12 @@ $('dview').addEventListener('click', (ev) => {
       if (diff.area === 'commit') send({ type: 'openCommitFile', sha: diff.sha, file: diff.file as FileStat });
       else send({ type: 'openWipFile', file: diff.file as FileChange, area: diff.area });
       break;
+    case 'file': {
+      // WIP line numbers match the file on disk: land on the first hunk; a commit's may have drifted since.
+      const h = diff.area !== 'commit' && typeof diff.body === 'object' && 'hunks' in diff.body ? diff.body.hunks[0] : undefined;
+      send({ type: 'openWorkingFile', path: diff.file.path, ...(h && { line: h.newStart }) });
+      break;
+    }
   }
 });
 

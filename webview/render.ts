@@ -403,7 +403,7 @@ export function wipFile(wip: Status, area: string, i: number): FileChange | unde
 export type DiffMode = 'inline' | 'split';
 export type DiffBody = 'loading' | { error: string } | FilePatch;
 
-export const DIFF_TRUNCATED_NOTE = 'Diff truncated at 10 000 lines — Open in Editor for the full diff.';
+export const DIFF_TRUNCATED_NOTE = 'Diff truncated at 10 000 lines — Open Diff for the full diff.';
 
 export interface DiffBar {
   status: string;
@@ -426,7 +426,8 @@ export function diffBarHtml(b: DiffBar): string {
     + `<button class="ib" data-dact="prev" title="Previous file (k)"${b.hasPrev ? '' : ' disabled'}>‹</button>`
     + `<button class="ib" data-dact="next" title="Next file (j)"${b.hasNext ? '' : ' disabled'}>›</button>`
     + `<button class="vchip" data-dact="mode" aria-pressed="${b.mode === 'split'}" title="Switch to ${other}">${b.mode === 'split' ? 'Split' : 'Inline'}</button>`
-    + '<button class="vchip" data-dact="editor" title="Open in the diff editor">Open in Editor</button>'
+    + `<button class="vchip" data-dact="file" title="Open the working tree file in the editor"${b.status === 'D' ? ' disabled' : ''}>Open File</button>`
+    + '<button class="vchip" data-dact="editor" title="Open in the diff editor">Open Diff</button>'
     + '<button class="ib" data-dact="close" title="Close (Esc)">✕</button>';
 }
 

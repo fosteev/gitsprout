@@ -270,6 +270,19 @@ class GraphPanel implements vscode.Disposable {
         await this.open(m.area === 'staged' ? stagedPlan(f, this.head.sha === null) : unstagedPlan(f));
         return;
       }
+      case 'openWorkingFile': {
+        if (!this.root) return;
+        const uri = vscode.Uri.joinPath(vscode.Uri.file(this.root), m.path);
+        try {
+          await vscode.workspace.fs.stat(uri);
+        } catch {
+          void vscode.window.showWarningMessage(`Gitsprout: ${m.path} is not in the working tree.`);
+          return;
+        }
+        const at = m.line ? new vscode.Position(m.line - 1, 0) : undefined;
+        await vscode.commands.executeCommand('vscode.open', uri, at && { selection: new vscode.Range(at, at) });
+        return;
+      }
       case 'diffCommitFile': {
         const c = this.commits.get(m.sha);
         if (!this.root || !c) return;

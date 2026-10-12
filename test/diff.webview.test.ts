@@ -166,11 +166,19 @@ describe('inline diff in the webview', () => {
     expect(q('#dview').hidden).toBe(true);
   });
 
-  it('Open in Editor posts the native-open message', () => {
+  it('Open Diff posts the native-open message', () => {
     commitReady();
     fileRow(2).click();
     q<HTMLElement>('[data-dact="editor"]').click();
     expect(sent('openCommitFile')).toEqual([{ type: 'openCommitFile', sha: SHA, file: FILES[2] }]);
+  });
+
+  it('Open File posts the working tree path (no line for a commit diff)', () => {
+    commitReady();
+    fileRow(2).click();
+    post({ type: 'diff', req: 1, patch: PATCH });
+    q<HTMLElement>('[data-dact="file"]').click();
+    expect(sent('openWorkingFile')).toEqual([{ type: 'openWorkingFile', path: FILES[2].path }]);
   });
 
   it('WIP: click asks for the area; follow re-requests, switches area, or closes', () => {
@@ -181,6 +189,8 @@ describe('inline diff in the webview', () => {
     expect(sent('diffWipFile')).toEqual([{ type: 'diffWipFile', req: 1, file: f('w1.ts'), area: 'unstaged' }]);
     expect(q('#dbar').textContent).toContain('Working Tree');
     post({ type: 'diff', req: 1, patch: PATCH });
+    q<HTMLElement>('[data-dact="file"]').click();
+    expect(sent('openWorkingFile')).toEqual([{ type: 'openWorkingFile', path: 'w1.ts', line: 1 }]);
     q('#dbody').scrollTop = 40;
     // same file still unstaged: silent re-request, content stays
     post(stateMsg({ unstaged: [f('w1.ts'), f('w3.ts')] }));

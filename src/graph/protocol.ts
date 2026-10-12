@@ -76,6 +76,8 @@ export type FromWebview =
   | { type: 'select'; sha: string }                      // extension answers with 'details'
   | { type: 'openCommitFile'; sha: string; file: FileStat }
   | { type: 'openWipFile'; file: FileChange; area: 'staged' | 'unstaged' }
+  /** The diff bar's Open File: the working tree file in a normal editor, at `line` (1-based) when given. */
+  | { type: 'openWorkingFile'; path: string; line?: number }
   /** Inline diff of one file (answered with `diff`). `openCommitFile` / `openWipFile` mean "open in the native editor". */
   | { type: 'diffCommitFile'; req: number; sha: string; file: FileStat }
   | { type: 'diffWipFile'; req: number; file: FileChange; area: 'staged' | 'unstaged' }
