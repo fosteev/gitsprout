@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1
+
+- Check out a branch from the graph: double-click its pill (or a row with a single branch to switch to), or use Checkout in the row's context menu. A remote branch creates or reuses its local branch.
+- The inline diff bar has "Open File": the working tree file in a normal editor (at the first hunk for working tree changes). The diff editor button is now "Open Diff".
+
 ## 0.4.0
 
 - Syntax highlighting in the graph's inline diff (26 languages). `gitsprout.diff.highlightTheme`: `auto` takes token colours from the active VS Code colour theme (falls back to the simple palette when the theme can't be read); `simple`, `github` and `one` are fixed palettes. `gitsprout.diff.syntaxHighlighting`, `gitsprout.diff.fontFamily` and `gitsprout.diff.fontSize` tune the diff.
