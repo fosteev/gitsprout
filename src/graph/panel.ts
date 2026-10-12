@@ -318,6 +318,11 @@ class GraphPanel implements vscode.Disposable {
         await vscode.env.clipboard.writeText(m.text);
         vscode.window.setStatusBarMessage('Gitsprout: copied', 2000);
         return;
+      case 'checkout':
+        // The commands re-read the refs: a branch gone since the last state fails like any other checkout.
+        await vscode.commands.executeCommand(m.kind === 'local' ? 'gitsprout.checkoutBranch' : 'gitsprout.checkoutRemote',
+          { root: this.repoRoot, branchKind: m.kind, branchName: m.name });
+        return;
       case 'worktree': {
         // Only worktrees the last state listed; the existing commands re-check everything else (missing folder, not a repo).
         const w = this.worktrees.find((x) => x.path === m.path);

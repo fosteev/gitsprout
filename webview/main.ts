@@ -11,7 +11,7 @@ import { ciMatcher } from './format';
 import { languageFor } from './highlight';
 import { graphWidth, isWorktreeWipSha, laneX, layout, RH, visibleRows, WIP_SHA, type LaidRow } from './layout';
 import {
-  branchTipHtml, canDiscard, commitDetailsHtml, diffBarHtml, diffBodyHtml, HEAD_PUSHED_NOTE, keepSet, NO_SUMMARY_ERROR, noDetailsHtml, primaryClass, primaryInnerHtml, refsBySha, rowHtml,
+  branchTipHtml, canDiscard, checkoutTarget, commitDetailsHtml, diffBarHtml, diffBodyHtml, HEAD_PUSHED_NOTE, keepSet, NO_SUMMARY_ERROR, noDetailsHtml, primaryClass, primaryInnerHtml, refsBySha, rowHtml,
   SUMMARY_LIMIT, WIP_LABEL, wipBarHtml, worktreeCardHtml, wipCommitHtml, wipDirKeys, wipFile, wipFileCount, wipHeaderHtml, wipListsHtml, wipPrimary,
   type CommitCtx, type DiffBody, type DiffMode, type FilesState, type RefPill, type RowEnv, type WipDraft, type WipView,
 } from './render';
@@ -642,6 +642,23 @@ rowsEl.addEventListener('click', (ev) => {
   list.focus();
 });
 
+// Double-click: check out the pill's branch, or the row's only branch (`checkoutTarget`). Pills without a target (the
+// checked-out branch, tags) do nothing rather than fall through to the row.
+function checkoutFrom(target: EventTarget | null): void {
+  if (gitBlocked()) return;
+  const el = target as HTMLElement;
+  const pill = el.closest<HTMLElement>('.ref');
+  if (pill) {
+    const kind = pill.dataset.coKind;
+    if (pill.dataset.co && (kind === 'local' || kind === 'remote')) send({ type: 'checkout', name: pill.dataset.co, kind });
+    return;
+  }
+  const sha = el.closest<HTMLElement>('.gr')?.dataset.sha;
+  const t = sha && model ? checkoutTarget(model.pills.get(sha)) : undefined;
+  if (t) send({ type: 'checkout', name: t.name, kind: t.kind });
+}
+rowsEl.addEventListener('dblclick', (ev) => checkoutFrom(ev.target));
+
 // Hover card on a graph node: which branch the commit was made on. Shown after a short rest on the row's graph cell.
 const tip = document.createElement('div');
 tip.className = 'btip';
@@ -748,6 +765,7 @@ details.addEventListener('pointerdown', (ev) => {
   window.addEventListener('pointercancel', up);
 });
 details.addEventListener('dblclick', (ev) => {
+  if ((ev.target as HTMLElement).closest('.ref')) { checkoutFrom(ev.target); return; }
   if (!(ev.target as HTMLElement).closest('.hsash')) return;
   listSplit = null; applyListSplit(); persist();
 });

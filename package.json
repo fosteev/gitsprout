@@ -731,6 +731,16 @@
           "group": "9_remove@1"
         },
         {
+          "command": "gitsprout.checkoutBranch",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit' && branchKind == 'local'",
+          "group": "0_checkout@1"
+        },
+        {
+          "command": "gitsprout.checkoutRemote",
+          "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit' && branchKind == 'remote'",
+          "group": "0_checkout@1"
+        },
+        {
           "command": "gitsprout.createBranchFrom",
           "when": "webviewId == 'gitsprout.graph' && webviewSection == 'commit'",
           "group": "1_create@1"

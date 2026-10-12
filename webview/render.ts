@@ -1,5 +1,5 @@
 // Pure HTML builders for the graph UI. Every piece of repository data (subjects, names, paths) goes through esc().
-import type { CommitContext, GraphWorktree, WipContext, WorktreeAction, WorktreeContext } from '../src/graph/protocol';
+import type { BranchContext, BranchKind, CommitContext, GraphWorktree, WipContext, WorktreeAction, WorktreeContext } from '../src/graph/protocol';
 import type { Commit, FileChange, FilePatch, FileStat, Head, Hunk, Refs, Status } from '../src/git/types';
 import { esc, fmtAgo, fmtAgoLong, jiraUrl, minutesAgo, parseSubject, splitPath } from './format';
 import type { Owner } from './branches';
@@ -56,15 +56,36 @@ const ICONS = {
 const icon = (name: keyof typeof ICONS): string =>
   `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
+/**
+ * What double-clicking or right-clicking this pill checks out: a local branch other than the checked-out one (one checked
+ * out in another worktree too: the command offers to open that worktree), or a remote branch whose local branch is not on
+ * the same commit (that pill is the target instead). Tags and another worktree's HEAD: nothing.
+ */
+export function pillTarget(p: RefPill, row: readonly RefPill[]): { name: string; kind: BranchKind } | undefined {
+  if (p.kind === 'local') return p.head ? undefined : { name: p.name, kind: 'local' };
+  if (p.kind !== 'remote') return undefined;
+  const local = p.name.slice(p.name.indexOf('/') + 1);
+  return row.some((q) => q.kind === 'local' && q.name === local) ? undefined : { name: p.name, kind: 'remote' };
+}
+
+/** The row's branch to check out on a double-click or from its context menu: only when exactly one pill has a target. */
+export function checkoutTarget(pills: readonly RefPill[] | undefined): { name: string; kind: BranchKind } | undefined {
+  const all = (pills ?? []).flatMap((p) => pillTarget(p, pills!) ?? []);
+  return all.length === 1 ? all[0] : undefined;
+}
+
 export function pillsHtml(pills: readonly RefPill[] | undefined, col: number): string {
   if (!pills) return '';
   return pills.map((p) => {
+    const t = pillTarget(p, pills);
+    const ctx: BranchContext = t ? { branchKind: t.kind, branchName: t.name } : { branchKind: 'none' };
+    const co = t ? ` data-co="${esc(t.name)}" data-co-kind="${t.kind}"` : '';
     const c = p.kind === 'tag' ? 'c0' : p.kind === 'remote' ? 'c5' : `c${col % LANE_COLORS}`;
     const ic = p.worktree ? 'worktree' : p.kind === 'remote' ? 'cloud' : p.kind === 'tag' ? 'tag' : p.head ? 'check' : 'branch';
     const title = !p.worktree ? p.name
       : p.kind === 'worktree' ? `Detached HEAD of worktree ${p.worktree.name} (${p.worktree.path})`
       : `Checked out in worktree ${p.worktree.name} (${p.worktree.path})`;
-    return `<span class="ref ${c}${p.head ? ' head' : ''}${p.kind === 'tag' ? ' tag' : ''}${p.worktree ? ' other' : ''}" title="${esc(title)}">${icon(ic)}${esc(p.name)}</span>`;
+    return `<span class="ref ${c}${p.head ? ' head' : ''}${p.kind === 'tag' ? ' tag' : ''}${p.worktree ? ' other' : ''}" title="${esc(title)}"${co} data-vscode-context="${esc(JSON.stringify(ctx))}">${icon(ic)}${esc(p.name)}</span>`;
   }).join('');
 }
 
@@ -82,8 +103,9 @@ export function subjectHtml(subject: string, jira: Record<string, string>, link:
   return h + `<span class="t">${esc(p.rest)}</span>`;
 }
 
-export function commitContext(sha: string, root: string): CommitContext {
-  return { webviewSection: 'commit', sha, root, preventDefaultContextMenuItems: true };
+export function commitContext(sha: string, root: string, pills?: readonly RefPill[]): CommitContext {
+  const t = checkoutTarget(pills);
+  return { webviewSection: 'commit', sha, root, preventDefaultContextMenuItems: true, ...(t && { branchKind: t.kind, branchName: t.name }) };
 }
 
 export function worktreeContext(path: string, root: string, main: boolean): WorktreeContext {
@@ -151,7 +173,7 @@ export function rowHtml(r: LaidRow, e: RowEnv): string {
   const c = r.commit as Commit;
   const cls = c.parents.length > 1 ? 'merge' : e.isCi(c) ? 'ci' : '';
   const ago = fmtAgo(minutesAgo(c.time, e.nowMs));
-  return `<div class="gr${e.selected === c.sha ? ' on' : ''}${rowMatches(c, e.query) ? '' : ' dim'}" data-sha="${c.sha}" data-vscode-context="${esc(JSON.stringify(commitContext(c.sha, e.root)))}">`
+  return `<div class="gr${e.selected === c.sha ? ' on' : ''}${rowMatches(c, e.query) ? '' : ' dim'}" data-sha="${c.sha}" data-vscode-context="${esc(JSON.stringify(commitContext(c.sha, e.root, e.pills.get(c.sha))))}">`
     + rowSvg(r, e.width, { head: c.sha === e.headSha, ci: e.isCi(c) })
     + `<div class="gdesc ${cls}">${pillsHtml(e.pills.get(c.sha), r.col)}${subjectHtml(c.subject, e.jira, false)}</div>`
     + `<div class="gwhen">${ago}</div><div class="gwho">${esc(c.author)}</div><div class="gsha">${c.sha.slice(0, 7)}</div></div>`;

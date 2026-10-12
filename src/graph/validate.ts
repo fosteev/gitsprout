@@ -32,6 +32,8 @@ export const inGitDir = (p: string): boolean => /(^|[\\/])\.git([\\/]|$)/.test(p
 
 /** Longest text the webview may put on the clipboard. */
 export const MAX_COPY = 1000;
+/** Longest branch name a `checkout` message may carry. */
+export const MAX_REF = 1000;
 /** Longest commit summary / description accepted from the webview (UTF-16 code units). */
 export const MAX_COMMIT_TEXT = 64 * 1024;
 /** Longest worktree path accepted from the webview. */
@@ -57,7 +59,7 @@ const isReq = (v: unknown): v is number => typeof v === 'number' && Number.isSaf
 
 /** Narrows an untrusted message to a well-formed `FromWebview`, or undefined. */
 export function parseFromWebview(m: unknown): FromWebview | undefined {
-  const o = m as { type?: unknown; req?: unknown; sha?: unknown; file?: unknown; area?: unknown; files?: unknown; summary?: unknown; description?: unknown; amend?: unknown; push?: unknown; hideCi?: unknown; url?: unknown; text?: unknown; action?: unknown; path?: unknown } | null;
+  const o = m as { type?: unknown; req?: unknown; sha?: unknown; file?: unknown; area?: unknown; files?: unknown; summary?: unknown; description?: unknown; amend?: unknown; push?: unknown; hideCi?: unknown; url?: unknown; text?: unknown; action?: unknown; path?: unknown; name?: unknown; kind?: unknown } | null;
   if (!o || typeof o !== 'object') return undefined;
   switch (o.type) {
     case 'ready': case 'openScm': case 'switchRepo': case 'refresh': case 'openSettings':
@@ -98,6 +100,9 @@ export function parseFromWebview(m: unknown): FromWebview | undefined {
     case 'toggleCi': return typeof o.hideCi === 'boolean' ? { type: 'toggleCi', hideCi: o.hideCi } : undefined;
     case 'openUrl': return typeof o.url === 'string' ? { type: 'openUrl', url: o.url } : undefined;
     case 'copy': return typeof o.text === 'string' && o.text.length > 0 && o.text.length <= MAX_COPY ? { type: 'copy', text: o.text } : undefined;
+    case 'checkout':
+      return typeof o.name === 'string' && o.name.length > 0 && o.name.length <= MAX_REF && (o.kind === 'local' || o.kind === 'remote')
+        ? { type: 'checkout', name: o.name, kind: o.kind } : undefined;
     default: return undefined;
   }
 }

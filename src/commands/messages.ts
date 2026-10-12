@@ -60,18 +60,24 @@ export function rootFromArg(arg: unknown): string | undefined {
   return typeof root === 'string' && root ? root : undefined;
 }
 
-/** Local branch name from a branches-tree leaf or a string. */
+/** Branch name of a graph pill / row context (`{ branchKind, branchName }`) of that kind. */
+const graphBranch = (arg: unknown, kind: 'local' | 'remote'): string | undefined => {
+  const a = arg as { branchKind?: unknown; branchName?: unknown } | null;
+  return a?.branchKind === kind && typeof a.branchName === 'string' && a.branchName ? a.branchName : undefined;
+};
+
+/** Local branch name from a branches-tree leaf, a graph branch context or a string. */
 export function localBranchFromArg(arg: unknown): string | undefined {
   if (typeof arg === 'string') return arg || undefined;
   const a = arg as { kind?: string; branch?: { name?: string } } | null;
-  return a?.kind === 'branch' ? a.branch?.name : undefined;
+  return a?.kind === 'branch' ? a.branch?.name : graphBranch(arg, 'local');
 }
 
-/** Remote branch name (`origin/x`) from a remotes-tree leaf or a string. */
+/** Remote branch name (`origin/x`) from a remotes-tree leaf, a graph branch context or a string. */
 export function remoteBranchFromArg(arg: unknown): string | undefined {
   if (typeof arg === 'string') return arg || undefined;
   const a = arg as { kind?: string; ref?: { name?: string } } | null;
-  return a?.kind === 'remoteBranch' ? a.ref?.name : undefined;
+  return a?.kind === 'remoteBranch' ? a.ref?.name : graphBranch(arg, 'remote');
 }
 
 /** The stash commit sha from a stash / stash-file node (indexes shift, shas do not). */

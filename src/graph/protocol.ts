@@ -97,10 +97,24 @@ export type FromWebview =
   /** A button of another worktree's details card; `path` must be one of the `state.worktrees` (checked by the extension). */
   | { type: 'worktree'; action: WorktreeAction; path: string }
   /** Copy text to the clipboard (the details card's "Copy SHA" button). */
-  | { type: 'copy'; text: string };
+  | { type: 'copy'; text: string }
+  /** Double-click on a branch pill (or a row with one branch to switch to): check the branch out. */
+  | { type: 'checkout'; name: string; kind: BranchKind };
+
+/** `remote` = a remote-tracking branch (`origin/x`): checkout creates or reuses the local branch. */
+export type BranchKind = 'local' | 'remote';
+/**
+ * Context of a branch pill, merged by VS Code over its row's `CommitContext`: the Checkout menu items match on
+ * `branchKind`. `none` (the checked-out branch, tags, another worktree's HEAD) hides them even when the row has a target.
+ */
+export interface BranchContext { branchKind: BranchKind | 'none'; branchName?: string }
 
 /** Context attached to a row (`data-vscode-context`); `webview/context` commands receive it. */
-export interface CommitContext { webviewSection: 'commit'; sha: string; /** the repo the row belongs to */ root: string; preventDefaultContextMenuItems: true }
+export interface CommitContext {
+  webviewSection: 'commit'; sha: string; /** the repo the row belongs to */ root: string; preventDefaultContextMenuItems: true;
+  /** The row's only branch to switch to (`checkoutTarget`), so the row itself offers Checkout. */
+  branchKind?: BranchKind; branchName?: string;
+}
 /** Context of another worktree's WIP row: `webview/context` commands get `path` (the worktree) and `root` (the repo of the tab). */
 export interface WorktreeContext { webviewSection: 'worktree'; path: string; root: string; /** the main worktree: no Remove in its menu */ worktreeMain: boolean; preventDefaultContextMenuItems: true }
 /**

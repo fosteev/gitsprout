@@ -134,7 +134,7 @@ export function registerMutations(context: vscode.ExtensionContext, registry: Re
 
   reg('checkoutBranch', async (arg?: unknown) => {
     const name = localBranchFromArg(arg);
-    const t = target();
+    const t = target(rootFromArg(arg));
     if (!t) return;
     if (!name) { void vscode.window.showInformationMessage('Gitsprout: use Checkout… or the Branches view.'); return; }
     await checkoutLocal(t, name);
@@ -142,7 +142,7 @@ export function registerMutations(context: vscode.ExtensionContext, registry: Re
 
   reg('checkoutRemote', async (arg?: unknown) => {
     const name = remoteBranchFromArg(arg);
-    const t = target();
+    const t = target(rootFromArg(arg));
     if (!t) return;
     if (!name) { void vscode.window.showInformationMessage('Gitsprout: use Checkout… or the Remotes view.'); return; }
     await checkoutRemote(t, name);

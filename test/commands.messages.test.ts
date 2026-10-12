@@ -12,7 +12,7 @@ import { COMMAND_IDS } from '../src/commands/ids';
 import { run } from '../src/git/run';
 import { GitError } from '../src/git/types';
 import type { FileChange, Refs } from '../src/git/types';
-import { MAX_COPY, parseFromWebview, stateMessage } from '../src/graph/validate';
+import { MAX_COPY, MAX_REF, parseFromWebview, stateMessage } from '../src/graph/validate';
 
 const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
 const SHA = 'a'.repeat(40);
@@ -75,6 +75,12 @@ describe('command arguments', () => {
     expect(localBranchFromArg({ kind: 'branch', branch: { name: 'a' } })).toBe('a');
     expect(localBranchFromArg({ kind: 'remoteBranch', ref: { name: 'origin/a' } })).toBeUndefined();
     expect(remoteBranchFromArg({ kind: 'remoteBranch', ref: { name: 'origin/a' } })).toBe('origin/a');
+    // graph pill / row contexts
+    expect(localBranchFromArg({ webviewSection: 'commit', root: '/r', branchKind: 'local', branchName: 'feat' })).toBe('feat');
+    expect(localBranchFromArg({ branchKind: 'remote', branchName: 'origin/feat' })).toBeUndefined();
+    expect(localBranchFromArg({ branchKind: 'none' })).toBeUndefined();
+    expect(remoteBranchFromArg({ branchKind: 'remote', branchName: 'origin/feat' })).toBe('origin/feat');
+    expect(remoteBranchFromArg({ branchKind: 'local', branchName: 'feat' })).toBeUndefined();
     expect(stashShaFromArg({ kind: 'stash', stash: { sha: SHA } })).toBe(SHA);
     expect(stashShaFromArg({ kind: 'stashFile', stash: { sha: SHA } })).toBe(SHA);
     expect(stashShaFromArg({ kind: 'branch' })).toBeUndefined();
@@ -195,6 +201,11 @@ describe('graph: copy message and multiRepo flag', () => {
     expect(parseFromWebview({ type: 'copy', text: '' })).toBeUndefined();
     expect(parseFromWebview({ type: 'copy', text: 'x'.repeat(MAX_COPY + 1) })).toBeUndefined();
     expect(parseFromWebview({ type: 'copy', text: 5 })).toBeUndefined();
+    expect(parseFromWebview({ type: 'checkout', name: 'feat', kind: 'local' })).toEqual({ type: 'checkout', name: 'feat', kind: 'local' });
+    expect(parseFromWebview({ type: 'checkout', name: 'origin/feat', kind: 'remote', x: 1 })).toEqual({ type: 'checkout', name: 'origin/feat', kind: 'remote' });
+    expect(parseFromWebview({ type: 'checkout', name: 'v1', kind: 'tag' })).toBeUndefined();
+    expect(parseFromWebview({ type: 'checkout', name: '', kind: 'local' })).toBeUndefined();
+    expect(parseFromWebview({ type: 'checkout', name: 'x'.repeat(MAX_REF + 1), kind: 'local' })).toBeUndefined();
     expect(parseFromWebview({ type: 'copy' })).toBeUndefined();
   });
   it('state.multiRepo is true only with more than one repo', () => {

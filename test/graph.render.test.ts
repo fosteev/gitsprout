@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Commit, FilePatch, Refs } from '../src/git/types';
 import { ciMatcher, esc, fmtAgo, fmtAgoLong, jiraUrl, parseSubject, splitPath } from '../webview/format';
 import { layout, visibleRows } from '../webview/layout';
-import { commitDetailsHtml, diffBarHtml, diffBodyHtml, keepSet, pillsHtml, refsBySha, rowHtml, subjectHtml, worktreeCardHtml, type RowEnv } from '../webview/render';
+import { checkoutTarget, commitDetailsHtml, diffBarHtml, diffBodyHtml, keepSet, pillsHtml, refsBySha, rowHtml, subjectHtml, worktreeCardHtml, type RefPill, type RowEnv } from '../webview/render';
 import type { GraphWorktree } from '../src/graph/protocol';
 import { asFileChange, asFileStat, graphHtml, isAllowedUrl, isSafeRelPath, parseFromWebview, shaFromArg, wipContextFromArg } from '../src/graph/validate';
 
@@ -46,6 +46,32 @@ describe('render', () => {
     const pills = refsBySha(refs, refs.head).get(SHA)!;
     expect(pills.map((p) => p.name)).toEqual(['develop', 'x', 'origin/develop', 'v1']);
     expect(pillsHtml([{ kind: 'tag', name: '<b>', head: false }], 0)).not.toContain('<b>');
+  });
+
+  it('checkout target: other local branches and remote branches without their local one on the row', () => {
+    const local = (name: string, head = false): RefPill => ({ kind: 'local', name, head });
+    const remote = (name: string): RefPill => ({ kind: 'remote', name, head: false });
+    // develop is checked out, origin/develop has its local pill on the row, v1 is a tag: only x
+    expect(checkoutTarget(refsBySha(refs, refs.head).get(SHA))).toEqual({ name: 'x', kind: 'local' });
+    expect(checkoutTarget([local('main', true), remote('origin/feat/a')])).toEqual({ name: 'origin/feat/a', kind: 'remote' });
+    expect(checkoutTarget([local('main', true), remote('origin/main')])).toBeUndefined();
+    expect(checkoutTarget([local('a'), local('b')])).toBeUndefined(); // ambiguous: only the pills offer it
+    expect(checkoutTarget([{ kind: 'tag', name: 'v1', head: false }])).toBeUndefined();
+    expect(checkoutTarget([{ kind: 'worktree', name: 'HEAD', head: false, worktree: { name: 'w', path: '/w' } }])).toBeUndefined();
+    expect(checkoutTarget(undefined)).toBeUndefined();
+  });
+
+  it('pills carry their checkout target; the row carries its only one', () => {
+    const h = pillsHtml(refsBySha(refs, refs.head).get(SHA), 0);
+    expect(h).toContain('data-co="x" data-co-kind="local" data-vscode-context="{&quot;branchKind&quot;:&quot;local&quot;,&quot;branchName&quot;:&quot;x&quot;}"');
+    expect(h).not.toContain('data-co="develop"');
+    expect(h).not.toContain('data-co="origin/develop"');
+    expect(h.match(/branchKind&quot;:&quot;none/g)).toHaveLength(3); // develop, origin/develop, v1 hide the row's Checkout
+    const c = commit();
+    const lay = layout(visibleRows([c], { hideCi: false, isCi: () => false, keep: new Set(), headSha: SHA, dirty: false }).rows);
+    const env: RowEnv = { root: '/r', width: 20, selected: null, headSha: SHA, jira: JIRA, pills: refsBySha(refs, refs.head), isCi: () => false, query: '', nowMs: 0, wipCount: 0, wipSummary: '', worktrees: [] };
+    expect(rowHtml(lay.rows[0], env)).toContain('preventDefaultContextMenuItems&quot;:true,&quot;branchKind&quot;:&quot;local&quot;,&quot;branchName&quot;:&quot;x&quot;}');
+    expect(rowHtml(lay.rows[0], { ...env, pills: new Map() })).not.toContain('branchKind');
   });
 
   it('escapes the subject and links Jira only when asked', () => {
